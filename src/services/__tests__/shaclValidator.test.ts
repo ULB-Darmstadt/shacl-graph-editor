@@ -1,0 +1,89 @@
+import { describe, expect, it } from 'vitest'
+import { ApplicationProfile, parseShaclProfile } from '@/domain/NodeShape'
+import { MappingState } from '@/domain/Mapping'
+import { CsvDataSource } from '@/domain/DataSource'
+import { validateMapping } from '@/services/shaclValidator'
+
+const SHAPE = `
+@prefix sh:  <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex:  <http://example.org/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+
+ex:PersonShape a sh:NodeShape ;
+  dct:title "Person" ;
+  sh:targetClass ex:Person ;
+  sh:property [
+    sh:name "Name" ; sh:path ex:name ;
+    sh:datatype xsd:string ; sh:minCount 1
+  ] ;
+  sh:property [
+    sh:name "Age" ; sh:path ex:age ;
+    sh:datatype xsd:integer
+  ] ;
+  sh:property [
+    sh:name "Email" ; sh:path ex:email ;
+    sh:datatype xsd:string ;
+    sh:pattern "^[^@]+@[^@]+$"
+  ] .
+`
+
+function makeAp(ttl = SHAPE) {
+  const ap = new ApplicationProfile()
+  ap.upsert(parseShaclProfile(ttl, 'test.ttl', 'uploaded'))
+  return ap
+}
+
+describe('shaclValidator', () => {
+  it('reports no violations for valid data', () => {
+    const ap = makeAp()
+    const csv = new CsvDataSource('p', 'p.csv', ['id', 'Name', 'Age'], [['1', 'Alice', '30']])
+    const mapping = new MappingState()
+    mapping.addOrReplace({ sourceId: 'p', sourceHeader: 'Name', shapeIri: 'http://example.org/PersonShape', propertyPath: 'http://example.org/name' })
+    mapping.addOrReplace({ sourceId: 'p', sourceHeader: 'Age', shapeIri: 'http://example.org/PersonShape', propertyPath: 'http://example.org/age' })
+    const result = validateMapping(ap, mapping, [csv])
+    expect(result.violations).toHaveLength(0)
+    expect(result.isValid).toBe(true)
+  })
+
+  it('reports error for minCount violation (empty required cell)', () => {
+    const ap = makeAp()
+    const csv = new CsvDataSource('p', 'p.csv', ['id', 'Name'], [['1', '']])
+    const mapping = new MappingState()
+    mapping.addOrReplace({ sourceId: 'p', sourceHeader: 'Name', shapeIri: 'http://example.org/PersonShape', propertyPath: 'http://example.org/name' })
+    const result = validateMapping(ap, mapping, [csv])
+    const errors = result.violations.filter(v => v.severity === 'error')
+    expect(errors.length).toBeGreaterThanOrEqual(1)
+    expect(result.isValid).toBe(false)
+  })
+
+  it('reports warning for unmapped required property', () => {
+    const ap = makeAp()
+    const csv = new CsvDataSource('p', 'p.csv', ['id'], [['1']])
+    const mapping = new MappingState()
+    // No mapping → minCount:1 property is unmapped
+    const result = validateMapping(ap, mapping, [csv])
+    const warnings = result.violations.filter(v => v.severity === 'warning')
+    expect(warnings.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('reports error for invalid integer', () => {
+    const ap = makeAp()
+    const csv = new CsvDataSource('p', 'p.csv', ['id', 'Age'], [['1', 'not-a-number']])
+    const mapping = new MappingState()
+    mapping.addOrReplace({ sourceId: 'p', sourceHeader: 'Age', shapeIri: 'http://example.org/PersonShape', propertyPath: 'http://example.org/age' })
+    const result = validateMapping(ap, mapping, [csv])
+    const errors = result.violations.filter(v => v.severity === 'error')
+    expect(errors.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('reports error for sh:pattern violation', () => {
+    const ap = makeAp()
+    const csv = new CsvDataSource('p', 'p.csv', ['id', 'Email'], [['1', 'not-an-email']])
+    const mapping = new MappingState()
+    mapping.addOrReplace({ sourceId: 'p', sourceHeader: 'Email', shapeIri: 'http://example.org/PersonShape', propertyPath: 'http://example.org/email' })
+    const result = validateMapping(ap, mapping, [csv])
+    const errors = result.violations.filter(v => v.severity === 'error')
+    expect(errors.length).toBeGreaterThanOrEqual(1)
+  })
+})

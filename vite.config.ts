@@ -1,0 +1,61 @@
+/// <reference types="vitest" />
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
+import { fileURLToPath, URL } from 'node:url'
+
+function normalizeBasePath(path: string): string {
+  const trimmed = path.trim()
+  if (!trimmed) return '/'
+  return `/${trimmed.replace(/^\/+|\/+$/g, '')}/`
+}
+
+function resolvePagesBase(mode: string): string {
+  if (mode !== 'production') return '/'
+
+  const explicitBase = process.env.VITE_BASE_PATH
+  if (explicitBase) return normalizeBasePath(explicitBase)
+
+  const repositoryName = process.env.GITHUB_REPOSITORY?.split('/')[1]
+  if (process.env.GITHUB_ACTIONS === 'true' && repositoryName) {
+    return normalizeBasePath(repositoryName)
+  }
+
+  return '/'
+}
+
+export default defineConfig(({ mode }) => ({
+  base: resolvePagesBase(mode),
+  plugins: [
+    vue(),
+    nodePolyfills({
+      // Don't polyfill `process` here — `vite-plugin-node-polyfills` ships a
+      // broken CJS-interop shim that loses `process.nextTick` when bundled
+      // dependencies (e.g. readable-stream inside @ulb-darmstadt/shacl-form)
+      // do `var process = require('process')`. We alias to the proper
+      // `process/browser` package below instead.
+      include: ['buffer'],
+      globals: { process: false, Buffer: true, global: true },
+    }),
+  ],
+  resolve: {
+    alias: [
+      { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
+      // Force the canonical `process` npm package (has working `nextTick`).
+      // Use exact match so `process/browser` etc. are not rewritten.
+      { find: /^process$/, replacement: 'process/browser.js' },
+    ],
+  },
+  define: {
+    // Many CJS packages reference bare `global` at module top-level.
+    global: 'globalThis',
+  },
+  optimizeDeps: {
+    // Pre-bundle these to ensure CJS deps see the aliased `process`.
+    include: ['process/browser'],
+  },
+  test: {
+    environment: 'happy-dom',
+    globals: true,
+  },
+}))
