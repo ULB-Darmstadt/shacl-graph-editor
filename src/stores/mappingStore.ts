@@ -19,14 +19,13 @@ import {
 } from '@/features/mapping/mappingExtensionRegistry'
 import type { MappingExtensionStoreApi } from '@/features/mapping/extensions/core/types'
 import {
-  getDependentTransformationNodeIds,
   getTransformationNodeInputs,
   removeUiEdgeById,
   resolveTransformationMappingInput,
   syncTransformationNodeMappings,
   upsertUiEdge,
 } from '@/services/mapping/mappingEdgeSync'
-import { cloneMappingEdges, cloneUiEdges, type MappingStoreSnapshot } from '@/services/project/projectSnapshot'
+import { cloneMappingEdges, type MappingStoreSnapshot } from '@/services/project/projectSnapshot'
 import {
   syncGeoNamesShapeMappings as syncGeoNamesShapeMappingsFromWorkflow,
 } from '@/features/mapping/extensions/modules/nodes/geonames/workflow'
@@ -202,12 +201,6 @@ export const useMappingStore = defineStore('mapping', () => {
     }
 
     state.edges = syncTransformationNodeMappings(state.edges, nodeId, input, node.kind)
-  }
-
-  function syncGeoNamesDependentTransformMappings(nodeId: string): void {
-    for (const transformId of getDependentTransformationNodeIds(nodeId, transformationUiEdges.value)) {
-      syncTransformationMappings(transformId)
-    }
   }
 
   function upsertGeoNamesUiEdge(edge: GeoNamesUiEdge): void {

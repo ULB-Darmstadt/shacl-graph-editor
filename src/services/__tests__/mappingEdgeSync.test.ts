@@ -183,6 +183,7 @@ describe('mappingEdgeSync', () => {
         shapeIri: 'http://example.org/LocationShape',
         propertyPath: 'http://www.w3.org/2000/01/rdf-schema#label',
         geoNamesNodeId: 'geonames:1',
+        source: { kind: 'enrichment-output', provider: 'geonames', nodeId: 'geonames:1' },
       },
     ])
   })
@@ -223,6 +224,7 @@ describe('mappingEdgeSync', () => {
         shapeIri: 'http://example.org/LocationShape',
         propertyPath: 'http://www.w3.org/2000/01/rdf-schema#label',
         geoNamesNodeId: 'geonames:1',
+        source: { kind: 'enrichment-output', provider: 'geonames', nodeId: 'geonames:1' },
       },
     ])
   })
@@ -243,6 +245,7 @@ describe('mappingEdgeSync', () => {
         shapeIri: 'http://example.org/PersonShape',
         propertyPath: 'http://xmlns.com/foaf/0.1/name',
         lobidNodeId: 'lobid:1',
+        source: { kind: 'enrichment-output', provider: 'lobid', nodeId: 'lobid:1' },
       },
     ])
   })
@@ -283,6 +286,7 @@ describe('mappingEdgeSync', () => {
         shapeIri: 'http://example.org/PersonShape',
         propertyPath: 'http://purl.org/dc/terms/creator',
         lobidNodeId: 'lobid:1',
+        source: { kind: 'enrichment-output', provider: 'lobid', nodeId: 'lobid:1' },
       },
     ])
   })
@@ -297,6 +301,12 @@ describe('mappingEdgeSync', () => {
         propertyPath: 'http://www.opengis.net/ont/geosparql#asWKT',
         transform: 'lat-lng-to-wkt',
         transformNodeId: 'transform:1',
+        source: {
+          kind: 'transform-output',
+          nodeId: 'transform:1',
+          transformId: 'lat-lng-to-wkt',
+          secondarySourceHeader: 'lng',
+        },
       },
       {
         sourceId: 'keep-me',
@@ -317,6 +327,12 @@ describe('mappingEdgeSync', () => {
         propertyPath: 'http://www.opengis.net/ont/geosparql#asWKT',
         transform: 'lat-lng-to-wkt',
         transformNodeId: 'transform:1',
+        source: {
+          kind: 'transform-output',
+          nodeId: 'transform:1',
+          transformId: 'lat-lng-to-wkt',
+          secondarySourceHeader: 'lng',
+        },
       },
       {
         sourceId: 'keep-me',

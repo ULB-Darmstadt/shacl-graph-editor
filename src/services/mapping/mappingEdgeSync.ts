@@ -1,4 +1,10 @@
-import type { MappingEdge } from '@/domain/Mapping'
+import {
+  createEnrichmentMappingEdge,
+  createTransformMappingEdge,
+  mappingEnrichmentNodeId,
+  mappingTransformNodeId,
+  type MappingEdge,
+} from '@/domain/Mapping'
 import type {
   GeoNamesNodeConfig,
   GeoNamesUiEdge,
@@ -104,13 +110,12 @@ export function buildGeoNamesShapeMappings(
       && edge.target.startsWith('shape:')
       && edge.targetHandle.startsWith('p:'),
     )
-    .map(edge => ({
+    .map(edge => createEnrichmentMappingEdge({
       sourceId: outputSourceId,
       sourceHeader: edge.sourceHandle.slice(2),
       shapeIri: edge.target.slice(6),
       propertyPath: edge.targetHandle.slice(2),
-      geoNamesNodeId: nodeId,
-    }))
+    }, { provider: 'geonames', nodeId }))
 }
 
 export function syncGeoNamesNodeMappings(
@@ -120,7 +125,7 @@ export function syncGeoNamesNodeMappings(
   uiEdges: GeoNamesUiEdge[],
 ): MappingEdge[] {
   return [
-    ...existingEdges.filter(edge => edge.geoNamesNodeId !== nodeId),
+    ...existingEdges.filter(edge => mappingEnrichmentNodeId(edge, 'geonames') !== nodeId),
     ...buildGeoNamesShapeMappings(nodeId, outputSourceId, uiEdges),
   ]
 }
@@ -139,13 +144,12 @@ export function buildLobidShapeMappings(
       && edge.target.startsWith('shape:')
       && edge.targetHandle.startsWith('p:'),
     )
-    .map(edge => ({
+    .map(edge => createEnrichmentMappingEdge({
       sourceId: outputSourceId,
       sourceHeader: edge.sourceHandle.slice(2),
       shapeIri: edge.target.slice(6),
       propertyPath: edge.targetHandle.slice(2),
-      lobidNodeId: nodeId,
-    }))
+    }, { provider: 'lobid', nodeId }))
 }
 
 export function syncLobidNodeMappings(
@@ -155,7 +159,7 @@ export function syncLobidNodeMappings(
   uiEdges: LobidUiEdge[],
 ): MappingEdge[] {
   return [
-    ...existingEdges.filter(edge => edge.lobidNodeId !== nodeId),
+    ...existingEdges.filter(edge => mappingEnrichmentNodeId(edge, 'lobid') !== nodeId),
     ...buildLobidShapeMappings(nodeId, outputSourceId, uiEdges),
   ]
 }
@@ -228,16 +232,18 @@ export function syncTransformationNodeMappings(
   transformId: string,
 ): MappingEdge[] {
   if (!input) {
-    return existingEdges.filter(edge => edge.transformNodeId !== nodeId)
+    return existingEdges.filter(edge => mappingTransformNodeId(edge) !== nodeId)
   }
 
-  return existingEdges.map(edge => edge.transformNodeId !== nodeId
+  return existingEdges.map(edge => mappingTransformNodeId(edge) !== nodeId
     ? edge
-    : {
+    : createTransformMappingEdge({
         ...edge,
         sourceId: input.sourceId,
         sourceHeader: input.latHeader,
+      }, {
+        nodeId,
+        transformId,
         secondarySourceHeader: input.lngHeader,
-        transform: transformId,
-      })
+      }))
 }

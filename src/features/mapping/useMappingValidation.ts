@@ -1,6 +1,6 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import type { ApplicationProfile, ShaclProfile } from '@/domain/NodeShape'
-import type { MappingState } from '@/domain/Mapping'
+import { mappingSecondarySourceHeader, mappingTransformId, mappingTransformNodeId, type MappingState } from '@/domain/Mapping'
 import type { DataSource } from '@/domain/DataSource'
 import type { ValidationResult } from '@/services/validation/validationTypes'
 
@@ -92,7 +92,7 @@ export function useMappingValidation(options: UseMappingValidationOptions) {
     [
       () => options.profiles.value.map(profile => `${profile.iri}:${profile.rawTurtle.length}`).join('|'),
       () => options.sources.value.map(source => `${source.id}:${source.headers.join(',')}:${source.rows.length}`).join('|'),
-      () => options.mappingState.edges.map(edge => `${edge.sourceId}:${edge.sourceHeader}:${edge.secondarySourceHeader ?? ''}:${edge.shapeIri}:${edge.propertyPath}:${edge.transform ?? ''}:${edge.transformNodeId ?? ''}`).join('|'),
+      () => options.mappingState.edges.map(edge => `${edge.sourceId}:${edge.sourceHeader}:${mappingSecondarySourceHeader(edge) ?? ''}:${edge.shapeIri}:${edge.propertyPath}:${mappingTransformId(edge) ?? ''}:${mappingTransformNodeId(edge) ?? ''}`).join('|'),
     ],
     () => { void refreshValidation() },
     { immediate: true },

@@ -19,7 +19,14 @@ import { useShapesStore } from '@/stores/shapesStore'
 import { useDataStore } from '@/stores/dataStore'
 import { useMappingStore } from '@/stores/mappingStore'
 import { generateRdf, serializeGraph } from '@/services/rdf/rdfGenerator'
-import { buildBrowseModel, type BrowseModel, type BrowseSubject, type BrowsePropertyValue } from '@/services/browse/browseService'
+import { buildBrowseModel, type BrowseModel, type BrowseSubject } from '@/services/browse/browseService'
+import {
+  classLabelsForSubject,
+  columnsForSubjects,
+  localName,
+  subjectMatchesSearch,
+  valuesForColumn,
+} from '@/features/browse/browseViewHelpers'
 import Message from 'primevue/message'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
@@ -134,17 +141,6 @@ const classFilteredSubjects = computed<BrowseSubject[]>(() => {
   return allSubjects.value.filter(subject => subject.classes.includes(selectedClass.value))
 })
 
-function subjectMatchesSearch(subject: BrowseSubject, term: string): boolean {
-  if (subject.label.toLowerCase().includes(term)) return true
-  if (subject.iri.toLowerCase().includes(term)) return true
-  for (const property of subject.properties) {
-    if (property.value.toLowerCase().includes(term)) return true
-    if (property.label.toLowerCase().includes(term)) return true
-    if (property.resolvedLabel && property.resolvedLabel.toLowerCase().includes(term)) return true
-  }
-  return false
-}
-
 const visibleSubjects = computed(() => {
   const term = search.value.trim().toLowerCase()
   return classFilteredSubjects.value.filter(subject => !term || subjectMatchesSearch(subject, term))
@@ -159,11 +155,6 @@ function clearFilters(): void {
   selectedClass.value = ''
 }
 
-function localName(iri: string): string {
-  const idx = Math.max(iri.lastIndexOf('#'), iri.lastIndexOf('/'))
-  return idx >= 0 ? iri.slice(idx + 1) : iri
-}
-
 // ---------- Detail dialog ----------
 const detailOpen = ref(false)
 const detailSubjectIri = ref<string | null>(null)
@@ -173,49 +164,13 @@ function openDetail(subj: BrowseSubject): void {
   detailOpen.value = true
 }
 
-/** Display text for a single property value — prefers cross-ref labels. */
-function displayValue(p: BrowsePropertyValue): string {
-  if (p.isResource) return p.resolvedLabel ?? (localName(p.value) || p.value)
-  return p.value
-}
-
 // ---------- List-view pivot ----------
-interface Column {
-  /** Predicate IRI — used as the row-cell key. */
-  predicate: string
-  /** Human label (sh:name → fallback). */
-  label: string
-}
-
-/**
- * Builds a stable column list for the visible subjects: union of all predicates
- * appearing on those subjects, sorted alphabetically by label. Predicates
- * are unique even if multiple subjects use them with different values.
- */
-function columnsForSubjects(subjects: BrowseSubject[]): Column[] {
-  const seen = new Map<string, string>()
-  for (const subj of subjects) {
-    for (const p of subj.properties) {
-      if (!seen.has(p.predicate)) seen.set(p.predicate, p.label)
-    }
-  }
-  return Array.from(seen.entries())
-    .map(([predicate, label]) => ({ predicate, label }))
-    .sort((a, b) => a.label.localeCompare(b.label))
-}
-
-/** All values of a subject for a given predicate column. */
-function valuesForColumn(subject: BrowseSubject, predicate: string): BrowsePropertyValue[] {
-  return subject.properties.filter(p => p.predicate === predicate)
-}
-
 const listColumns = computed(() =>
   selectedClass.value ? columnsForSubjects(visibleSubjects.value) : [],
 )
 
 function classLabelsFor(subject: BrowseSubject): string[] {
-  if (subject.classes.length === 0) return ['Untyped']
-  return subject.classes.map(cls => classLabelsByIri.value.get(cls) ?? localName(cls))
+  return classLabelsForSubject(subject, classLabelsByIri.value)
 }
 
 async function copyTurtle(): Promise<void> {

@@ -1,4 +1,5 @@
 import { defineAsyncComponent, markRaw } from 'vue'
+import { mappingSecondarySourceHeader, mappingTransformId, mappingTransformNodeId } from '@/domain/Mapping'
 import { createMappingExtensionModule } from '@/features/mapping/extensions/core/createMappingExtensionModule'
 import type { DataSource } from '@/domain/DataSource'
 import type { ExtensionCanvasBuildContext, MappingExtensionSnapshotContext } from '@/features/mapping/extensions/core/types'
@@ -61,9 +62,9 @@ export const latLngToWktModule = createMappingExtensionModule({
   mappingEdgeSourceHandlers: [
     {
       id: 'node.lat-lng-to-wkt.mapping-edge-source',
-      canResolve: edge => edge.transform === LAT_LNG_TO_WKT_TRANSFORM_ID && Boolean(edge.transformNodeId),
+      canResolve: edge => mappingTransformId(edge) === LAT_LNG_TO_WKT_TRANSFORM_ID && Boolean(mappingTransformNodeId(edge)),
       resolve: edge => ({
-        source: edge.transformNodeId!,
+        source: mappingTransformNodeId(edge)!,
         sourceHandle: 'h:wkt',
       }),
     },
@@ -180,12 +181,15 @@ export const latLngToWktModule = createMappingExtensionModule({
           }
         }
 
-        const transformEdge = context.mappingStore.state.edges.find(edge => edge.transformNodeId === nodeId && edge.transform === LAT_LNG_TO_WKT_TRANSFORM_ID)
+        const transformEdge = context.mappingStore.state.edges.find(edge =>
+          mappingTransformNodeId(edge) === nodeId
+          && mappingTransformId(edge) === LAT_LNG_TO_WKT_TRANSFORM_ID)
         if (transformEdge) {
           const baseSource = context.dataStore.findById(transformEdge.sourceId)
           if (baseSource) {
             const latIdx = baseSource.headers.indexOf(transformEdge.sourceHeader)
-            const lngIdx = transformEdge.secondarySourceHeader ? baseSource.headers.indexOf(transformEdge.secondarySourceHeader) : -1
+            const secondarySourceHeader = mappingSecondarySourceHeader(transformEdge)
+            const lngIdx = secondarySourceHeader ? baseSource.headers.indexOf(secondarySourceHeader) : -1
             if (latIdx >= 0 && lngIdx >= 0) {
               outputSource = {
                 id: `${nodeId}:output-preview`,
@@ -212,13 +216,17 @@ export const latLngToWktModule = createMappingExtensionModule({
       canHandle: transformId => transformId === LAT_LNG_TO_WKT_TRANSFORM_ID,
       buildValue: ({ edge, source, row }) => {
         const latIdx = source.headers.indexOf(edge.sourceHeader)
-        const lngIdx = edge.secondarySourceHeader ? source.headers.indexOf(edge.secondarySourceHeader) : -1
+        const secondarySourceHeader = mappingSecondarySourceHeader(edge)
+        const lngIdx = secondarySourceHeader ? source.headers.indexOf(secondarySourceHeader) : -1
         if (latIdx < 0 || lngIdx < 0) return undefined
         return buildWktPoint(row[latIdx], row[lngIdx]) ?? undefined
       },
-      buildRmlTemplate: edge => edge.secondarySourceHeader
-        ? `POINT({${edge.secondarySourceHeader}} {${edge.sourceHeader}})`
-        : undefined,
+      buildRmlTemplate: edge => {
+        const secondarySourceHeader = mappingSecondarySourceHeader(edge)
+        return secondarySourceHeader
+          ? `POINT({${secondarySourceHeader}} {${edge.sourceHeader}})`
+          : undefined
+      },
     },
   ],
   connectionHandlers: [

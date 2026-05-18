@@ -12,7 +12,6 @@ import { VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
-import type { DataSource } from '@/domain/DataSource'
 import { useDataStore } from '@/stores/dataStore'
 import { useMetadataStore } from '@/stores/metadataStore'
 import { useShapesStore } from '@/stores/shapesStore'
@@ -80,7 +79,6 @@ const {
   isShapePreviewLoading,
   combinedCanvasShapesTurtle,
   openTablePreview,
-  openPairedSourcePreview,
   openNodePreview,
   openShapePreview,
 } = useCanvasPreviews({
@@ -130,8 +128,6 @@ useCanvasConnections({
   toast,
   confirm,
 })
-
-const isReady = computed(() => sources.value.length > 0 && canvasShapes.value.length > 0)
 
 const hasNothing = computed(() =>
   profiles.value.length === 0

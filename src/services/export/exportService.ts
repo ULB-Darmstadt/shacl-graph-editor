@@ -4,6 +4,7 @@
  * button anywhere in the app.
  */
 import JSZip from 'jszip'
+import { dataSourceKindLabel } from '@/domain/DataSource'
 import { generateRdf, serializeGraph } from '@/services/rdf/rdfGenerator'
 import { exportedHeadersForSource, exportedRowsForSource } from '@/services/mapping/mappingSemantics'
 import { buildRoCrateMetadata, type RoCrateFile } from '@/services/export/roCrate'
@@ -30,10 +31,14 @@ export interface ExportResult {
   tripleCount: number
 }
 
+export interface ExportPackage extends ExportResult {
+  blob: Blob
+}
+
 function cellToCsv(value: unknown): string {
   if (value === null || value === undefined) return ''
   const s = String(value)
-  return /[\",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
 function sanitize(name: string): string {
@@ -57,7 +62,7 @@ This bundle is an [**RO-Crate 1.2**](https://w3id.org/ro/crate/1.2) packaged by
 `
 }
 
-function triggerDownload(blob: Blob, filename: string): void {
+export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -68,7 +73,7 @@ function triggerDownload(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url)
 }
 
-export async function exportRoCrate(input: ExportInput): Promise<ExportResult> {
+export async function buildRoCratePackage(input: ExportInput): Promise<ExportPackage> {
   const zip = new JSZip()
   const files: RoCrateFile[] = []
 
@@ -121,7 +126,7 @@ export async function exportRoCrate(input: ExportInput): Promise<ExportResult> {
     files.push({
       path,
       name: src.name,
-      description: `Source table (${src.kind}, ${src.rows.length} rows).${src.recordIds ? ' Includes exported Airtable record identifiers for subject templates.' : ''}`,
+      description: `${dataSourceKindLabel(src)} (${src.rows.length} rows).${src.recordIds ? ' Includes exported row identifiers for subject templates.' : ''}`,
       encodingFormat: 'text/csv',
     })
   })
@@ -184,11 +189,17 @@ export async function exportRoCrate(input: ExportInput): Promise<ExportResult> {
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2) + Date.now().toString(36)
   const filename = `${uuid}.zip`
-  triggerDownload(blob, filename)
 
   return {
+    blob,
     filename,
     subjectCount: result.subjectCount,
     tripleCount: result.tripleCount,
   }
+}
+
+export async function exportRoCrate(input: ExportInput): Promise<ExportResult> {
+  const { blob, ...result } = await buildRoCratePackage(input)
+  downloadBlob(blob, result.filename)
+  return result
 }

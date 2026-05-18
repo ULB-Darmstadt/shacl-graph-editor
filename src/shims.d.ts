@@ -2,27 +2,21 @@
 
 declare module '*.vue' {
   import type { DefineComponent } from 'vue'
-  const component: DefineComponent<{}, {}, any>
+  const component: DefineComponent<object, object, unknown>
   export default component
 }
 
 // shacl-form web component (registered as side-effect by importing the package)
 declare module 'vue' {
   interface GlobalComponents {
-    'shacl-form': any
+    'shacl-form': DefineComponent<{
+      dataView?: boolean
+      dataCollapse?: string
+      dataIgnoreOwlImports?: boolean
+      dataLanguage?: string
+      dataShowRootShapeLabel?: string
+    }, object, unknown>
   }
-}
-
-declare module 'shacl-engine' {
-  export class Validator {
-    constructor(dataset: unknown, options: Record<string, unknown>)
-    validate(data: { dataset: unknown; terms?: Iterable<unknown> }, shapes?: { terms?: Iterable<unknown> }): Promise<{ conforms: boolean; results: unknown[] }>
-  }
-}
-
-declare module 'shacl-engine/sparql.js' {
-  export const validations: Map<unknown, unknown>
-  export const targetResolvers: Map<unknown, unknown>
 }
 
 export {}

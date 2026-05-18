@@ -1,4 +1,5 @@
 import { defineAsyncComponent, markRaw } from 'vue'
+import { mappingEnrichmentNodeId } from '@/domain/Mapping'
 import { createMappingExtensionModule } from '@/features/mapping/extensions/core/createMappingExtensionModule'
 import type { ExtensionCanvasBuildContext, MappingExtensionSnapshotContext } from '@/features/mapping/extensions/core/types'
 import type { LobidNodeConfig, LobidUiEdge } from '@/features/mapping/mappingNodeTypes'
@@ -61,8 +62,8 @@ export const lobidModule = createMappingExtensionModule({
   mappingEdgeSourceHandlers: [
     {
       id: 'node.lobid.mapping-edge-source',
-      canResolve: edge => Boolean(edge.lobidNodeId),
-      resolve: edge => ({ source: edge.lobidNodeId! }),
+      canResolve: edge => Boolean(mappingEnrichmentNodeId(edge, 'lobid')),
+      resolve: edge => ({ source: mappingEnrichmentNodeId(edge, 'lobid')! }),
     },
   ],
   canvasModules: [
@@ -188,7 +189,7 @@ export const lobidModule = createMappingExtensionModule({
 
         if (connection.source?.startsWith('src:') && connection.target?.startsWith('lobid:')) {
           if (!sourceHandle.startsWith('h:') || targetHandle !== 'lobid-input') return false
-          context.mappingStore.upsertExtensionUiEdge(LOBID_UI_EDGE_STATE_KEY, {
+          context.mappingStore.upsertLobidUiEdge({
             id: `lobid-ui:${connection.target}:input`,
             source: connection.source,
             sourceHandle,
@@ -200,7 +201,7 @@ export const lobidModule = createMappingExtensionModule({
 
         if (connection.source?.startsWith('lobid:') && connection.target?.startsWith('shape:')) {
           if (!sourceHandle.startsWith('h:') || !targetHandle.startsWith('p:')) return false
-          context.mappingStore.upsertExtensionUiEdge(LOBID_UI_EDGE_STATE_KEY, {
+          context.mappingStore.upsertLobidUiEdge({
             id: `lobid-ui:${connection.source}:${sourceHandle}->${connection.target}:${targetHandle}`,
             source: connection.source,
             sourceHandle,
@@ -214,19 +215,20 @@ export const lobidModule = createMappingExtensionModule({
       },
       deleteUiEdge: (edgeId, context) => {
         if (!edgeId.startsWith('lobid-ui:')) return false
-        context.mappingStore.removeExtensionUiEdge(LOBID_UI_EDGE_STATE_KEY, edgeId)
+        context.mappingStore.removeLobidUiEdge(edgeId)
         return true
       },
       deleteMappingEdge: (edge, shapeIri, propertyPath, context) => {
-        if (!edge.lobidNodeId) return false
+        const nodeId = mappingEnrichmentNodeId(edge, 'lobid')
+        if (!nodeId) return false
         const uiEdge = getCanvasLobidUiEdges(context).find(candidate =>
-          candidate.source === edge.lobidNodeId
+          candidate.source === nodeId
           && candidate.sourceHandle === `h:${edge.sourceHeader}`
           && candidate.target === `shape:${shapeIri}`
           && candidate.targetHandle === `p:${propertyPath}`,
         )
         if (!uiEdge) return false
-        context.mappingStore.removeExtensionUiEdge(LOBID_UI_EDGE_STATE_KEY, uiEdge.id)
+        context.mappingStore.removeLobidUiEdge(uiEdge.id)
         return true
       },
     },

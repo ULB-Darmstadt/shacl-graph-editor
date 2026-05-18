@@ -9,6 +9,7 @@ type MetadataStore = ReturnType<typeof useMetadataStore>
 
 const ROKIT_DATASET_PROFILE_IRI = 'https://w3id.org/nfdi4ing/profiles/4a5d4526-34d4-4b00-8f8f-4b13dd48e6d6'
 const DEFAULT_BASE_URI = 'http://example.org/'
+const DEFAULT_METADATA_VALUES_SUBJECT = 'urn:ardmp:metadata:dataset'
 const DCT_CONFORMS_TO = namedNode('http://purl.org/dc/terms/conformsTo')
 const RDF_TYPE = namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type')
 const DCAT_DATASET = namedNode('http://www.w3.org/ns/dcat#Dataset')
@@ -71,8 +72,12 @@ export function useDatasetMetadataWorkflow(options: UseDatasetMetadataWorkflowOp
   ].join('::'))
 
   const metadataTurtle = computed(() => options.metadataStore.metadataTurtle[ROKIT_DATASET_PROFILE_IRI] ?? '')
-  const metadataValuesSubject = computed(() => inferValuesSubject(metadataTurtle.value, datasetShapeSubject.value))
-  const draftValuesSubject = computed(() => inferValuesSubject(draftMetadataTurtle.value, datasetShapeSubject.value))
+  const metadataValuesSubject = computed(() =>
+    inferValuesSubject(metadataTurtle.value, datasetShapeSubject.value) ?? DEFAULT_METADATA_VALUES_SUBJECT,
+  )
+  const draftValuesSubject = computed(() =>
+    inferValuesSubject(draftMetadataTurtle.value, datasetShapeSubject.value) ?? DEFAULT_METADATA_VALUES_SUBJECT,
+  )
   const metadataSummary = computed(() => extractDatasetMetadata(metadataTurtle.value))
 
   const viewerFormKey = computed(() => [
@@ -133,7 +138,10 @@ export function useDatasetMetadataWorkflow(options: UseDatasetMetadataWorkflowOp
   function saveMetadata(serialize?: () => string): void {
     if (serialize) {
       try {
-        draftMetadataTurtle.value = serialize() ?? draftMetadataTurtle.value
+        const serialized = serialize()
+        if (serialized.trim()) {
+          draftMetadataTurtle.value = serialized
+        }
       } catch {
         // Keep the last successful draft if serialization is briefly unavailable.
       }

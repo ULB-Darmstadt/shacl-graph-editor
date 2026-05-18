@@ -187,6 +187,9 @@ export class ApplicationProfile {
     const inheritedProperties: PropertyShape[] = []
 
     for (const inheritedIri of rawShape.inheritedShapeIris ?? []) {
+      const hasInheritedShape = this.rawNodeShapes().some(ns => ns.nodeId.value === inheritedIri)
+      if (!hasInheritedShape) continue
+
       const inheritedShape = this.resolveNodeShape(inheritedIri, nextVisited)
       for (const property of inheritedShape.properties) {
         const key = propertyKeyFor(property)

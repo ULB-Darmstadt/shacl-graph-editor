@@ -1,6 +1,6 @@
 import { computed, markRaw, ref, watch, type Ref } from 'vue'
 import type { Edge, Node } from '@vue-flow/core'
-import type { DataSource } from '@/domain/DataSource'
+import { isCanvasVisibleDataSource, type DataSource } from '@/domain/DataSource'
 import type { NodeShape } from '@/domain/NodeShape'
 import {
   buildExtensionCanvasEdges,
@@ -263,22 +263,30 @@ export function useCanvasGraph(options: UseCanvasGraphOptions) {
       data: { shape, onPreview: () => options.openShapePreview(shape) },
     }))
 
-    const mappingEdges: Edge[] = options.mappingStore.state.edges.map(edge => {
+    const nextNodes = [...extensionNodes, ...tableNodes, ...shapeNodes]
+    const visibleNodeIds = new Set(nextNodes.map(node => node.id))
+
+    const mappingEdges: Edge[] = options.mappingStore.state.edges.flatMap(edge => {
       const targetShape = options.canvasShapes.value.find(shape => shape.nodeId.value === edge.shapeIri)
+      if (!targetShape) return []
+
       const targetProp = targetShape?.properties.find(property => property.path?.value === edge.propertyPath)
       const sourceDescriptor = resolveMappingEdgeCanvasSource(edge) ?? { source: `src:${edge.sourceId}` }
-      return buildGradientEdge({
+      const target = `shape:${edge.shapeIri}`
+      if (!visibleNodeIds.has(sourceDescriptor.source) || !visibleNodeIds.has(target)) return []
+
+      return [buildGradientEdge({
         id: `e:${edge.shapeIri}::${edge.propertyPath}`,
         source: sourceDescriptor.source,
         sourceHandle: sourceDescriptor.sourceHandle ?? `h:${edge.sourceHeader}`,
-        target: `shape:${edge.shapeIri}`,
+        target,
         targetHandle: `p:${edge.propertyPath}`,
         animated: true,
         style: { strokeWidth: 2 },
         data: {
           isFkProp: Boolean(targetProp?.node),
         },
-      })
+      })]
     })
 
     const canvasIriSet = new Set(options.canvasShapes.value.map(shape => shape.nodeId.value))
@@ -333,7 +341,7 @@ export function useCanvasGraph(options: UseCanvasGraphOptions) {
     }
 
     const allEdges = [...mappingEdges, ...structuralEdges, ...extensionEdges]
-    const nextNodes = [...extensionNodes, ...tableNodes, ...shapeNodes]
+      .filter(edge => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target))
     nodes.value = shouldAutoLayout(nextNodes)
       ? layoutMappingGraph(nextNodes, allEdges)
       : preserveNodePositions(nextNodes)
@@ -362,5 +370,5 @@ export function useCanvasGraph(options: UseCanvasGraphOptions) {
 }
 
 function isVisibleSource(source: DataSource): boolean {
-  return !source.hidden
+  return isCanvasVisibleDataSource(source)
 }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DataSource } from '@/domain/DataSource'
 
-const props = defineProps<{
+defineProps<{
   inputSource: DataSource | null
   outputSource: DataSource | null
 }>()

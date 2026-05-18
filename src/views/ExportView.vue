@@ -10,13 +10,13 @@ import { useDataStore } from '@/stores/dataStore'
 import { useMetadataStore } from '@/stores/metadataStore'
 import { useMappingStore } from '@/stores/mappingStore'
 import { useProjectStore } from '@/stores/projectStore'
-import { exportRoCrate } from '@/services/export/exportService'
+import { buildRoCratePackage, downloadBlob } from '@/services/export/exportService'
 import { useDatasetMetadataWorkflow } from '@/features/export/useDatasetMetadataWorkflow'
 import { useShaclFormViewer, type ShaclFormElement } from '@/features/shacl/useShaclFormViewer'
 import { useShapesStore } from '@/stores/shapesStore'
 
 type SerializableShaclFormElement = ShaclFormElement & {
-  serialize?: () => string
+  serialize?: (format?: string) => string
 }
 
 const METADATA_VALUES_NAMESPACE = 'urn:ardmp:metadata:'
@@ -65,11 +65,16 @@ const canExport = computed(() =>
 )
 
 function onEditorChange(): void {
-  updateDraftFromSerialized(editorRef.value?.serialize)
+  updateDraftFromSerialized(serializeEditor)
 }
 
 function saveMetadata(): void {
-  commitMetadata(editorRef.value?.serialize)
+  updateDraftFromSerialized(serializeEditor)
+  commitMetadata(serializeEditor)
+}
+
+function serializeEditor(): string {
+  return editorRef.value?.serialize?.('text/turtle') ?? ''
 }
 
 async function exportCrate(): Promise<void> {
@@ -77,7 +82,7 @@ async function exportCrate(): Promise<void> {
 
   isExporting.value = true
   try {
-    const result = await exportRoCrate({
+    const result = await buildRoCratePackage({
       projectTitle: metadataSummary.value.name ?? projectStore.project.title,
       ap: shapesStore.ap,
       profiles: shapesStore.profiles,
@@ -85,6 +90,7 @@ async function exportCrate(): Promise<void> {
       mapping: mappingStore.state,
       metadataTurtle: metadataStore.getCombinedMetadataTurtle(),
     })
+    downloadBlob(result.blob, result.filename)
     toast.add({
       severity: 'success',
       summary: 'RO-Crate exportiert',

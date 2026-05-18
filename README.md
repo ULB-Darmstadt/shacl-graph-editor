@@ -1,127 +1,136 @@
 # Architectural RDM-Pipeline
 
-Visual RDF dataset editor: load **SHACL** profiles, connect them to **CSV** files
-or **Airtable** tables via a drag-and-drop mapping canvas, and export validated
-RDF graphs.
+Architectural RDM-Pipeline is a browser-based tool for turning tabular research
+data into structured RDF datasets. It combines SHACL application profiles,
+CSV or Airtable sources, visual mapping, enrichment services, SHACL validation,
+metadata capture, and RO-Crate export in one Vue single-page application.
 
-## Features
+The app is designed for research data workflows where datasets should be
+understandable, reproducible, and publishable without hand-writing Turtle files
+or maintaining one-off conversion scripts.
 
-- **Setup mode** — upload SHACL profiles (`.ttl`); `owl:imports` are resolved
-  automatically against `https://w3id.org/...` and cached in IndexedDB. Bundles
-  the [NFDI4Ing RO-kit](https://w3id.org/nfdi4ing/profiles/) Collection-Dataset
-  and Class-Partition profiles out of the box.
-- **Mapping mode** — Vue-Flow canvas with auto-layout (Dagre). Drag from a CSV
-  column handle to a SHACL property handle to create a mapping edge.
-- **Data mode** — generate Turtle from the current mapping using `rdflib`.
-- **Export mode** — bundle the resolved profiles, source tables, mapping
-  definition, generated TTL and a README into a downloadable ZIP.
-- **Airtable integration** — multi-base support via Personal Access Token,
-  metadata API for table discovery, automatic pagination, AES-GCM encrypted
-  credential storage in IndexedDB.
+[Demo](https://winroger.github.io/ardmp/)
 
-## Stack
 
-- Vue 3.5 + TypeScript 5.6 (strict, `<script setup>`)
-- Vite 5 (hash-routed SPA, suitable for static hosting)
-- Pinia · Vue Router 4
-- PrimeVue 4 (Aura theme) + PrimeIcons
-- Vue Flow 1.41 + `@dagrejs/dagre` for canvas auto-layout
-- `rdflib` 2 for SHACL parsing & RDF serialisation
-- `papaparse` for CSV ingestion
-- `localforage` for IndexedDB persistence
-- `jszip` for export bundles
-- Vitest + happy-dom for tests
 
-## Repository layout
+## What You Can Do
 
-```
-src/
-├── assets/profiles/   bundled SHACL profiles (raw .ttl, imported via Vite ?raw)
-├── components/        AppShell, setup-mode panels, mapping-mode nodes
-├── domain/            DataSource, NodeShape (SHACL parser), Mapping, rdfConstants
-├── router/            hash-routed mode definitions
-├── services/          ProfileResolver, AirtableService, RDF generator, layout, …
-├── stores/            Pinia stores (project / data / shapes / mapping)
-├── styles/            global SCSS + design tokens
-├── views/             one component per mode (Setup, Mapping, Data, Export)
-├── App.vue            root layout
-└── main.ts            Pinia + router + PrimeVue bootstrap
-Testfiles/             developer reference data (not bundled)
-public/                static assets (favicon)
-```
+- Load SHACL profiles in Turtle format and resolve `owl:imports`.
+- Import source data from CSV files or Airtable tables.
+- Build mappings visually on a Vue Flow canvas by connecting source columns to
+  SHACL property shapes.
+- Detect and display table-to-table references from Airtable-style linked
+  record fields.
+- Add enrichment nodes for GeoNames and Lobid/GND workflows.
+- Transform latitude/longitude columns into GeoSPARQL WKT points.
+- Generate RDF from the current mapping.
+- Browse generated RDF subjects as cards, tables, or Turtle.
+- Validate generated RDF against the loaded SHACL profiles.
+- Capture RO-Crate dataset metadata through a SHACL-form based export view.
+- Export a ZIP package containing:
+  - `ro-crate-metadata.json`
+  - generated RDF as `data/dataset.ttl`
+  - source tables as CSV
+  - resolved SHACL profiles
+  - RML mapping output
+  - an internal mapping JSON for round-trip workflows
 
-## Getting started
+## Who It Is For
+
+This tool is aimed at research data managers, data stewards, and domain experts
+who need to prepare RDF datasets from tabular data while staying aligned with
+SHACL-based application profiles. It is especially useful when a dataset needs
+both machine-readable RDF and packaging metadata for publication or archival
+handover.
+
+## Main Workflow
+
+1. Open the mapping view.
+2. Add source data, for example a CSV file or an Airtable base.
+3. Add a target schema by uploading a SHACL profile or loading an embedded
+   profile.
+4. Connect table columns to SHACL properties on the canvas.
+5. Optionally add enrichment or transformation nodes.
+6. Review generated RDF in the browse view.
+7. Check validation results.
+8. Complete dataset metadata in the export view.
+9. Export the RO-Crate ZIP.
+
+## Technology
+
+- Vue 3 and TypeScript
+- Vite
+- Pinia
+- Vue Router
+- PrimeVue
+- Vue Flow and Dagre
+- rdflib
+- shacl-engine
+- `@ulb-darmstadt/shacl-form`
+- PapaParse
+- localForage
+- JSZip
+- Vitest
+
+## Development
+
+Recommended runtime: Node.js 20 or newer.
 
 ```bash
 npm install
-npm run dev          # http://localhost:5173/
+npm run dev
 npm run type-check
+npm run lint
+npm run test
 npm run build
-npm run preview
-npm run test         # run unit tests once
 ```
 
-Recommended runtime: Node.js 20.x. That matches the GitHub Pages workflow.
+The local dev server is served by Vite, usually at:
 
-## GitHub Pages deployment
-
-The `main` branch is deployed to GitHub Pages through
-[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
-
-The production base path is derived automatically from the GitHub repository
-name during the workflow run via `GITHUB_REPOSITORY`. For this repository that
-means the generated site is built for `/ardmp/`.
-
-The workflow also attempts to create or initialize the GitHub Pages site
-automatically via `actions/configure-pages` if the repository does not have a
-Pages site yet.
-
-If the repository name changes later, the Pages build keeps working without a
-code change as long as the workflow still runs in the target repository.
-
-### Repository settings
-
-In GitHub, open **Settings -> Pages** and set **Source** to **GitHub Actions**.
-
-### Local Pages validation
-
-Regular local builds use `/` as the base path:
-
-```bash
-npm run build
-npm run preview
+```text
+http://localhost:5173/
 ```
 
-To validate the GitHub Pages asset paths locally, build with an explicit Pages
-base path override.
+## Repository Layout
 
-POSIX shells:
-
-```bash
-VITE_BASE_PATH=/ardmp/ npm run build
+```text
+src/
+  assets/profiles/      bundled SHACL profiles
+  components/           shared shell and browse components
+  domain/               framework-light domain models
+  features/             feature modules for mapping, browse, export, SHACL UI
+  router/               route definitions
+  services/             RDF, validation, export, mapping, project, infrastructure
+  stores/               Pinia stores
+  styles/               global SCSS and design tokens
+  views/                route-level views
 ```
 
-PowerShell:
+## Deployment
 
-```powershell
-$env:VITE_BASE_PATH = '/ardmp/'
-npm run build
-Remove-Item Env:VITE_BASE_PATH
-```
+The app is a static hash-routed SPA and can be deployed to GitHub Pages. The
+production base path is derived in `vite.config.ts` from the repository name
+when the GitHub Actions workflow runs, so the source code does not hardcode a
+Pages path.
 
-After that build, the generated `dist/index.html` should reference assets below
-`/ardmp/`.
-
-### Workflow summary
-
-The deploy workflow currently does this:
+The deployment workflow:
 
 - installs dependencies with `npm ci`
-- runs `npm run type-check`
-- runs `npm run build`
-- uploads `dist/` as the Pages artifact
-- publishes with `actions/deploy-pages`
+- runs type checking
+- builds the Vite app
+- uploads `dist/`
+- deploys through GitHub Pages
+
+For GitHub Pages, set the repository Pages source to **GitHub Actions**.
+
+## Project Status
+
+The project is under active development. The current architecture separates
+domain models, Pinia state, feature modules, infrastructure adapters, RDF
+generation, validation, and export logic. Mapping extensions are being moved
+toward explicit module boundaries so new importers, enrichers, transformations,
+and exporters can be added without growing route views or central stores.
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+MIT. See [LICENSE](LICENSE).

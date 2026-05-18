@@ -19,10 +19,8 @@ import type {
   MappingTransformSemanticsHandler,
   MappingExtensionSnapshotContext,
   MappingExtensionSnapshotHandler,
-  OpenSetupDialog,
   SetupDialogDefinition,
   SetupDialogId,
-  SetupDialogPayload,
   ShapeSourceImportDefinition,
 } from '@/features/mapping/extensions/core/types'
 import { mappingExtensionModules } from '@/features/mapping/extensions/modules'
@@ -42,12 +40,11 @@ export type {
   MappingTransformSemanticsHandler,
   MappingExtensionSnapshotContext,
   MappingExtensionSnapshotHandler,
-  OpenSetupDialog,
   SetupDialogDefinition,
   SetupDialogId,
-  SetupDialogPayload,
   ShapeSourceImportDefinition,
 } from '@/features/mapping/extensions/core/types'
+export type { OpenSetupDialog, SetupDialogPayload } from '@/features/mapping/extensions/core/types'
 
 export const setupDialogDefinitions: SetupDialogDefinition[] = mappingExtensionModules.flatMap(module => module.setupDialogs ?? [])
 

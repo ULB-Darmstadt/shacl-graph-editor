@@ -1,4 +1,5 @@
 import { defineAsyncComponent, markRaw } from 'vue'
+import { mappingEnrichmentNodeId } from '@/domain/Mapping'
 import { createMappingExtensionModule } from '@/features/mapping/extensions/core/createMappingExtensionModule'
 import type { ExtensionCanvasBuildContext, MappingExtensionSnapshotContext } from '@/features/mapping/extensions/core/types'
 import type { GeoNamesNodeConfig, GeoNamesUiEdge } from '@/features/mapping/mappingNodeTypes'
@@ -74,8 +75,8 @@ export const geoNamesModule = createMappingExtensionModule({
   mappingEdgeSourceHandlers: [
     {
       id: 'node.geonames.mapping-edge-source',
-      canResolve: edge => Boolean(edge.geoNamesNodeId),
-      resolve: edge => ({ source: edge.geoNamesNodeId! }),
+      canResolve: edge => Boolean(mappingEnrichmentNodeId(edge, 'geonames')),
+      resolve: edge => ({ source: mappingEnrichmentNodeId(edge, 'geonames')! }),
     },
   ],
   canvasModules: [
@@ -201,7 +202,7 @@ export const geoNamesModule = createMappingExtensionModule({
 
         if (connection.source?.startsWith('src:') && connection.target?.startsWith('geonames:')) {
           if (!sourceHandle.startsWith('h:') || targetHandle !== 'geo-input') return false
-          context.mappingStore.upsertExtensionUiEdge(GEONAMES_UI_EDGE_STATE_KEY, {
+          context.mappingStore.upsertGeoNamesUiEdge({
             id: `geo-ui:${connection.target}:input`,
             source: connection.source,
             sourceHandle,
@@ -213,7 +214,7 @@ export const geoNamesModule = createMappingExtensionModule({
 
         if (connection.source?.startsWith('geonames:') && connection.target?.startsWith('shape:')) {
           if (!sourceHandle.startsWith('h:') || !targetHandle.startsWith('p:')) return false
-          context.mappingStore.upsertExtensionUiEdge(GEONAMES_UI_EDGE_STATE_KEY, {
+          context.mappingStore.upsertGeoNamesUiEdge({
             id: `geo-ui:${connection.source}:${sourceHandle}->${connection.target}:${targetHandle}`,
             source: connection.source,
             sourceHandle,
@@ -227,19 +228,20 @@ export const geoNamesModule = createMappingExtensionModule({
       },
       deleteUiEdge: (edgeId, context) => {
         if (!edgeId.startsWith('geo-ui:')) return false
-        context.mappingStore.removeExtensionUiEdge(GEONAMES_UI_EDGE_STATE_KEY, edgeId)
+        context.mappingStore.removeGeoNamesUiEdge(edgeId)
         return true
       },
       deleteMappingEdge: (edge, shapeIri, propertyPath, context) => {
-        if (!edge.geoNamesNodeId) return false
+        const nodeId = mappingEnrichmentNodeId(edge, 'geonames')
+        if (!nodeId) return false
         const uiEdge = getCanvasGeoNamesUiEdges(context).find(candidate =>
-          candidate.source === edge.geoNamesNodeId
+          candidate.source === nodeId
           && candidate.sourceHandle === `h:${edge.sourceHeader}`
           && candidate.target === `shape:${shapeIri}`
           && candidate.targetHandle === `p:${propertyPath}`,
         )
         if (!uiEdge) return false
-        context.mappingStore.removeExtensionUiEdge(GEONAMES_UI_EDGE_STATE_KEY, uiEdge.id)
+        context.mappingStore.removeGeoNamesUiEdge(uiEdge.id)
         return true
       },
     },

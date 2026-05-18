@@ -2,13 +2,12 @@ import { blankNode, graph, literal, namedNode, serialize, type NamedNode, type S
 import type { ApplicationProfile } from '@/domain/NodeShape'
 import { classifyShape } from '@/domain/NodeShape'
 import type { DataSource } from '@/domain/DataSource'
-import type { MappingEdge, MappingState } from '@/domain/Mapping'
+import { mappingTransformId, type MappingEdge, type MappingState } from '@/domain/Mapping'
 import { INSTANCE_BASE_IRI, instanceTemplateForShape, sourcePathForExport } from '@/services/mapping/mappingSemantics'
 import { findTransformSemanticsHandler } from '@/features/mapping/mappingExtensionRegistry'
 
 const RDF_TYPE = namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type')
 const RR_TRIPLES_MAP = namedNode('http://www.w3.org/ns/r2rml#TriplesMap')
-const RR_LOGICAL_TABLE = namedNode('http://www.w3.org/ns/r2rml#logicalTable')
 const RML_LOGICAL_SOURCE = namedNode('http://semweb.mmlab.be/ns/rml#logicalSource')
 const RML_SOURCE = namedNode('http://semweb.mmlab.be/ns/rml#source')
 const RML_REFERENCE_FORMULATION = namedNode('http://semweb.mmlab.be/ns/rml#referenceFormulation')
@@ -92,7 +91,7 @@ export function buildRmlStore(
         store.add(predicateObjectMap, RR_PREDICATE, propertyShape.path)
         store.add(predicateObjectMap, RR_OBJECT_MAP, objectMap)
 
-        const transformHandler = findTransformSemanticsHandler(edge.transform)
+        const transformHandler = findTransformSemanticsHandler(mappingTransformId(edge))
         if (transformHandler?.buildRmlTemplate) {
           const template = transformHandler.buildRmlTemplate(edge)
           if (!template) continue

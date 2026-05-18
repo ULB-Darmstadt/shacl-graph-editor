@@ -13,6 +13,7 @@ export interface DataSourceSnapshot {
   id: string
   name: string
   kind: DataSource['kind']
+  role?: DataSource['role']
   headers: string[]
   rows: unknown[][]
   recordIds?: string[]
@@ -63,6 +64,7 @@ export function createDataSourceSnapshots(sources: DataSource[]): DataSourceSnap
     id: source.id,
     name: source.name,
     kind: source.kind,
+    role: source.role,
     headers: [...source.headers],
     rows: cloneRows(source.rows),
     recordIds: source.recordIds ? [...source.recordIds] : undefined,
@@ -84,7 +86,7 @@ export function restoreDataSourcesFromSnapshot(snapshots: DataSourceSnapshot[]):
       )
     }
 
-    if (snapshot.hidden && snapshot.id.startsWith('geonames-output:')) {
+    if (snapshot.kind === 'geonames-result' || (snapshot.hidden && snapshot.id.startsWith('geonames-output:'))) {
       return new GeoNamesResultDataSource(
         snapshot.id,
         snapshot.name,
@@ -94,7 +96,7 @@ export function restoreDataSourcesFromSnapshot(snapshots: DataSourceSnapshot[]):
       )
     }
 
-    if (snapshot.hidden && snapshot.id.startsWith('lobid-output:')) {
+    if (snapshot.kind === 'lobid-result' || (snapshot.hidden && snapshot.id.startsWith('lobid-output:'))) {
       return new LobidResultDataSource(
         snapshot.id,
         snapshot.name,
@@ -129,7 +131,10 @@ export function restoreProfilesFromSnapshot(snapshots: ShaclProfileSnapshot[]): 
 }
 
 export function cloneMappingEdges(edges: MappingEdge[]): MappingEdge[] {
-  return edges.map(edge => ({ ...edge }))
+  return edges.map(edge => ({
+    ...edge,
+    source: edge.source ? { ...edge.source } : undefined,
+  }))
 }
 
 export function cloneUiEdges(edges: UiEdgeSnapshot[]): UiEdgeSnapshot[] {

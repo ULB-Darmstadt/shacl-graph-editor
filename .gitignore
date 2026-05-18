@@ -2,6 +2,12 @@
 node_modules
 /dist
 
+# AI agent instructions and review notes
+AGENTS.md
+copilot-instructions.md
+REFACTOR_REVIEW.md
+Software_review.md
+
 
 # local env files
 .env.local

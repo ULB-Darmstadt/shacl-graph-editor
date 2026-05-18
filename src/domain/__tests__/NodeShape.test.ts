@@ -169,4 +169,14 @@ describe('ApplicationProfile', () => {
 
     expect(ap.inheritedImportedNodeShapeIds()).toEqual(new Set(['http://example.org/ImportedProfileShape']))
   })
+
+  it('keeps usable shapes when an inherited imported shape is missing', () => {
+    const ap = new ApplicationProfile()
+    ap.upsert(parseShaclProfile(INHERITING_TTL, 'concrete.ttl', 'uploaded'))
+
+    const shape = ap.findNodeShape('http://example.org/ConcreteShape')
+
+    expect(shape?.properties.map(property => property.name)).toEqual(['Own field'])
+    expect(ap.allNodeShapes()).toHaveLength(1)
+  })
 })

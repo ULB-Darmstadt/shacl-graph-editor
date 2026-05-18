@@ -1,10 +1,10 @@
 import { graph, serialize, type NamedNode, type Store } from 'rdflib'
 import { RDF_TYPE } from '@/domain/rdfConstants'
-import type { ApplicationProfile, NodeShape } from '@/domain/NodeShape'
+import type { ApplicationProfile } from '@/domain/NodeShape'
 import { classifyShape } from '@/domain/NodeShape'
-import type { MappingState } from '@/domain/Mapping'
+import { mappingTransformId, type MappingState } from '@/domain/Mapping'
 import type { DataSource } from '@/domain/DataSource'
-import { buildObject, buildObjects, mintInstanceIri, subjectFor } from '@/services/mapping/mappingSemantics'
+import { buildObject, buildObjects, subjectFor } from '@/services/mapping/mappingSemantics'
 import { findTransformSemanticsHandler } from '@/features/mapping/mappingExtensionRegistry'
 
 export interface GeneratedGraph {
@@ -62,7 +62,7 @@ export function generateRdf(
             ? (ap.findNodeShape(ps.node.value)?.targetClass ?? ps.node)
             : undefined
 
-          const transformHandler = findTransformSemanticsHandler(edge.transform)
+          const transformHandler = findTransformSemanticsHandler(mappingTransformId(edge))
           if (transformHandler?.buildValue) {
             const transformedValue = transformHandler.buildValue({ edge, source, row })
             if (!transformedValue) continue
@@ -70,7 +70,7 @@ export function generateRdf(
             continue
           }
 
-          const objects = buildObjects(cellValue, edge.transform, ps.nodeKind, refTargetClass, ps.datatype)
+          const objects = buildObjects(cellValue, mappingTransformId(edge), ps.nodeKind, refTargetClass, ps.datatype)
           for (const obj of objects) store.add(subject, ps.path, obj)
         }
       }

@@ -1,5 +1,6 @@
 import { onBeforeUnmount, onMounted, ref, type Ref } from 'vue'
 import { useVueFlow, type Connection, type EdgeMouseEvent } from '@vue-flow/core'
+import { createColumnMappingEdge } from '@/domain/Mapping'
 import type { DataSource } from '@/domain/DataSource'
 import { getConnectionHandlers } from '@/features/mapping/mappingExtensionRegistry'
 import type { useDataStore } from '@/stores/dataStore'
@@ -52,7 +53,7 @@ export function useCanvasConnections(options: UseCanvasConnectionsOptions) {
       const sourceHeader = sourceHandle.startsWith('h:') ? sourceHandle.slice(2) : ''
       const propertyPath = targetHandle.startsWith('p:') ? targetHandle.slice(2) : ''
       if (!sourceHeader || !propertyPath) return
-      options.mappingStore.set({ sourceId, sourceHeader, shapeIri, propertyPath })
+      options.mappingStore.set(createColumnMappingEdge({ sourceId, sourceHeader, shapeIri, propertyPath }))
       return
     }
 

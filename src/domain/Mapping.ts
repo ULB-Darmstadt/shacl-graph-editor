@@ -9,6 +9,11 @@
  */
 
 export interface MappingEdge {
+  /**
+   * Typed source descriptor for new code paths. The flat fields below remain
+   * for project snapshot compatibility and are kept in sync by helper builders.
+   */
+  source?: MappingEdgeSource
   /** ID of the source DataSource */
   sourceId: string
   /** Header name within the source */
@@ -30,6 +35,100 @@ export interface MappingEdge {
 }
 
 export type MappingTransformId = string
+
+export type MappingEdgeSource =
+  | { kind: 'table-column' }
+  | {
+      kind: 'transform-output'
+      nodeId: string
+      transformId: MappingTransformId
+      secondarySourceHeader: string
+    }
+  | {
+      kind: 'enrichment-output'
+      provider: 'geonames' | 'lobid' | string
+      nodeId: string
+    }
+
+export function createColumnMappingEdge(edge: Omit<MappingEdge, 'source'>): MappingEdge {
+  return {
+    ...edge,
+    source: { kind: 'table-column' },
+  }
+}
+
+export function createTransformMappingEdge(
+  edge: Omit<MappingEdge, 'source' | 'transform' | 'secondarySourceHeader' | 'transformNodeId'>,
+  transform: {
+    nodeId: string
+    transformId: MappingTransformId
+    secondarySourceHeader: string
+  },
+): MappingEdge {
+  return {
+    ...edge,
+    transform: transform.transformId,
+    secondarySourceHeader: transform.secondarySourceHeader,
+    transformNodeId: transform.nodeId,
+    source: {
+      kind: 'transform-output',
+      nodeId: transform.nodeId,
+      transformId: transform.transformId,
+      secondarySourceHeader: transform.secondarySourceHeader,
+    },
+  }
+}
+
+export function createEnrichmentMappingEdge(
+  edge: Omit<MappingEdge, 'source' | 'geoNamesNodeId' | 'lobidNodeId'>,
+  enrichment: {
+    provider: 'geonames' | 'lobid' | string
+    nodeId: string
+  },
+): MappingEdge {
+  return {
+    ...edge,
+    ...(enrichment.provider === 'geonames' ? { geoNamesNodeId: enrichment.nodeId } : {}),
+    ...(enrichment.provider === 'lobid' ? { lobidNodeId: enrichment.nodeId } : {}),
+    source: {
+      kind: 'enrichment-output',
+      provider: enrichment.provider,
+      nodeId: enrichment.nodeId,
+    },
+  }
+}
+
+export function mappingTransformId(edge: MappingEdge): MappingTransformId | undefined {
+  return edge.source?.kind === 'transform-output'
+    ? edge.source.transformId
+    : edge.transform
+}
+
+export function mappingTransformNodeId(edge: MappingEdge): string | undefined {
+  return edge.source?.kind === 'transform-output'
+    ? edge.source.nodeId
+    : edge.transformNodeId
+}
+
+export function mappingSecondarySourceHeader(edge: MappingEdge): string | undefined {
+  return edge.source?.kind === 'transform-output'
+    ? edge.source.secondarySourceHeader
+    : edge.secondarySourceHeader
+}
+
+export function mappingEnrichmentNodeId(edge: MappingEdge, provider?: string): string | undefined {
+  if (edge.source?.kind === 'enrichment-output') {
+    if (!provider || edge.source.provider === provider) return edge.source.nodeId
+  }
+  if (provider === 'geonames') return edge.geoNamesNodeId
+  if (provider === 'lobid') return edge.lobidNodeId
+  return edge.geoNamesNodeId ?? edge.lobidNodeId
+}
+
+export function mappingOwnedByNode(edge: MappingEdge, nodeId: string): boolean {
+  return mappingTransformNodeId(edge) === nodeId
+    || mappingEnrichmentNodeId(edge) === nodeId
+}
 
 export class MappingState {
   edges: MappingEdge[] = []

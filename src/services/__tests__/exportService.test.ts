@@ -1,9 +1,9 @@
 import JSZip from 'jszip'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApplicationProfile, parseShaclProfile } from '@/domain/NodeShape'
 import { AirtableDataSource } from '@/domain/DataSource'
 import { MappingState } from '@/domain/Mapping'
-import { exportRoCrate } from '@/services/export/exportService'
+import { buildRoCratePackage } from '@/services/export/exportService'
 
 const SHAPE = `
 @prefix sh:  <http://www.w3.org/ns/shacl#> .
@@ -19,23 +19,7 @@ ex:PersonShape a sh:NodeShape ;
 `
 
 describe('exportService', () => {
-  const originalCreateObjectURL = URL.createObjectURL
-  const originalRevokeObjectURL = URL.revokeObjectURL
-  let capturedBlob: Blob | null = null
-
-  beforeEach(() => {
-    capturedBlob = null
-    URL.createObjectURL = vi.fn((blob: Blob) => {
-      capturedBlob = blob
-      return 'blob:test-export'
-    })
-    URL.revokeObjectURL = vi.fn()
-    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-  })
-
   afterEach(() => {
-    URL.createObjectURL = originalCreateObjectURL
-    URL.revokeObjectURL = originalRevokeObjectURL
     vi.restoreAllMocks()
   })
 
@@ -53,7 +37,7 @@ describe('exportService', () => {
       propertyPath: 'http://example.org/name',
     })
 
-    const result = await exportRoCrate({
+    const result = await buildRoCratePackage({
       projectTitle: 'People export',
       ap,
       profiles: [profile],
@@ -62,9 +46,8 @@ describe('exportService', () => {
     })
 
     expect(result.filename).toMatch(/\.zip$/)
-    expect(capturedBlob).toBeTruthy()
 
-    const zip = await JSZip.loadAsync(await capturedBlob!.arrayBuffer())
+    const zip = await JSZip.loadAsync(await result.blob.arrayBuffer())
     const rml = await zip.file('mapping/mapping.rml.ttl')?.async('string')
     const mappingJson = await zip.file('mapping/mapping.json')?.async('string')
     const sourceCsv = await zip.file('sources/People.csv')?.async('string')
@@ -114,7 +97,7 @@ _:att1 prov:agent <http://example.org/people/alice> .
   foaf:name "Alice Example" .
 `
 
-    await exportRoCrate({
+    const result = await buildRoCratePackage({
       projectTitle: 'Fallback title',
       ap,
       profiles: [profile],
@@ -123,7 +106,7 @@ _:att1 prov:agent <http://example.org/people/alice> .
       metadataTurtle,
     })
 
-    const zip = await JSZip.loadAsync(await capturedBlob!.arrayBuffer())
+    const zip = await JSZip.loadAsync(await result.blob.arrayBuffer())
     const roCrateJson = await zip.file('ro-crate-metadata.json')?.async('string')
     const roCrate = JSON.parse(roCrateJson ?? '{}')
     const root = roCrate['@graph'].find((entity: { '@id': string }) => entity['@id'] === './')
@@ -148,7 +131,7 @@ _:att1 prov:agent <http://example.org/people/alice> .
       propertyPath: 'http://example.org/name',
     })
 
-    await exportRoCrate({
+    const result = await buildRoCratePackage({
       projectTitle: 'Fallback title',
       ap,
       profiles: [profile],
@@ -156,7 +139,7 @@ _:att1 prov:agent <http://example.org/people/alice> .
       mapping,
     })
 
-    const zip = await JSZip.loadAsync(await capturedBlob!.arrayBuffer())
+    const zip = await JSZip.loadAsync(await result.blob.arrayBuffer())
     const roCrateJson = await zip.file('ro-crate-metadata.json')?.async('string')
     const roCrate = JSON.parse(roCrateJson ?? '{}')
     const root = roCrate['@graph'].find((entity: { '@id': string }) => entity['@id'] === './')
