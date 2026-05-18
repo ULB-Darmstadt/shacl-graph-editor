@@ -108,3 +108,4 @@ export function mergeMetadataTurtle(dataStore: Store, metadataTurtle?: string): 
   if (!metadataTurtle || metadataTurtle.trim().length === 0) return
   parse(metadataTurtle, dataStore, DEFAULT_BASE_URI, 'text/turtle')
 }
+

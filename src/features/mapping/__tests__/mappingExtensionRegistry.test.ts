@@ -3,7 +3,6 @@ import { createPinia, setActivePinia } from 'pinia'
 import {
   canvasNodeTypes,
   dataSourceImportDefinitions,
-  findCanvasNodePresentation,
   findTransformSemanticsHandler,
   getSetupDialogDefinition,
   mappingNodeActionDefinitions,
@@ -13,6 +12,8 @@ import {
 } from '@/features/mapping/mappingExtensionRegistry'
 import { useDataStore } from '@/stores/dataStore'
 import { useMappingStore } from '@/stores/mappingStore'
+import { csvSource } from '@/test/dataSources'
+import { addGeoNamesNode } from '@/test/mappingExtensionFixtures'
 
 describe('mappingExtensionRegistry', () => {
   beforeEach(() => {
@@ -47,7 +48,7 @@ describe('mappingExtensionRegistry', () => {
   it('resolves materialized upstream outputs through registered node output handlers', () => {
     const mappingStore = useMappingStore()
     const dataStore = useDataStore()
-    const node = mappingStore.addGeoNamesNode('demo-user')
+    const node = addGeoNamesNode(mappingStore, 'demo-user')
 
     mappingStore.updateExtensionNode('node.geonames.nodes', node.id, current => ({
       ...current,
@@ -61,28 +62,13 @@ describe('mappingExtensionRegistry', () => {
     })).toBe(`geonames-output:${node.id}`)
   })
 
-  it('resolves canvas presentation metadata through registered module handlers', () => {
-    expect(findCanvasNodePresentation('geonames:test')).toEqual({
-      inputColor: '#0ea5e9',
-      outputColor: '#0284c7',
-    })
-    expect(findCanvasNodePresentation('lobid:test')).toEqual({
-      inputColor: '#14b8a6',
-      outputColor: '#0f766e',
-    })
-    expect(findCanvasNodePresentation('transform:test')).toEqual({
-      inputColor: '#ea580c',
-      outputColor: '#c2410c',
-    })
-  })
-
   it('resolves mapping edge source ownership through registered module handlers', () => {
     expect(resolveMappingEdgeCanvasSource({
       sourceId: 'geonames-output:test',
       sourceHeader: 'name',
       shapeIri: 'http://example.org/PlaceShape',
       propertyPath: 'http://www.w3.org/2000/01/rdf-schema#label',
-      geoNamesNodeId: 'geonames:test',
+      source: { kind: 'node-output', provider: 'geonames', nodeId: 'geonames:test' },
     })).toEqual({
       source: 'geonames:test',
     })
@@ -124,14 +110,10 @@ describe('mappingExtensionRegistry', () => {
         transform: 'lat-lng-to-wkt',
         transformNodeId: 'transform:test',
       },
-      source: {
-        id: 'places',
-        name: 'Places',
-        kind: 'csv',
-        headers: ['lat', 'lng'],
-        rows: [['49.8728', '8.6512']],
-      },
+      source: csvSource('places', 'Places', ['lat', 'lng'], [['49.8728', '8.6512']]),
       row: ['49.8728', '8.6512'],
     })).toBe('POINT(8.6512 49.8728)')
   })
 })
+
+

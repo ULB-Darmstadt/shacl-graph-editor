@@ -194,3 +194,4 @@ useShaclFormViewer({
   color: var(--color-text-muted);
 }
 </style>
+

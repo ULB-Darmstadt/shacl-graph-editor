@@ -28,10 +28,6 @@ export interface MappingEdge {
   secondarySourceHeader?: string
   /** Optional canvas node id for transform-backed mappings. */
   transformNodeId?: string
-  /** Optional canvas node id for direct GeoNames-backed mappings. */
-  geoNamesNodeId?: string
-  /** Optional canvas node id for direct Lobid-backed mappings. */
-  lobidNodeId?: string
 }
 
 export type MappingTransformId = string
@@ -45,8 +41,8 @@ export type MappingEdgeSource =
       secondarySourceHeader: string
     }
   | {
-      kind: 'enrichment-output'
-      provider: 'geonames' | 'lobid' | string
+      kind: 'node-output'
+      provider: string
       nodeId: string
     }
 
@@ -80,18 +76,16 @@ export function createTransformMappingEdge(
 }
 
 export function createEnrichmentMappingEdge(
-  edge: Omit<MappingEdge, 'source' | 'geoNamesNodeId' | 'lobidNodeId'>,
+  edge: Omit<MappingEdge, 'source'>,
   enrichment: {
-    provider: 'geonames' | 'lobid' | string
+    provider: string
     nodeId: string
   },
 ): MappingEdge {
   return {
     ...edge,
-    ...(enrichment.provider === 'geonames' ? { geoNamesNodeId: enrichment.nodeId } : {}),
-    ...(enrichment.provider === 'lobid' ? { lobidNodeId: enrichment.nodeId } : {}),
     source: {
-      kind: 'enrichment-output',
+      kind: 'node-output',
       provider: enrichment.provider,
       nodeId: enrichment.nodeId,
     },
@@ -117,12 +111,10 @@ export function mappingSecondarySourceHeader(edge: MappingEdge): string | undefi
 }
 
 export function mappingEnrichmentNodeId(edge: MappingEdge, provider?: string): string | undefined {
-  if (edge.source?.kind === 'enrichment-output') {
+  if (edge.source?.kind === 'node-output') {
     if (!provider || edge.source.provider === provider) return edge.source.nodeId
   }
-  if (provider === 'geonames') return edge.geoNamesNodeId
-  if (provider === 'lobid') return edge.lobidNodeId
-  return edge.geoNamesNodeId ?? edge.lobidNodeId
+  return undefined
 }
 
 export function mappingOwnedByNode(edge: MappingEdge, nodeId: string): boolean {
@@ -174,3 +166,5 @@ export class MappingState {
     this.edges = []
   }
 }
+
+

@@ -1,15 +1,20 @@
 /**
- * DataSource — common interface for tabular data (CSV, Airtable, …).
+ * Provider-neutral tabular source model used by mapping, preview, RDF, and export.
+ *
+ * Concrete importers and enrichment nodes should create DataSource instances from
+ * their module code instead of adding provider-specific classes here.
  */
 export interface DataSource {
-  /** Stable key used for mapping references; usually file or table name. */
+  /** Stable key used for mapping references. */
   readonly id: string
   /** Human-readable display name. */
   readonly name: string
-  /** Concrete source type, used for UI labels, snapshots, and export metadata. */
-  readonly kind: 'csv' | 'airtable' | 'geonames-result' | 'lobid-result'
+  /** Core data shape. Provider details live in `origin`. */
+  readonly kind: 'tabular'
   /** High-level role in the mapping pipeline. */
-  readonly role?: 'source' | 'derived'
+  readonly role: DataSourceRole
+  /** Where this source came from. */
+  readonly origin: DataSourceOrigin
   /** Column headers in source order. */
   readonly headers: string[]
   /** Raw rows, indexed by header position. */
@@ -18,79 +23,151 @@ export interface DataSource {
   readonly hidden?: boolean
   /**
    * Optional per-row primary identifiers used as the URI suffix when
-   * generating RDF subjects (e.g. Airtable record IDs). When absent the
-   * first column value is used as a fallback.
+   * generating RDF subjects. When absent the first column value is used.
    */
   readonly recordIds?: string[]
 }
 
-export interface AirtableSyncInfo {
-  readonly baseId: string
-  readonly tableId: string
+export type DataSourceRole = 'source' | 'derived'
+
+export type DataSourceOrigin =
+  | {
+      kind: 'uploaded-file'
+      mediaType?: string
+      filename?: string
+    }
+  | {
+      kind: 'remote-table'
+      provider: string
+      externalRef: Record<string, string>
+    }
+  | {
+      kind: 'node-output'
+      provider: string
+      nodeId: string
+    }
+  | {
+      kind: 'generated'
+      provider?: string
+      externalRef?: Record<string, string>
+    }
+
+export class TabularDataSource implements DataSource {
+  readonly kind = 'tabular' as const
+  readonly id: string
+  readonly name: string
+  readonly headers: string[]
+  readonly rows: unknown[][]
+  readonly role: DataSourceRole
+  readonly origin: DataSourceOrigin
+  readonly hidden?: boolean
+  readonly recordIds?: string[]
+
+  constructor(options: {
+    id: string
+    name: string
+    headers: string[]
+    rows: unknown[][]
+    recordIds?: string[]
+    role?: DataSourceRole
+    origin?: DataSourceOrigin
+    hidden?: boolean
+  }) {
+    this.id = options.id
+    this.name = options.name
+    this.headers = options.headers
+    this.rows = options.rows
+    this.recordIds = options.recordIds
+    this.role = options.role ?? 'source'
+    this.origin = options.origin ?? { kind: 'generated' }
+    this.hidden = options.hidden
+  }
 }
 
-export class CsvDataSource implements DataSource {
-  readonly kind = 'csv' as const
-  constructor(
-    public readonly id: string,
-    public readonly name: string,
-    public readonly headers: string[],
-    public readonly rows: unknown[][],
-  ) {}
+export function createUploadedTabularSource(options: {
+  id: string
+  name: string
+  headers: string[]
+  rows: unknown[][]
+  recordIds?: string[]
+  filename?: string
+  mediaType?: string
+}): DataSource {
+  return new TabularDataSource({
+    ...options,
+    origin: {
+      kind: 'uploaded-file',
+      filename: options.filename,
+      mediaType: options.mediaType,
+    },
+  })
 }
 
-export class AirtableDataSource implements DataSource {
-  readonly kind = 'airtable' as const
-  constructor(
-    public readonly id: string,
-    public readonly name: string,
-    public readonly headers: string[],
-    public readonly rows: unknown[][],
-    public readonly recordIds: string[],
-    public readonly sync?: AirtableSyncInfo,
-  ) {}
+export function createRemoteTabularSource(options: {
+  id: string
+  name: string
+  provider: string
+  externalRef: Record<string, string>
+  headers: string[]
+  rows: unknown[][]
+  recordIds?: string[]
+}): DataSource {
+  return new TabularDataSource({
+    id: options.id,
+    name: options.name,
+    headers: options.headers,
+    rows: options.rows,
+    recordIds: options.recordIds,
+    origin: {
+      kind: 'remote-table',
+      provider: options.provider,
+      externalRef: options.externalRef,
+    },
+  })
 }
 
-export class GeoNamesResultDataSource implements DataSource {
-  readonly kind = 'geonames-result' as const
-  readonly role = 'derived' as const
-  readonly hidden = true
-  constructor(
-    public readonly id: string,
-    public readonly name: string,
-    public readonly headers: string[],
-    public readonly rows: unknown[][],
-    public readonly recordIds?: string[],
-  ) {}
-}
-
-export class LobidResultDataSource implements DataSource {
-  readonly kind = 'lobid-result' as const
-  readonly role = 'derived' as const
-  readonly hidden = true
-  constructor(
-    public readonly id: string,
-    public readonly name: string,
-    public readonly headers: string[],
-    public readonly rows: unknown[][],
-    public readonly recordIds?: string[],
-  ) {}
+export function createNodeOutputTabularSource(options: {
+  id: string
+  name: string
+  provider: string
+  nodeId: string
+  headers: string[]
+  rows: unknown[][]
+  recordIds?: string[]
+  hidden?: boolean
+}): DataSource {
+  return new TabularDataSource({
+    id: options.id,
+    name: options.name,
+    headers: options.headers,
+    rows: options.rows,
+    recordIds: options.recordIds,
+    role: 'derived',
+    hidden: options.hidden ?? true,
+    origin: {
+      kind: 'node-output',
+      provider: options.provider,
+      nodeId: options.nodeId,
+    },
+  })
 }
 
 export function isCanvasVisibleDataSource(source: DataSource): boolean {
-  return (source.role ?? 'source') === 'source' && !source.hidden
+  return source.role === 'source' && !source.hidden
 }
 
-export function dataSourceKindLabel(source: DataSource): string {
-  switch (source.kind) {
-    case 'airtable':
-      return 'Airtable table'
-    case 'geonames-result':
-      return 'GeoNames result table'
-    case 'lobid-result':
-      return 'Lobid result table'
-    case 'csv':
+export function dataSourceOriginLabel(source: DataSource): string {
+  switch (source.origin.kind) {
+    case 'uploaded-file':
+      return source.origin.mediaType === 'text/csv' ? 'CSV table' : 'Uploaded table'
+    case 'remote-table':
+      return `${source.origin.provider} table`
+    case 'node-output':
+      return `${source.origin.provider} result table`
+    case 'generated':
     default:
-      return 'CSV table'
+      return source.origin.provider ? `${source.origin.provider} table` : 'Generated table'
   }
 }
+
+

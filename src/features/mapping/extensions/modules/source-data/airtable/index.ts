@@ -1,5 +1,13 @@
+import { CANVAS_EDGE_STYLES } from '@/features/mapping/canvasTheme'
 import { defineAsyncComponent, markRaw } from 'vue'
 import { createMappingExtensionModule } from '@/features/mapping/extensions/core/createMappingExtensionModule'
+import { loadAirtableCredentials } from '@/services/infrastructure/storage/credentialStore'
+import {
+  AIRTABLE_PROVIDER_ID,
+  getAirtableTablesForBase,
+  listAirtableBases,
+  refreshAirtableBase,
+} from '@/features/mapping/extensions/modules/source-data/airtable/workflow'
 
 const AirtableConnectPanel = defineAsyncComponent(() => import('@/features/mapping/components/setup/AirtableConnectPanel.vue'))
 const HubNode = defineAsyncComponent(() => import('@/features/mapping/components/canvas/HubNode.vue'))
@@ -31,10 +39,10 @@ export const airtableModule = createMappingExtensionModule({
   canvasModules: [
     {
       id: 'airtable-hub',
-      buildNodes: context => context.dataStore.listAirtableBases().map(baseId => {
-        const tables = context.dataStore.getAirtableTablesForBase(baseId)
+      buildNodes: context => listAirtableBases(context.visibleSources).map(baseId => {
+        const tables = getAirtableTablesForBase(context.visibleSources, baseId)
         return {
-          id: `air:${baseId}`,
+          id: `${AIRTABLE_PROVIDER_ID}:${baseId}`,
           type: 'hubNode',
           position: { x: 0, y: 0 },
           data: {
@@ -56,25 +64,57 @@ export const airtableModule = createMappingExtensionModule({
             action: {
               label: 'Refresh',
               icon: 'pi pi-refresh',
-              loading: context.isRefreshingAirtableBase(baseId),
-              onClick: () => context.refreshAirtableBase(baseId),
-            },
-            theme: {
-              background: 'linear-gradient(160deg, #ecfeff 0%, #f0fdfa 100%)',
-              borderColor: '#99f6e4',
-              accentColor: '#0f766e',
-              mutedColor: '#115e59',
-              handleColor: '#d1d5db',
-              codeBackground: 'rgba(255, 255, 255, 0.7)',
+              loading: context.isRefreshingSourceGroup(AIRTABLE_PROVIDER_ID, baseId),
+              onClick: () => context.refreshSourceGroup(AIRTABLE_PROVIDER_ID, baseId),
             },
             onOpenConfig: () => context.openSetupDialog('airtable-connect', { initialBaseId: baseId }),
-            onHoverChange: (isHovered: boolean) => context.setAirtableEdgeVisibility(baseId, isHovered),
+            onHoverChange: (isHovered: boolean) => context.setSourceGroupEdgeVisibility(AIRTABLE_PROVIDER_ID, baseId, isHovered),
           },
         }
       }),
+      buildEdges: context => listAirtableBases(context.visibleSources).flatMap(baseId =>
+        getAirtableTablesForBase(context.visibleSources, baseId).map(source => ({
+          id: `${AIRTABLE_PROVIDER_ID}:${baseId}->${source.id}`,
+          source: `${AIRTABLE_PROVIDER_ID}:${baseId}`,
+          sourceHandle: 'airtable-out',
+          target: `src:${source.id}`,
+          targetHandle: 'table-parent',
+          type: 'bezier',
+          animated: false,
+          style: { ...CANVAS_EDGE_STYLES.structural, opacity: 0 },
+        })),
+      ),
     },
   ],
   defaultNodePositions: {
     hubNode: { x: 40, y: 40 },
   },
+  sourceGroupHandlers: [
+    {
+      id: 'source-data.airtable.refresh',
+      provider: AIRTABLE_PROVIDER_ID,
+      refreshGroup: async (baseId, context) => {
+        const creds = await loadAirtableCredentials()
+        if (!creds?.pat) {
+          context.toast.add({
+            severity: 'warn',
+            summary: 'No Airtable token stored',
+            detail: 'Reconnect Airtable before refreshing data.',
+            life: 4000,
+          })
+          return {
+            successSummary: 'Airtable not refreshed',
+            successDetail: 'Missing stored token.',
+          }
+        }
+        const refreshed = await refreshAirtableBase(context.dataStore, creds.pat, baseId)
+        return {
+          successSummary: 'Airtable updated',
+          successDetail: `${refreshed} table(s) reloaded. Existing mappings were preserved.`,
+        }
+      },
+    },
+  ],
 })
+
+

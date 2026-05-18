@@ -157,3 +157,5 @@ export function useCanvasConnections(options: UseCanvasConnectionsOptions) {
 function isStructuralEdge(edgeId: string): boolean {
   return edgeId.startsWith('ref:') || edgeId.startsWith('air:') || edgeId.startsWith('tbl:')
 }
+
+

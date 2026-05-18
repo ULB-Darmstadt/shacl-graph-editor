@@ -2,15 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, reactive, ref } from 'vue'
 import { MappingState, type MappingEdge, type MappingTransformId } from '@/domain/Mapping'
 import type { DataSource } from '@/domain/DataSource'
-import type {
-  GeoNamesNodeConfig,
-  GeoNamesUiEdge,
-  LobidNodeConfig,
-  LobidUiEdge,
-  TransformationNodeConfig,
-  TransformationUiEdge,
-} from '@/features/mapping/mappingNodeTypes'
-import { type GeoNamesOutputField } from '@/services/infrastructure/integrations/geonamesService'
+import type { TransformationNodeConfig, TransformationUiEdge } from '@/features/mapping/extensions/modules/nodes/lat-lng-to-wkt/types'
 import {
   createExtensionSnapshotState,
   resolveMaterializedNodeOutputSource,
@@ -25,11 +17,7 @@ import {
   syncTransformationNodeMappings,
   upsertUiEdge,
 } from '@/services/mapping/mappingEdgeSync'
-import { cloneMappingEdges, type MappingStoreSnapshot } from '@/services/project/projectSnapshot'
-import {
-  syncGeoNamesShapeMappings as syncGeoNamesShapeMappingsFromWorkflow,
-} from '@/features/mapping/extensions/modules/nodes/geonames/workflow'
-import { syncLobidShapeMappings as syncLobidShapeMappingsFromWorkflow } from '@/features/mapping/extensions/modules/nodes/lobid/workflow'
+import { cloneMappingEdges, normalizeMappingEdge, type MappingStoreSnapshot } from '@/services/project/projectSnapshot'
 import { useDataStore } from '@/stores/dataStore'
 
 export const useMappingStore = defineStore('mapping', () => {
@@ -37,7 +25,6 @@ export const useMappingStore = defineStore('mapping', () => {
   const dataStore = useDataStore()
   const extensionState = ref<Record<string, unknown>>({})
   const extensionStateRevision = ref(0)
-  let extensionStoreApi: MappingExtensionStoreApi
 
   function getExtensionState<T>(key: string, fallback: T): T {
     const value = extensionState.value[key]
@@ -97,22 +84,6 @@ export const useMappingStore = defineStore('mapping', () => {
     }
   }
 
-  const geoNamesNodes = computed<GeoNamesNodeConfig[]>({
-    get: () => getExtensionState('node.geonames.nodes', [] as GeoNamesNodeConfig[]),
-    set: value => setExtensionState('node.geonames.nodes', value),
-  })
-  const geoNamesUiEdges = computed<GeoNamesUiEdge[]>({
-    get: () => getExtensionState('node.geonames.uiEdges', [] as GeoNamesUiEdge[]),
-    set: value => setExtensionState('node.geonames.uiEdges', value),
-  })
-  const lobidNodes = computed<LobidNodeConfig[]>({
-    get: () => getExtensionState('node.lobid.nodes', [] as LobidNodeConfig[]),
-    set: value => setExtensionState('node.lobid.nodes', value),
-  })
-  const lobidUiEdges = computed<LobidUiEdge[]>({
-    get: () => getExtensionState('node.lobid.uiEdges', [] as LobidUiEdge[]),
-    set: value => setExtensionState('node.lobid.uiEdges', value),
-  })
   const transformationNodes = computed<TransformationNodeConfig[]>({
     get: () => getExtensionState('node.transformation.nodes', [] as TransformationNodeConfig[]),
     set: value => setExtensionState('node.transformation.nodes', value),
@@ -130,53 +101,11 @@ export const useMappingStore = defineStore('mapping', () => {
     state.remove(shapeIri, propertyPath)
   }
 
-  function addGeoNamesNode(username: string): GeoNamesNodeConfig {
-    return createExtensionNode<GeoNamesNodeConfig>('node.geonames.nodes', 'geonames', id => ({
-      id,
-      username,
-      selectedOutputs: ['name', 'id', 'lat', 'lng'] as GeoNamesOutputField[],
-      status: 'idle' as const,
-      stats: { totalCount: 0, processedCount: 0, cachedCount: 0 },
-      results: {},
-    }))
-  }
-
-  function addLobidNode(selectedProperties: string[] = ['preferredName', 'firstAuthor']): LobidNodeConfig {
-    return createExtensionNode<LobidNodeConfig>('node.lobid.nodes', 'lobid', id => ({
-      id,
-      selectedProperties: [...selectedProperties],
-      status: 'idle' as const,
-      stats: { totalCount: 0, processedCount: 0, cachedCount: 0 },
-      results: {},
-    }))
-  }
-
   function addTransformationNode(kind: MappingTransformId = 'lat-lng-to-wkt'): TransformationNodeConfig {
     return createExtensionNode<TransformationNodeConfig>('node.transformation.nodes', 'transform', id => ({
       id,
       kind,
     }))
-  }
-
-  function geoNamesWorkflowStore() {
-    return {
-      state,
-      findExtensionNode,
-      updateExtensionNode,
-      getExtensionState,
-      setExtensionState,
-      syncTransformationMappings,
-    }
-  }
-
-  function lobidWorkflowStore() {
-    return {
-      state,
-      findExtensionNode,
-      updateExtensionNode,
-      getExtensionState,
-      setExtensionState,
-    }
   }
 
   function transformationInputsForNode(nodeId: string): { lat?: TransformationUiEdge; lng?: TransformationUiEdge } {
@@ -201,34 +130,6 @@ export const useMappingStore = defineStore('mapping', () => {
     }
 
     state.edges = syncTransformationNodeMappings(state.edges, nodeId, input, node.kind)
-  }
-
-  function upsertGeoNamesUiEdge(edge: GeoNamesUiEdge): void {
-    upsertExtensionUiEdge<GeoNamesUiEdge>('node.geonames.uiEdges', edge)
-    if (edge.source.startsWith('geonames:') && edge.target.startsWith('shape:')) {
-      syncGeoNamesShapeMappingsFromWorkflow(geoNamesWorkflowStore(), dataStore, edge.source)
-    }
-  }
-
-  function removeGeoNamesUiEdge(edgeId: string): void {
-    const { removed } = removeExtensionUiEdge<GeoNamesUiEdge>('node.geonames.uiEdges', edgeId)
-    if (removed?.source.startsWith('geonames:') && removed.target.startsWith('shape:')) {
-      syncGeoNamesShapeMappingsFromWorkflow(geoNamesWorkflowStore(), dataStore, removed.source)
-    }
-  }
-
-  function upsertLobidUiEdge(edge: LobidUiEdge): void {
-    upsertExtensionUiEdge<LobidUiEdge>('node.lobid.uiEdges', edge)
-    if (edge.source.startsWith('lobid:') && edge.target.startsWith('shape:')) {
-      syncLobidShapeMappingsFromWorkflow(lobidWorkflowStore(), dataStore, edge.source)
-    }
-  }
-
-  function removeLobidUiEdge(edgeId: string): void {
-    const { removed } = removeExtensionUiEdge<LobidUiEdge>('node.lobid.uiEdges', edgeId)
-    if (removed?.source.startsWith('lobid:') && removed.target.startsWith('shape:')) {
-      syncLobidShapeMappingsFromWorkflow(lobidWorkflowStore(), dataStore, removed.source)
-    }
   }
 
   function upsertTransformationUiEdge(edge: TransformationUiEdge): void {
@@ -260,7 +161,7 @@ export const useMappingStore = defineStore('mapping', () => {
           && typeof (edge as Record<string, unknown>).shapeIri === 'string'
           && typeof (edge as Record<string, unknown>).propertyPath === 'string'
         ) {
-          state.addOrReplace(edge as MappingEdge)
+          state.addOrReplace(normalizeMappingEdge(edge as MappingEdge))
           imported++
         } else {
           skipped++
@@ -289,7 +190,7 @@ export const useMappingStore = defineStore('mapping', () => {
     resetExtensionSnapshotState({ mappingStore: extensionStoreApi })
   }
 
-  extensionStoreApi = {
+  const extensionStoreApi: MappingExtensionStoreApi = {
     get state() { return state },
     createExtensionNode,
     findExtensionNode,
@@ -304,10 +205,6 @@ export const useMappingStore = defineStore('mapping', () => {
   return {
     state,
     extensionStateRevision,
-    geoNamesNodes,
-    geoNamesUiEdges,
-    lobidNodes,
-    lobidUiEdges,
     transformationNodes,
     transformationUiEdges,
     createExtensionNode,
@@ -320,15 +217,9 @@ export const useMappingStore = defineStore('mapping', () => {
     resetExtensionState,
     set,
     unset,
-    addGeoNamesNode,
-    addLobidNode,
     addTransformationNode,
     transformationInputsForNode,
     syncTransformationMappings,
-    upsertGeoNamesUiEdge,
-    removeGeoNamesUiEdge,
-    upsertLobidUiEdge,
-    removeLobidUiEdge,
     upsertTransformationUiEdge,
     removeTransformationUiEdge,
     importFromJson,
@@ -337,3 +228,5 @@ export const useMappingStore = defineStore('mapping', () => {
     reset,
   }
 })
+
+

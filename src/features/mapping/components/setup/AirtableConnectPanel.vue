@@ -6,7 +6,8 @@ import Button from 'primevue/button'
 import Listbox from 'primevue/listbox'
 import Message from 'primevue/message'
 import { useToast } from 'primevue/usetoast'
-import { AirtableService, type AirtableTable } from '@/services/infrastructure/imports/airtableService'
+import { AirtableService, type AirtableTable } from '@/features/mapping/extensions/modules/source-data/airtable/client'
+import { createAirtableDataSource } from '@/features/mapping/extensions/modules/source-data/airtable/workflow'
 import { loadAirtableCredentials, saveAirtableCredentials, clearAirtableCredentials } from '@/services/infrastructure/storage/credentialStore'
 import { useDataStore } from '@/stores/dataStore'
 
@@ -79,7 +80,14 @@ async function importSelected(): Promise<void> {
       const records = await svc.fetchTableRecords(table.id)
       const fieldOrder = table.fields?.map(field => field.name) ?? []
       const { headers, rows, recordIds } = AirtableService.recordsToTable(records, fieldOrder)
-      data.addAirtableTable(baseId.value, table.id, table.name, headers, rows, recordIds)
+      data.upsertSource(createAirtableDataSource({
+        baseId: baseId.value,
+        tableId: table.id,
+        tableName: table.name,
+        headers,
+        rows,
+        recordIds,
+      }))
     }
     toast.add({
       severity: 'success',
@@ -179,3 +187,5 @@ label {
 }
 h4 { margin: 0; font-size: 0.95rem; }
 </style>
+
+

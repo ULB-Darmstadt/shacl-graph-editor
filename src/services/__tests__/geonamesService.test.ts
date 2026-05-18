@@ -25,7 +25,7 @@ vi.mock('localforage', () => {
   }
 })
 
-import { clearGeoNamesCache, fetchGeoNameFeature, fetchGeoNameFeatures, normalizeGeoNameFeature } from '@/services/infrastructure/integrations/geonamesService'
+import { clearGeoNamesCache, fetchGeoNameFeature, fetchGeoNameFeatures, normalizeGeoNameFeature } from '@/features/mapping/extensions/modules/nodes/geonames/client'
 
 const SAMPLE_JSON = {
   geonameId: 6173331,
@@ -95,3 +95,5 @@ describe('geonamesService', () => {
     expect(getMock).toHaveBeenCalledTimes(1)
   })
 })
+
+

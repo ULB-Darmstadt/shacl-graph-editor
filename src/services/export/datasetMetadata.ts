@@ -127,3 +127,4 @@ function detectAgentType(store: Store, agent: RdfTerm): 'Person' | 'Organization
   if (types.includes(FOAF_ORGANIZATION) || types.includes(SCHEMA_ORGANIZATION)) return 'Organization'
   return 'Organization'
 }
+

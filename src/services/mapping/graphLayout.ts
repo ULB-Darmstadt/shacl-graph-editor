@@ -57,3 +57,5 @@ function estimateHeight(node: Node): number {
     : (node.data?.shape?.properties?.length ?? 0)
   return headerH + rowH * Math.max(rows, 1)
 }
+
+

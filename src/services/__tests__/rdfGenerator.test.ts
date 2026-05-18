@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ApplicationProfile, parseShaclProfile } from '@/domain/NodeShape'
 import { MappingState } from '@/domain/Mapping'
-import { AirtableDataSource, CsvDataSource } from '@/domain/DataSource'
+import { airtableSource, csvSource } from '@/test/dataSources'
 import { generateRdf, serializeGraph } from '@/services/rdf/rdfGenerator'
 
 const SHAPE = `
@@ -71,7 +71,7 @@ describe('rdfGenerator', () => {
     const ap = new ApplicationProfile()
     ap.upsert(parseShaclProfile(SHAPE, 'shape.ttl', 'uploaded'))
 
-    const csv = new CsvDataSource('people', 'people.csv',
+    const csv = csvSource('people', 'people.csv',
       ['id', 'Name', 'Email'],
       [
         ['p1', 'Alice', 'alice@example.org'],
@@ -96,7 +96,7 @@ describe('rdfGenerator', () => {
   it('skips empty cells', () => {
     const ap = new ApplicationProfile()
     ap.upsert(parseShaclProfile(SHAPE, 'shape.ttl', 'uploaded'))
-    const csv = new CsvDataSource('people', 'people.csv',
+    const csv = csvSource('people', 'people.csv',
       ['id', 'Name', 'Email'],
       [['p1', 'Alice', '']],
     )
@@ -112,9 +112,9 @@ describe('rdfGenerator', () => {
     ap.upsert(parseShaclProfile(FK_SHAPES, 'fk.ttl', 'uploaded'))
 
     // People source (record IDs are the primary keys)
-    const people = new AirtableDataSource('people', 'People', ['Name'], [['Alice']], ['recAAA'])
+    const people = airtableSource('people', 'People', ['Name'], [['Alice']], ['recAAA'])
     // Projects source — Owner column contains Airtable record ID of linked person
-    const projects = new AirtableDataSource('projects', 'Projects', ['Title', 'Owner'], [['My Project', 'recAAA']], ['recPRJ'])
+    const projects = airtableSource('projects', 'Projects', ['Title', 'Owner'], [['My Project', 'recAAA']], ['recPRJ'])
 
     const mapping = new MappingState()
     mapping.addOrReplace({ sourceId: 'people',   sourceHeader: 'Name',  shapeIri: 'http://example.org/PersonShape',  propertyPath: 'http://example.org/name' })
@@ -137,9 +137,9 @@ describe('rdfGenerator', () => {
     const ap = new ApplicationProfile()
     ap.upsert(parseShaclProfile(FK_SHAPES, 'fk.ttl', 'uploaded'))
 
-    const people = new AirtableDataSource('people', 'People', ['Name'], [['Alice'], ['Bob']], ['recA', 'recB'])
+    const people = airtableSource('people', 'People', ['Name'], [['Alice'], ['Bob']], ['recA', 'recB'])
     // Owner field contains an array of two linked record IDs
-    const projects = new AirtableDataSource('projects', 'Projects', ['Title', 'Owner'], [['Collab', ['recA', 'recB']]], ['recPRJ'])
+    const projects = airtableSource('projects', 'Projects', ['Title', 'Owner'], [['Collab', ['recA', 'recB']]], ['recPRJ'])
 
     const mapping = new MappingState()
     mapping.addOrReplace({ sourceId: 'people',   sourceHeader: 'Name',  shapeIri: 'http://example.org/PersonShape',  propertyPath: 'http://example.org/name' })
@@ -159,7 +159,7 @@ describe('rdfGenerator', () => {
     const ap = new ApplicationProfile()
     ap.upsert(parseShaclProfile(IRI_SHAPE, 'iri.ttl', 'uploaded'))
 
-    const csv = new CsvDataSource('resources', 'resources.csv',
+    const csv = csvSource('resources', 'resources.csv',
       ['id', 'URL'],
       [['r1', 'https://www.fastepp.com/portfolio/fast-epp-home-office/']],
     )
@@ -184,7 +184,7 @@ describe('rdfGenerator', () => {
     const ap = new ApplicationProfile()
     ap.upsert(parseShaclProfile(GEO_SHAPE, 'geo.ttl', 'uploaded'))
 
-    const csv = new CsvDataSource('places', 'places.csv',
+    const csv = csvSource('places', 'places.csv',
       ['id', 'lat', 'lng'],
       [['p1', '49.8728', '8.6512']],
     )
@@ -210,11 +210,11 @@ describe('rdfGenerator', () => {
     const ap = new ApplicationProfile()
     ap.upsert(parseShaclProfile(GEO_SHAPE, 'geo.ttl', 'uploaded'))
 
-    const table = new CsvDataSource('locations', 'locations.csv',
+    const table = csvSource('locations', 'locations.csv',
       ['id', 'uri', 'geonamesId'],
       [['loc-1', 'https://www.geonames.org/5746545', '5746545']],
     )
-    const geonames = new AirtableDataSource('geonames-output:node-1', 'GeoNames node-1',
+    const geonames = airtableSource('geonames-output:node-1', 'GeoNames node-1',
       ['name', 'id', 'lat', 'lng'],
       [['Portland', '5746545', '45.52345', '-122.67621']],
       ['loc-1'],
@@ -238,7 +238,7 @@ describe('rdfGenerator', () => {
       sourceHeader: 'name',
       shapeIri: 'http://example.org/PlaceShape',
       propertyPath: 'http://www.w3.org/2000/01/rdf-schema#label',
-      geoNamesNodeId: 'geonames:node-1',
+      source: { kind: 'node-output', provider: 'geonames', nodeId: 'geonames:node-1' },
     })
     mapping.addOrReplace({
       sourceId: 'geonames-output:node-1',
@@ -260,3 +260,7 @@ describe('rdfGenerator', () => {
     expect(ttl).toContain('POINT(-122.67621 45.52345)')
   })
 })
+
+
+
+

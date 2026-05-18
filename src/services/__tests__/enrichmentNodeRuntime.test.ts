@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { CsvDataSource } from '@/domain/DataSource'
-import { runGeoNamesRuntime, runLobidRuntime } from '@/services/mapping/enrichmentNodeRuntime'
+import type { DataSource } from '@/domain/DataSource'
+import { csvSource } from '@/test/dataSources'
+import { runGeoNamesRuntime } from '@/features/mapping/extensions/modules/nodes/geonames/runtime'
+import { runLobidRuntime } from '@/features/mapping/extensions/modules/nodes/lobid/runtime'
 
-vi.mock('@/services/infrastructure/integrations/geonamesService', () => ({
+vi.mock('@/features/mapping/extensions/modules/nodes/geonames/client', () => ({
   fetchGeoNameFeatures: vi.fn(async (ids: string[]) => ({
     results: Object.fromEntries(ids.map(id => [id, {
       id,
@@ -34,7 +36,7 @@ vi.mock('@/services/infrastructure/integrations/geonamesService', () => ({
   })),
 }))
 
-vi.mock('@/services/infrastructure/integrations/lobidService', () => ({
+vi.mock('@/features/mapping/extensions/modules/nodes/lobid/client', () => ({
   fetchLobidBatch: vi.fn(async (ids: string[], properties: string[]) => ({
     results: Object.fromEntries(ids.map(id => [id, Object.fromEntries(properties.map(property => [property, `${property}:${id}`]))])),
     totalCount: ids.length,
@@ -44,13 +46,9 @@ vi.mock('@/services/infrastructure/integrations/lobidService', () => ({
 }))
 
 describe('enrichmentNodeRuntime', () => {
-  const sources = [{
-    id: 'cities',
-    name: 'Cities',
-    kind: 'csv',
-    headers: ['geoId'],
-    rows: [['6173331'], ['5128581']],
-  }] satisfies CsvDataSource[]
+  const sources = [
+    csvSource('cities', 'Cities', ['geoId'], [['6173331'], ['5128581']]),
+  ] satisfies DataSource[]
 
   it('runs GeoNames enrichment and materializes output rows', async () => {
     const addResultSource = vi.fn(() => 'geonames-output:node-1')
@@ -105,3 +103,5 @@ describe('enrichmentNodeRuntime', () => {
     )
   })
 })
+
+

@@ -117,3 +117,4 @@ export function instanceTemplateForShape(shape: NodeShape, source: DataSource): 
   const segment = localName || localNameOf(shape.nodeId.value) || 'Resource'
   return `${INSTANCE_BASE_IRI}${segment}/{${reference}}`
 }
+

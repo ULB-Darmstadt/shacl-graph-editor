@@ -16,3 +16,4 @@ export const mappingExtensionModules: MappingExtensionModule[] = [
   lobidModule,
   latLngToWktModule,
 ]
+

@@ -39,3 +39,4 @@ export function makeValidationResult(conforms: boolean, violations: ValidationVi
     get infoCount() { return violations.filter(v => v.severity === 'info').length },
   }
 }
+

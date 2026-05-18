@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ApplicationProfile, parseShaclProfile } from '@/domain/NodeShape'
-import { AirtableDataSource, CsvDataSource, GeoNamesResultDataSource } from '@/domain/DataSource'
+import { airtableSource, csvSource, nodeOutputSource } from '@/test/dataSources'
 import { MappingState } from '@/domain/Mapping'
 import { serializeMappingAsRml } from '@/services/export/rmlSerializer'
 
@@ -56,8 +56,8 @@ describe('rmlSerializer', () => {
     const ap = new ApplicationProfile()
     ap.upsert(parseShaclProfile(FK_SHAPES, 'fk.ttl', 'uploaded'))
 
-    const people = new AirtableDataSource('people', 'People', ['Name'], [['Alice']], ['recAAA'])
-    const projects = new AirtableDataSource('projects', 'Projects', ['Title', 'Owner'], [['My Project', 'recAAA']], ['recPRJ'])
+    const people = airtableSource('people', 'People', ['Name'], [['Alice']], ['recAAA'])
+    const projects = airtableSource('projects', 'Projects', ['Title', 'Owner'], [['My Project', 'recAAA']], ['recPRJ'])
 
     const mapping = new MappingState()
     mapping.addOrReplace({ sourceId: 'people', sourceHeader: 'Name', shapeIri: 'http://example.org/PersonShape', propertyPath: 'http://example.org/name' })
@@ -77,7 +77,7 @@ describe('rmlSerializer', () => {
     const ap = new ApplicationProfile()
     ap.upsert(parseShaclProfile(IRI_SHAPE, 'iri.ttl', 'uploaded'))
 
-    const csv = new CsvDataSource('resources', 'resources.csv', ['id', 'URL'], [['r1', 'https://example.org/file']])
+    const csv = csvSource('resources', 'resources.csv', ['id', 'URL'], [['r1', 'https://example.org/file']])
     const mapping = new MappingState()
     mapping.addOrReplace({
       sourceId: 'resources',
@@ -97,12 +97,12 @@ describe('rmlSerializer', () => {
     const ap = new ApplicationProfile()
     ap.upsert(parseShaclProfile(GEO_SHAPE, 'geo.ttl', 'uploaded'))
 
-    const table = new CsvDataSource('locations', 'locations.csv', ['id', 'geonamesId'], [['loc-1', '5746545']])
-    const geonames = new GeoNamesResultDataSource('geonames-output:node-1', 'GeoNames node-1', ['name', 'id', 'lat', 'lng'], [['Portland', '5746545', '45.52345', '-122.67621']], ['loc-1'])
+    const table = csvSource('locations', 'locations.csv', ['id', 'geonamesId'], [['loc-1', '5746545']])
+    const geonames = nodeOutputSource('geonames', 'geonames-output:node-1', 'GeoNames node-1', ['name', 'id', 'lat', 'lng'], [['Portland', '5746545', '45.52345', '-122.67621']], ['loc-1'])
 
     const mapping = new MappingState()
     mapping.addOrReplace({ sourceId: 'locations', sourceHeader: 'geonamesId', shapeIri: 'http://example.org/PlaceShape', propertyPath: 'http://example.org/geonamesId' })
-    mapping.addOrReplace({ sourceId: 'geonames-output:node-1', sourceHeader: 'name', shapeIri: 'http://example.org/PlaceShape', propertyPath: 'http://www.w3.org/2000/01/rdf-schema#label', geoNamesNodeId: 'geonames:node-1' })
+    mapping.addOrReplace({ sourceId: 'geonames-output:node-1', sourceHeader: 'name', shapeIri: 'http://example.org/PlaceShape', propertyPath: 'http://www.w3.org/2000/01/rdf-schema#label', source: { kind: 'node-output', provider: 'geonames', nodeId: 'geonames:node-1' } })
 
     const ttl = await serializeMappingAsRml(ap, mapping, [table, geonames])
 
@@ -117,7 +117,7 @@ describe('rmlSerializer', () => {
     const ap = new ApplicationProfile()
     ap.upsert(parseShaclProfile(GEO_SHAPE, 'geo.ttl', 'uploaded'))
 
-    const csv = new CsvDataSource('places', 'places.csv', ['id', 'lat', 'lng'], [['p1', '49.8728', '8.6512']])
+    const csv = csvSource('places', 'places.csv', ['id', 'lat', 'lng'], [['p1', '49.8728', '8.6512']])
     const mapping = new MappingState()
     mapping.addOrReplace({
       sourceId: 'places',
@@ -135,3 +135,6 @@ describe('rmlSerializer', () => {
     expect(ttl).toContain('rr:termType rr:Literal')
   })
 })
+
+
+

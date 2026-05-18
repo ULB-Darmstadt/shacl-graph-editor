@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
 import { Handle, Position } from '@vue-flow/core'
+import { CANVAS_NODE_COLORS } from '@/features/mapping/canvasTheme'
 
 type HubNodeRow = {
   label: string
@@ -59,12 +60,12 @@ function setHovered(isHovered: boolean): void {
   <div
     class="hub-node"
     :style="{
-      '--hub-node-bg': data.theme?.background ?? 'linear-gradient(160deg, #ecfeff 0%, #f0fdfa 100%)',
-      '--hub-node-border': data.theme?.borderColor ?? '#99f6e4',
-      '--hub-node-accent': data.theme?.accentColor ?? '#0f766e',
-      '--hub-node-muted': data.theme?.mutedColor ?? '#115e59',
-      '--hub-node-handle': data.theme?.handleColor ?? '#d1d5db',
-      '--hub-node-code-bg': data.theme?.codeBackground ?? 'rgba(255, 255, 255, 0.7)',
+      '--hub-node-bg': data.theme?.background ?? CANVAS_NODE_COLORS.importer.headerBackground,
+      '--hub-node-border': data.theme?.borderColor ?? CANVAS_NODE_COLORS.importer.borderColor,
+      '--hub-node-accent': data.theme?.accentColor ?? CANVAS_NODE_COLORS.importer.headerColor,
+      '--hub-node-muted': data.theme?.mutedColor ?? CANVAS_NODE_COLORS.importer.subtleColor,
+      '--hub-node-handle': data.theme?.handleColor ?? CANVAS_NODE_COLORS.importer.handleColor,
+      '--hub-node-code-bg': data.theme?.codeBackground ?? CANVAS_NODE_COLORS.importer.codeBackground,
     }"
     @click="openConfig"
     @mouseenter="setHovered(true)"
@@ -184,7 +185,7 @@ header span {
 
 code {
   padding: 6px 8px;
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--hub-node-code-bg);
   font-size: 0.75rem;
   word-break: break-all;
@@ -197,3 +198,4 @@ code {
   background: var(--hub-node-handle) !important;
 }
 </style>
+

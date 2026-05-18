@@ -5,3 +5,4 @@ export interface ProjectSnapshotRepository {
   saveSnapshot(snapshot: ProjectSnapshot): Promise<void>
   clearSnapshot?(): Promise<void>
 }
+

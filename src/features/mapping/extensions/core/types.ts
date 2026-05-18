@@ -57,15 +57,31 @@ export interface OpenNodePreview {
 
 export type ExtensionCanvasEdgeDefinition = Omit<Edge, 'type'> & { type?: string }
 
+export interface ExtensionUiEdge {
+  id: string
+  source: string
+  sourceHandle: string
+  target: string
+  targetHandle: string
+}
+
+export interface NodeRunStats {
+  totalCount: number
+  processedCount: number
+  cachedCount: number
+  lastRunAt?: string
+  lastError?: string
+}
+
 export interface ExtensionCanvasBuildContext {
   dataStore: DataStore
   mappingStore: MappingStore
   visibleSources: DataSource[]
   openSetupDialog: OpenSetupDialog
   openNodePreview: OpenNodePreview
-  isRefreshingAirtableBase: (baseId: string) => boolean
-  refreshAirtableBase: (baseId: string) => Promise<void>
-  setAirtableEdgeVisibility: (baseId: string, isVisible: boolean) => void
+  isRefreshingSourceGroup: (provider: string, groupId: string) => boolean
+  refreshSourceGroup: (provider: string, groupId: string) => Promise<void>
+  setSourceGroupEdgeVisibility: (provider: string, groupId: string, isVisible: boolean) => void
   runNode: (nodeId: string) => Promise<void>
 }
 
@@ -73,17 +89,6 @@ export interface ExtensionCanvasModuleDefinition {
   id: string
   buildNodes: (context: ExtensionCanvasBuildContext) => Node[]
   buildEdges?: (context: ExtensionCanvasBuildContext) => ExtensionCanvasEdgeDefinition[]
-}
-
-export interface MappingCanvasNodePresentation {
-  inputColor?: string
-  outputColor?: string
-}
-
-export interface MappingCanvasNodePresentationHandler {
-  id: string
-  canPresent: (nodeId: string) => boolean
-  presentation: MappingCanvasNodePresentation
 }
 
 export interface MappingCanvasMappingEdgeSource {
@@ -105,7 +110,6 @@ export interface MappingExtensionModule {
   mappingNodeActions?: MappingNodeActionDefinition[]
   canvasNodeTypes?: Record<string, Component>
   canvasModules?: ExtensionCanvasModuleDefinition[]
-  canvasNodePresentationHandlers?: MappingCanvasNodePresentationHandler[]
   mappingEdgeSourceHandlers?: MappingCanvasMappingEdgeSourceHandler[]
   defaultNodePositions?: Partial<Record<string, Node['position']>>
   previewHandlers?: MappingNodePreviewHandler[]
@@ -114,6 +118,23 @@ export interface MappingExtensionModule {
   transformSemanticsHandlers?: MappingTransformSemanticsHandler[]
   connectionHandlers?: MappingConnectionHandler[]
   snapshotHandlers?: MappingExtensionSnapshotHandler[]
+  sourceGroupHandlers?: SourceGroupHandler[]
+}
+
+export interface SourceGroupRuntimeContext {
+  dataStore: DataStore
+  toast: ToastLike
+}
+
+export interface SourceGroupRefreshResult {
+  successSummary: string
+  successDetail?: string
+}
+
+export interface SourceGroupHandler {
+  id: string
+  provider: string
+  refreshGroup?: (groupId: string, context: SourceGroupRuntimeContext) => Promise<SourceGroupRefreshResult>
 }
 
 export interface MappingNodeRuntimeContext {

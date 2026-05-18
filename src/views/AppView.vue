@@ -6,7 +6,7 @@
  * enrichment, transformation, and reset. The canvas itself
  * stays minimal — no legend, no help asides, no info banners.
  */
-import { computed, defineAsyncComponent } from 'vue'
+import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
@@ -21,10 +21,9 @@ import { useCanvasGraph } from '@/features/mapping/useCanvasGraph'
 import { useCanvasConnections } from '@/features/mapping/useCanvasConnections'
 import { useCanvasSetupMenu } from '@/features/mapping/useCanvasSetupMenu'
 import { useCanvasPreviews } from '@/features/mapping/useCanvasPreviews'
+import CanvasDialogs from '@/features/mapping/components/CanvasDialogs.vue'
+import MappingValidationSidebar from '@/features/mapping/components/MappingValidationSidebar.vue'
 import Menubar from 'primevue/menubar'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import Message from 'primevue/message'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 
@@ -32,11 +31,6 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
 import '@vue-flow/minimap/dist/style.css'
-
-const TablePreviewPanel = defineAsyncComponent(() => import('@/features/mapping/components/previews/TablePreviewPanel.vue'))
-const TransformationPreviewPanel = defineAsyncComponent(() => import('@/features/mapping/components/previews/TransformationPreviewPanel.vue'))
-const ShapePreviewPanel = defineAsyncComponent(() => import('@/features/mapping/components/previews/ShapePreviewPanel.vue'))
-const ValidationResultPanel = defineAsyncComponent(() => import('@/features/mapping/components/ValidationResultPanel.vue'))
 
 const data = useDataStore()
 const metadata = useMetadataStore()
@@ -109,7 +103,7 @@ const {
   getCombinedMetadataTurtle: () => metadata.getCombinedMetadataTurtle(),
 })
 
-const { nodes, edges, nodeTypes, edgeTypes } = useCanvasGraph({
+const { nodes, edges, nodeTypes } = useCanvasGraph({
   dataStore: data,
   mappingStore: mapping,
   sources,
@@ -160,8 +154,7 @@ const hasNothing = computed(() =>
         v-model:nodes="nodes"
         v-model:edges="edges"
         :node-types="nodeTypes"
-        :edge-types="edgeTypes"
-        :default-edge-options="{ animated: false, type: 'gradientEdge' }"
+        :default-edge-options="{ animated: false, type: 'bezier' }"
         fit-view-on-init
       >
         <Background pattern-color="var(--color-border)" :gap="20" />
@@ -169,82 +162,42 @@ const hasNothing = computed(() =>
         <MiniMap pannable zoomable />
       </VueFlow>
 
-      <aside class="validation-sidebar" :class="{ open: validationSidebarOpen }">
-        <header class="validation-sidebar-header">
-          <div class="validation-sidebar-status" :class="`sev-${validationStatusSeverity}`">
-            <i :class="validationStatusIcon" />
-            <div>
-              <strong>SHACL validation</strong>
-              <span>{{ validationStatusLabel }}</span>
-            </div>
-          </div>
-          <Button
-            icon="pi pi-angle-right"
-            size="small"
-            severity="secondary"
-            text
-            rounded
-            @click="validationSidebarOpen = false"
-          />
-        </header>
-
-        <div class="validation-sidebar-body">
-          <Message v-if="!canValidate" severity="info" :closable="false">
-            Load shapes, data, or form values to start SHACL validation.
-          </Message>
-          <Message v-else-if="validationError" severity="error" :closable="false">
-            {{ validationError }}
-          </Message>
-          <div v-else-if="isValidating" class="validation-loading">
-            <i class="pi pi-spin pi-spinner" />
-            <span>Validation in progress...</span>
-          </div>
-          <ValidationResultPanel v-else-if="validationResult" :result="validationResult" />
-        </div>
-      </aside>
-
-      <Button
-        v-if="!validationSidebarOpen"
-        class="validation-sidebar-tab"
-        :icon="validationStatusIcon"
-        :severity="validationStatusSeverity"
-        rounded
-        @click="validationSidebarOpen = true"
+      <MappingValidationSidebar
+        :open="validationSidebarOpen"
+        :result="validationResult"
+        :error="validationError"
+        :is-validating="isValidating"
+        :can-validate="canValidate"
+        :status-severity="validationStatusSeverity"
+        :status-icon="validationStatusIcon"
+        :status-label="validationStatusLabel"
+        @close="validationSidebarOpen = false"
+        @open="validationSidebarOpen = true"
       />
     </div>
 
-    <!-- Dialogs -->
-    <Dialog
-      v-if="activeSetupDialogDefinition"
-      v-model:visible="activeSetupDialogVisible"
-      modal
-      :header="activeSetupDialogDefinition.header"
-      :style="{ width: activeSetupDialogDefinition.width, maxWidth: '95vw' }"
-      @hide="closeSetupDialog"
-    >
-      <component
-        :is="activeSetupDialogDefinition.component"
-        :key="activeSetupDialogKey"
-        v-bind="activeSetupDialogProps"
-        @added="closeSetupDialog"
-      />
-    </Dialog>
-    <Dialog v-model:visible="tablePreviewOpen" modal header="Table preview" :style="{ width: 'min(1200px, 96vw)' }">
-      <TablePreviewPanel v-if="previewSource" :source="previewSource" />
-    </Dialog>
-    <Dialog v-model:visible="pairedSourcePreviewOpen" modal header="Node preview" :style="{ width: 'min(1320px, 96vw)' }">
-      <TransformationPreviewPanel :input-source="previewPrimarySource" :output-source="previewSecondarySource" />
-    </Dialog>
-    <Dialog v-model:visible="shapePreviewOpen" modal header="Shape preview" :style="{ width: 'min(1080px, 96vw)' }">
-      <ShapePreviewPanel
-        v-if="previewShape"
-        :shape="previewShape"
-        :shapes-turtle="combinedCanvasShapesTurtle"
-        :values-turtle="previewShapeValuesTurtle"
-        :subjects="previewShapeSubjects"
-        :is-loading="isShapePreviewLoading"
-      />
-    </Dialog>
+    <CanvasDialogs
+      :active-setup-dialog-definition="activeSetupDialogDefinition"
+      :active-setup-dialog-visible="activeSetupDialogVisible"
+      :active-setup-dialog-key="activeSetupDialogKey"
+      :active-setup-dialog-props="activeSetupDialogProps"
+      :table-preview-open="tablePreviewOpen"
+      :paired-source-preview-open="pairedSourcePreviewOpen"
+      :shape-preview-open="shapePreviewOpen"
+      :preview-source="previewSource"
+      :preview-primary-source="previewPrimarySource"
+      :preview-secondary-source="previewSecondarySource"
+      :preview-shape="previewShape"
+      :combined-canvas-shapes-turtle="combinedCanvasShapesTurtle"
+      :preview-shape-values-turtle="previewShapeValuesTurtle"
+      :preview-shape-subjects="previewShapeSubjects"
+      :is-shape-preview-loading="isShapePreviewLoading"
+      @close-setup-dialog="closeSetupDialog"
+      @update:active-setup-dialog-visible="activeSetupDialogVisible = $event"
+      @update:table-preview-open="tablePreviewOpen = $event"
+      @update:paired-source-preview-open="pairedSourcePreviewOpen = $event"
+      @update:shape-preview-open="shapePreviewOpen = $event"
+    />
   </div>
 </template>
 
@@ -277,84 +230,6 @@ const hasNothing = computed(() =>
   overflow: hidden;
 }
 
-.validation-sidebar {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  bottom: 16px;
-  width: min(420px, calc(100vw - 48px));
-  display: flex;
-  flex-direction: column;
-  background: color-mix(in srgb, var(--color-surface-1) 94%, white 6%);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-  transform: translateX(calc(100% + 24px));
-  transition: transform 0.2s ease;
-  z-index: 20;
-}
-
-.validation-sidebar.open {
-  transform: translateX(0);
-}
-
-.validation-sidebar-header {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  justify-content: space-between;
-  padding: var(--space-3);
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface-2);
-}
-
-.validation-sidebar-status {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-
-  i {
-    font-size: 1.1rem;
-    margin-top: 2px;
-  }
-
-  strong {
-    display: block;
-    font-size: 0.95rem;
-  }
-
-  span {
-    display: block;
-    font-size: 0.8rem;
-    color: var(--color-text-muted);
-  }
-
-  &.sev-success i { color: #16a34a; }
-  &.sev-warn i { color: #d97706; }
-  &.sev-danger i { color: #dc2626; }
-}
-
-.validation-sidebar-body {
-  flex: 1;
-  overflow: auto;
-  padding: var(--space-3);
-}
-
-.validation-loading {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--color-text-muted);
-  padding: var(--space-3);
-}
-
-.validation-sidebar-tab {
-  position: absolute;
-  right: 16px;
-  top: 16px;
-  z-index: 18;
-}
-
 .empty-state {
   position: absolute;
   inset: 0;
@@ -371,14 +246,6 @@ const hasNothing = computed(() =>
   p { margin: 0; max-width: 480px; line-height: 1.55; }
 }
 
-@media (max-width: 900px) {
-  .validation-sidebar {
-    top: auto;
-    left: 12px;
-    right: 12px;
-    bottom: 12px;
-    width: auto;
-    max-height: 55vh;
-  }
-}
 </style>
+
+

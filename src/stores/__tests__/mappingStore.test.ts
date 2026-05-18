@@ -3,9 +3,16 @@ import { createPinia, setActivePinia } from 'pinia'
 import { getGeoNamesNode, runGeoNamesNode } from '@/features/mapping/extensions/modules/nodes/geonames/workflow'
 import { useMappingStore } from '@/stores/mappingStore'
 import { useDataStore } from '@/stores/dataStore'
-import type { CsvDataSource } from '@/domain/DataSource'
+import type { DataSource } from '@/domain/DataSource'
+import { csvSource } from '@/test/dataSources'
+import {
+  addGeoNamesNode,
+  geoNamesNodes,
+  geoNamesUiEdges,
+  upsertGeoNamesUiEdge,
+} from '@/test/mappingExtensionFixtures'
 
-vi.mock('@/services/infrastructure/integrations/geonamesService', () => ({
+vi.mock('@/features/mapping/extensions/modules/nodes/geonames/client', () => ({
   fetchGeoNameFeature: vi.fn(async (id: string) => ({
     feature: {
       id,
@@ -73,7 +80,7 @@ describe('mappingStore GeoNames flow state', () => {
   it('adds a GeoNames node with a stable generated id', () => {
     const store = useMappingStore()
 
-    const node = store.addGeoNamesNode('demo-user')
+    const node = addGeoNamesNode(store, 'demo-user')
 
     expect(node).toEqual({
       id: 'geonames:11111111-1111-4111-8111-111111111111',
@@ -83,13 +90,13 @@ describe('mappingStore GeoNames flow state', () => {
       stats: { totalCount: 0, processedCount: 0, cachedCount: 0 },
       results: {},
     })
-    expect(store.geoNamesNodes).toEqual([node])
+    expect(geoNamesNodes(store)).toEqual([node])
   })
 
   it('replaces an existing UI edge for the same target handle', () => {
     const store = useMappingStore()
 
-    store.upsertGeoNamesUiEdge({
+    upsertGeoNamesUiEdge(store, {
       id: 'geo-ui:a',
       source: 'src:table-a',
       sourceHandle: 'h:id',
@@ -97,7 +104,7 @@ describe('mappingStore GeoNames flow state', () => {
       targetHandle: 'geo-input',
     })
 
-    store.upsertGeoNamesUiEdge({
+    upsertGeoNamesUiEdge(store, {
       id: 'geo-ui:b',
       source: 'src:table-b',
       sourceHandle: 'h:otherId',
@@ -105,7 +112,7 @@ describe('mappingStore GeoNames flow state', () => {
       targetHandle: 'geo-input',
     })
 
-    expect(store.geoNamesUiEdges).toEqual([
+    expect(geoNamesUiEdges(store)).toEqual([
       {
         id: 'geo-ui:b',
         source: 'src:table-b',
@@ -119,8 +126,8 @@ describe('mappingStore GeoNames flow state', () => {
   it('runs a GeoNames node against the connected source column', async () => {
     const store = useMappingStore()
     const dataStore = useDataStore()
-    const node = store.addGeoNamesNode('demo-user')
-    store.upsertGeoNamesUiEdge({
+    const node = addGeoNamesNode(store, 'demo-user')
+    upsertGeoNamesUiEdge(store, {
       id: 'geo-ui:input',
       source: 'src:cities',
       sourceHandle: 'h:geoId',
@@ -128,13 +135,9 @@ describe('mappingStore GeoNames flow state', () => {
       targetHandle: 'geo-input',
     })
 
-    const sources = [{
-      id: 'cities',
-      name: 'Cities',
-      kind: 'csv',
-      headers: ['geoId'],
-      rows: [['6173331'], ['5128581']],
-    }] satisfies CsvDataSource[]
+    const sources = [
+      csvSource('cities', 'Cities', ['geoId'], [['6173331'], ['5128581']]),
+    ] satisfies DataSource[]
 
     await runGeoNamesNode(store, dataStore, node.id, sources)
 
@@ -148,23 +151,23 @@ describe('mappingStore GeoNames flow state', () => {
 
   it('syncs direct GeoNames output mappings to shapes after the GeoNames node runs', async () => {
     const store = useMappingStore()
-    const node = store.addGeoNamesNode('demo-user')
+    const node = addGeoNamesNode(store, 'demo-user')
 
-    store.upsertGeoNamesUiEdge({
+    upsertGeoNamesUiEdge(store, {
       id: 'geo-ui:input',
       source: 'src:cities',
       sourceHandle: 'h:geoId',
       target: node.id,
       targetHandle: 'geo-input',
     })
-    store.upsertGeoNamesUiEdge({
+    upsertGeoNamesUiEdge(store, {
       id: 'geo-ui:shape-id',
       source: node.id,
       sourceHandle: 'h:id',
       target: 'shape:http://example.org/LocationShape',
       targetHandle: 'p:http://example.org/geonamesId',
     })
-    store.upsertGeoNamesUiEdge({
+    upsertGeoNamesUiEdge(store, {
       id: 'geo-ui:shape-name',
       source: node.id,
       sourceHandle: 'h:name',
@@ -172,25 +175,21 @@ describe('mappingStore GeoNames flow state', () => {
       targetHandle: 'p:http://www.w3.org/2000/01/rdf-schema#label',
     })
 
-    const sources = [{
-      id: 'cities',
-      name: 'Cities',
-      kind: 'csv',
-      headers: ['geoId'],
-      rows: [['6173331'], ['5128581']],
-    }] satisfies CsvDataSource[]
+    const sources = [
+      csvSource('cities', 'Cities', ['geoId'], [['6173331'], ['5128581']]),
+    ] satisfies DataSource[]
 
     await runGeoNamesNode(store, useDataStore(), node.id, sources)
 
     expect(store.state.forProperty('http://example.org/LocationShape', 'http://example.org/geonamesId')).toMatchObject({
       sourceId: `geonames-output:${node.id}`,
       sourceHeader: 'id',
-      geoNamesNodeId: node.id,
+      source: { kind: 'node-output', provider: 'geonames', nodeId: node.id },
     })
     expect(store.state.forProperty('http://example.org/LocationShape', 'http://www.w3.org/2000/01/rdf-schema#label')).toMatchObject({
       sourceId: `geonames-output:${node.id}`,
       sourceHeader: 'name',
-      geoNamesNodeId: node.id,
+      source: { kind: 'node-output', provider: 'geonames', nodeId: node.id },
     })
   })
 
@@ -241,10 +240,10 @@ describe('mappingStore GeoNames flow state', () => {
 
   it('syncs WKT transform mappings from GeoNames lat/lng outputs after the GeoNames node runs', async () => {
     const store = useMappingStore()
-    const node = store.addGeoNamesNode('demo-user')
+    const node = addGeoNamesNode(store, 'demo-user')
     const transformNode = store.addTransformationNode()
 
-    store.upsertGeoNamesUiEdge({
+    upsertGeoNamesUiEdge(store, {
       id: 'geo-ui:input',
       source: 'src:cities',
       sourceHandle: 'h:geoId',
@@ -275,13 +274,9 @@ describe('mappingStore GeoNames flow state', () => {
       transformNodeId: transformNode.id,
     })
 
-    const sources = [{
-      id: 'cities',
-      name: 'Cities',
-      kind: 'csv',
-      headers: ['geoId'],
-      rows: [['6173331'], ['5128581']],
-    }] satisfies CsvDataSource[]
+    const sources = [
+      csvSource('cities', 'Cities', ['geoId'], [['6173331'], ['5128581']]),
+    ] satisfies DataSource[]
 
     await runGeoNamesNode(store, useDataStore(), node.id, sources)
 
@@ -294,3 +289,5 @@ describe('mappingStore GeoNames flow state', () => {
     })
   })
 })
+
+

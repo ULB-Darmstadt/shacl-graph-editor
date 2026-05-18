@@ -72,3 +72,5 @@ export function materializeEnrichmentOutputSource<ResultRecord>(options: {
 
   return options.addResultSource([...options.fields], outputRows, alignedRecordIds)
 }
+
+

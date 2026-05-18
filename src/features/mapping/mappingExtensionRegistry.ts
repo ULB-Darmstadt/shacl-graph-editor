@@ -1,15 +1,11 @@
 import { defineAsyncComponent, markRaw } from 'vue'
 import type { Node } from '@vue-flow/core'
-import { AirtableDataSource } from '@/domain/DataSource'
-import type { DataSource } from '@/domain/DataSource'
 import type {
   DataSourceImportDefinition,
   ExtensionCanvasEdgeDefinition,
   ExtensionCanvasBuildContext,
   MappingCanvasMappingEdgeSource,
   MappingCanvasMappingEdgeSourceHandler,
-  MappingCanvasNodePresentation,
-  MappingCanvasNodePresentationHandler,
   MappingConnectionHandler,
   MappingNodeActionDefinition,
   MappingNodeOutputSourceContext,
@@ -22,6 +18,9 @@ import type {
   SetupDialogDefinition,
   SetupDialogId,
   ShapeSourceImportDefinition,
+  SourceGroupHandler,
+  SourceGroupRuntimeContext,
+  SourceGroupRefreshResult,
 } from '@/features/mapping/extensions/core/types'
 import { mappingExtensionModules } from '@/features/mapping/extensions/modules'
 
@@ -32,7 +31,6 @@ export type {
   DataSourceImportDefinition,
   ExtensionCanvasBuildContext,
   MappingCanvasMappingEdgeSource,
-  MappingCanvasNodePresentation,
   MappingConnectionHandler,
   MappingNodeActionDefinition,
   MappingNodeOutputSourceContext,
@@ -65,9 +63,9 @@ const transformSemanticsHandlers: MappingTransformSemanticsHandler[] = mappingEx
 const connectionHandlers: MappingConnectionHandler[] = mappingExtensionModules.flatMap(module => module.connectionHandlers ?? [])
 
 const snapshotHandlers: MappingExtensionSnapshotHandler[] = mappingExtensionModules.flatMap(module => module.snapshotHandlers ?? [])
+const sourceGroupHandlers: SourceGroupHandler[] = mappingExtensionModules.flatMap(module => module.sourceGroupHandlers ?? [])
 
 const extensionCanvasNodeTypes = Object.assign({}, ...mappingExtensionModules.map(module => module.canvasNodeTypes ?? {}))
-const canvasNodePresentationHandlers: MappingCanvasNodePresentationHandler[] = mappingExtensionModules.flatMap(module => module.canvasNodePresentationHandlers ?? [])
 const mappingEdgeSourceHandlers: MappingCanvasMappingEdgeSourceHandler[] = mappingExtensionModules.flatMap(module => module.mappingEdgeSourceHandlers ?? [])
 
 export const canvasNodeTypes = {
@@ -92,10 +90,6 @@ export function buildExtensionCanvasNodes(context: ExtensionCanvasBuildContext):
 
 export function buildExtensionCanvasEdges(context: ExtensionCanvasBuildContext): ExtensionCanvasEdgeDefinition[] {
   return mappingExtensionModules.flatMap(module => (module.canvasModules ?? []).flatMap(canvasModule => canvasModule.buildEdges?.(context) ?? []))
-}
-
-export function findCanvasNodePresentation(nodeId: string): MappingCanvasNodePresentation | undefined {
-  return canvasNodePresentationHandlers.find(handler => handler.canPresent(nodeId))?.presentation
 }
 
 export function resolveMappingEdgeCanvasSource(edge: Parameters<MappingCanvasMappingEdgeSourceHandler['resolve']>[0]): MappingCanvasMappingEdgeSource | undefined {
@@ -140,6 +134,15 @@ export function resetExtensionSnapshotState(context: MappingExtensionSnapshotCon
   }
 }
 
+export async function refreshSourceGroup(
+  provider: string,
+  groupId: string,
+  context: SourceGroupRuntimeContext,
+): Promise<SourceGroupRefreshResult | undefined> {
+  const handler = sourceGroupHandlers.find(candidate => candidate.provider === provider && candidate.refreshGroup)
+  return handler?.refreshGroup?.(groupId, context)
+}
+
 export function defaultPositionForNodeType(nodeType: string | undefined, index: number): Node['position'] {
   const base = nodeType ? defaultNodePositions[nodeType] : undefined
   if (!base) return { x: 760, y: 40 + index * 220 }
@@ -147,6 +150,5 @@ export function defaultPositionForNodeType(nodeType: string | undefined, index: 
   return { x: base.x, y: base.y + index * step }
 }
 
-export function isAirtableSource(source: DataSource): source is AirtableDataSource {
-  return source instanceof AirtableDataSource
-}
+
+

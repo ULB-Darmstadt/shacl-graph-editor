@@ -77,3 +77,5 @@ export const DATASET_SCHEMA_CATALOG: DatasetCatalogEntry[] = [
     rawTurtle: findEmbeddedTurtle('https://w3id.org/nfdi4ing/profiles/9f821dd1-07b8-441b-93bd-ef120b3b6c5e') ?? '',
   },
 ].filter(e => e.rawTurtle.length > 0)
+
+

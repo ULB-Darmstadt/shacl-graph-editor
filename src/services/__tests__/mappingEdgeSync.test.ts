@@ -1,18 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import {
-  applyGeoNamesNodePatch,
-  applyLobidNodePatch,
-  buildGeoNamesShapeMappings,
-  buildLobidShapeMappings,
   getDependentTransformationNodeIds,
   getTransformationNodeInputs,
   removeUiEdgeById,
   resolveTransformationMappingInput,
-  syncGeoNamesNodeMappings,
-  syncLobidNodeMappings,
   syncTransformationNodeMappings,
   upsertUiEdge,
 } from '@/services/mapping/mappingEdgeSync'
+import {
+  applyGeoNamesNodePatch,
+  buildGeoNamesShapeMappings,
+  syncGeoNamesNodeMappings,
+} from '@/features/mapping/extensions/modules/nodes/geonames/mapping'
+import {
+  applyLobidNodePatch,
+  buildLobidShapeMappings,
+  syncLobidNodeMappings,
+} from '@/features/mapping/extensions/modules/nodes/lobid/mapping'
 
 describe('mappingEdgeSync', () => {
   it('applies a GeoNames node patch and drops disconnected output edges', () => {
@@ -182,8 +186,7 @@ describe('mappingEdgeSync', () => {
         sourceHeader: 'name',
         shapeIri: 'http://example.org/LocationShape',
         propertyPath: 'http://www.w3.org/2000/01/rdf-schema#label',
-        geoNamesNodeId: 'geonames:1',
-        source: { kind: 'enrichment-output', provider: 'geonames', nodeId: 'geonames:1' },
+        source: { kind: 'node-output', provider: 'geonames', nodeId: 'geonames:1' },
       },
     ])
   })
@@ -195,7 +198,7 @@ describe('mappingEdgeSync', () => {
         sourceHeader: 'id',
         shapeIri: 'http://example.org/LocationShape',
         propertyPath: 'http://example.org/geonamesId',
-        geoNamesNodeId: 'geonames:1',
+        source: { kind: 'node-output', provider: 'geonames', nodeId: 'geonames:1' },
       },
       {
         sourceId: 'keep-me',
@@ -223,8 +226,7 @@ describe('mappingEdgeSync', () => {
         sourceHeader: 'name',
         shapeIri: 'http://example.org/LocationShape',
         propertyPath: 'http://www.w3.org/2000/01/rdf-schema#label',
-        geoNamesNodeId: 'geonames:1',
-        source: { kind: 'enrichment-output', provider: 'geonames', nodeId: 'geonames:1' },
+        source: { kind: 'node-output', provider: 'geonames', nodeId: 'geonames:1' },
       },
     ])
   })
@@ -244,8 +246,7 @@ describe('mappingEdgeSync', () => {
         sourceHeader: 'preferredName',
         shapeIri: 'http://example.org/PersonShape',
         propertyPath: 'http://xmlns.com/foaf/0.1/name',
-        lobidNodeId: 'lobid:1',
-        source: { kind: 'enrichment-output', provider: 'lobid', nodeId: 'lobid:1' },
+        source: { kind: 'node-output', provider: 'lobid', nodeId: 'lobid:1' },
       },
     ])
   })
@@ -257,7 +258,7 @@ describe('mappingEdgeSync', () => {
         sourceHeader: 'preferredName',
         shapeIri: 'http://example.org/PersonShape',
         propertyPath: 'http://xmlns.com/foaf/0.1/name',
-        lobidNodeId: 'lobid:1',
+        source: { kind: 'node-output', provider: 'lobid', nodeId: 'lobid:1' },
       },
       {
         sourceId: 'keep-me',
@@ -285,8 +286,7 @@ describe('mappingEdgeSync', () => {
         sourceHeader: 'firstAuthor',
         shapeIri: 'http://example.org/PersonShape',
         propertyPath: 'http://purl.org/dc/terms/creator',
-        lobidNodeId: 'lobid:1',
-        source: { kind: 'enrichment-output', provider: 'lobid', nodeId: 'lobid:1' },
+        source: { kind: 'node-output', provider: 'lobid', nodeId: 'lobid:1' },
       },
     ])
   })
@@ -490,3 +490,7 @@ describe('mappingEdgeSync', () => {
     )).toBeUndefined()
   })
 })
+
+
+
+

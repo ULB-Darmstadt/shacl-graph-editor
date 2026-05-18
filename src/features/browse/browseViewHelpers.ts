@@ -51,3 +51,5 @@ export function classLabelsForSubject(
   if (subject.classes.length === 0) return ['Untyped']
   return subject.classes.map(cls => labelsByIri.get(cls) ?? localName(cls))
 }
+
+

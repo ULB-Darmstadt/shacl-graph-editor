@@ -5,6 +5,13 @@ import { useMappingStore } from '@/stores/mappingStore'
 import { useMetadataStore } from '@/stores/metadataStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useShapesStore } from '@/stores/shapesStore'
+import { createAirtableDataSource } from '@/features/mapping/extensions/modules/source-data/airtable/workflow'
+import {
+  addGeoNamesNode,
+  geoNamesNodes,
+  geoNamesUiEdges,
+  upsertGeoNamesUiEdge,
+} from '@/test/mappingExtensionFixtures'
 
 const SHAPE_PROFILE = `
 @prefix sh: <http://www.w3.org/ns/shacl#> .
@@ -52,10 +59,17 @@ describe('projectStore snapshot persistence', () => {
     await metadata.addRootFromTurtle(METADATA_PROFILE, 'metadata.ttl', 'http://example.org/meta-profile')
     metadata.setMetadataTurtle('http://example.org/meta-profile', '@prefix ex: <http://example.org/> .\nex:dataset ex:title "Dataset A" .')
 
-    data.addAirtableTable('appBase', 'tblProjects', 'Projects', ['Name'], [['Alpha']], ['rec1'])
+    data.upsertSource(createAirtableDataSource({
+      baseId: 'appBase',
+      tableId: 'tblProjects',
+      tableName: 'Projects',
+      headers: ['Name'],
+      rows: [['Alpha']],
+      recordIds: ['rec1'],
+    }))
 
-    const geoNode = mapping.addGeoNamesNode('demo-user')
-    mapping.upsertGeoNamesUiEdge({
+    const geoNode = addGeoNamesNode(mapping, 'demo-user')
+    upsertGeoNamesUiEdge(mapping, {
       id: 'geo-ui:input',
       source: 'src:airtable:appBase:tblProjects',
       sourceHandle: 'h:Name',
@@ -87,9 +101,9 @@ describe('projectStore snapshot persistence', () => {
     expect(shapes.profiles).toHaveLength(1)
     expect(metadata.rootProfiles).toHaveLength(1)
     expect(metadata.metadataTurtle['http://example.org/meta-profile']).toContain('Dataset A')
-    expect(mapping.geoNamesNodes).toHaveLength(1)
-    expect(mapping.geoNamesNodes[0]?.id).toBe(geoNode.id)
-    expect(mapping.geoNamesUiEdges).toHaveLength(1)
+    expect(geoNamesNodes(mapping)).toHaveLength(1)
+    expect(geoNamesNodes(mapping)[0]?.id).toBe(geoNode.id)
+    expect(geoNamesUiEdges(mapping)).toHaveLength(1)
     expect(mapping.state.edges).toHaveLength(1)
   })
 
@@ -123,3 +137,5 @@ describe('projectStore snapshot persistence', () => {
     expect(repository.clearSnapshot).toHaveBeenCalledTimes(1)
   })
 })
+
+

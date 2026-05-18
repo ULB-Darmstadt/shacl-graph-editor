@@ -4,7 +4,7 @@
  * button anywhere in the app.
  */
 import JSZip from 'jszip'
-import { dataSourceKindLabel } from '@/domain/DataSource'
+import { dataSourceOriginLabel } from '@/domain/DataSource'
 import { generateRdf, serializeGraph } from '@/services/rdf/rdfGenerator'
 import { exportedHeadersForSource, exportedRowsForSource } from '@/services/mapping/mappingSemantics'
 import { buildRoCrateMetadata, type RoCrateFile } from '@/services/export/roCrate'
@@ -126,7 +126,7 @@ export async function buildRoCratePackage(input: ExportInput): Promise<ExportPac
     files.push({
       path,
       name: src.name,
-      description: `${dataSourceKindLabel(src)} (${src.rows.length} rows).${src.recordIds ? ' Includes exported row identifiers for subject templates.' : ''}`,
+      description: `${dataSourceOriginLabel(src)} (${src.rows.length} rows).${src.recordIds ? ' Includes exported row identifiers for subject templates.' : ''}`,
       encodingFormat: 'text/csv',
     })
   })
@@ -203,3 +203,5 @@ export async function exportRoCrate(input: ExportInput): Promise<ExportResult> {
   downloadBlob(blob, result.filename)
   return result
 }
+
+

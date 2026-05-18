@@ -364,3 +364,5 @@ function localName(iri: string): string {
 
 .empty { color: var(--color-text-muted); font-style: italic; padding: var(--space-4); }
 </style>
+
+

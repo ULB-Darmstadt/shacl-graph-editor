@@ -57,3 +57,4 @@ export async function fetchAimsProfileTurtle(profile: AimsProfile): Promise<stri
 
   return await response.text()
 }
+

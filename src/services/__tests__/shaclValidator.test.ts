@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ApplicationProfile, parseShaclProfile } from '@/domain/NodeShape'
 import { MappingState } from '@/domain/Mapping'
-import { CsvDataSource } from '@/domain/DataSource'
+import { csvSource } from '@/test/dataSources'
 import { validateMapping } from '@/services/validation/shaclValidator'
 
 const SHAPE = `
@@ -51,7 +51,7 @@ function makeAp(ttl = SHAPE) {
 describe('shaclValidator', () => {
   it('reports no violations for valid data', async () => {
     const ap = makeAp()
-    const csv = new CsvDataSource('p', 'p.csv', ['id', 'Name', 'Age'], [['1', 'Alice', '30']])
+    const csv = csvSource('p', 'p.csv', ['id', 'Name', 'Age'], [['1', 'Alice', '30']])
     const mapping = new MappingState()
     mapping.addOrReplace({ sourceId: 'p', sourceHeader: 'Name', shapeIri: 'http://example.org/PersonShape', propertyPath: 'http://example.org/name' })
     mapping.addOrReplace({ sourceId: 'p', sourceHeader: 'Age', shapeIri: 'http://example.org/PersonShape', propertyPath: 'http://example.org/age' })
@@ -62,7 +62,7 @@ describe('shaclValidator', () => {
 
   it('reports error for minCount violation (empty required cell)', async () => {
     const ap = makeAp()
-    const csv = new CsvDataSource('p', 'p.csv', ['id', 'Name'], [['1', '']])
+    const csv = csvSource('p', 'p.csv', ['id', 'Name'], [['1', '']])
     const mapping = new MappingState()
     mapping.addOrReplace({ sourceId: 'p', sourceHeader: 'Name', shapeIri: 'http://example.org/PersonShape', propertyPath: 'http://example.org/name' })
     const result = await validateMapping(ap, mapping, [csv])
@@ -73,7 +73,7 @@ describe('shaclValidator', () => {
 
   it('reports warning for unmapped required property', async () => {
     const ap = makeAp()
-    const csv = new CsvDataSource('p', 'p.csv', ['id'], [['1']])
+    const csv = csvSource('p', 'p.csv', ['id'], [['1']])
     const mapping = new MappingState()
     const result = await validateMapping(ap, mapping, [csv])
     const warnings = result.violations.filter(v => v.severity === 'warning')
@@ -82,7 +82,7 @@ describe('shaclValidator', () => {
 
   it('reports error for invalid integer', async () => {
     const ap = makeAp()
-    const csv = new CsvDataSource('p', 'p.csv', ['id', 'Age'], [['1', 'not-a-number']])
+    const csv = csvSource('p', 'p.csv', ['id', 'Age'], [['1', 'not-a-number']])
     const mapping = new MappingState()
     mapping.addOrReplace({ sourceId: 'p', sourceHeader: 'Age', shapeIri: 'http://example.org/PersonShape', propertyPath: 'http://example.org/age' })
     const result = await validateMapping(ap, mapping, [csv])
@@ -92,7 +92,7 @@ describe('shaclValidator', () => {
 
   it('reports error for sh:pattern violation', async () => {
     const ap = makeAp()
-    const csv = new CsvDataSource('p', 'p.csv', ['id', 'Email'], [['1', 'not-an-email']])
+    const csv = csvSource('p', 'p.csv', ['id', 'Email'], [['1', 'not-an-email']])
     const mapping = new MappingState()
     mapping.addOrReplace({ sourceId: 'p', sourceHeader: 'Email', shapeIri: 'http://example.org/PersonShape', propertyPath: 'http://example.org/email' })
     const result = await validateMapping(ap, mapping, [csv])
@@ -102,7 +102,7 @@ describe('shaclValidator', () => {
 
   it('skips malformed list-based SHACL constraints without crashing', async () => {
     const ap = makeAp(MALFORMED_LIST_SHAPE)
-    const csv = new CsvDataSource('p', 'p.csv', ['id', 'status'], [['1', 'StatusA']])
+    const csv = csvSource('p', 'p.csv', ['id', 'status'], [['1', 'StatusA']])
     const mapping = new MappingState()
     mapping.addOrReplace({ sourceId: 'p', sourceHeader: 'status', shapeIri: 'http://example.org/BrokenShape', propertyPath: 'http://example.org/status' })
     const result = await validateMapping(ap, mapping, [csv])
@@ -111,3 +111,6 @@ describe('shaclValidator', () => {
     expect(result.isValid).toBe(true)
   })
 })
+
+
+

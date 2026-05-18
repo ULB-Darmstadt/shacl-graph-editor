@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useDataStore } from '@/stores/dataStore'
+import {
+  createAirtableDataSource,
+  refreshAirtableBase,
+} from '@/features/mapping/extensions/modules/source-data/airtable/workflow'
 
 describe('dataStore Airtable refresh', () => {
   beforeEach(() => {
@@ -14,8 +18,22 @@ describe('dataStore Airtable refresh', () => {
   it('replaces an imported Airtable table in place using a stable source id', () => {
     const store = useDataStore()
 
-    store.addAirtableTable('appBase', 'tblProjects', 'Projects', ['Name'], [['Alpha']], ['rec1'])
-    store.addAirtableTable('appBase', 'tblProjects', 'Projects', ['Name', 'Status'], [['Alpha', 'Live']], ['rec1'])
+    store.upsertSource(createAirtableDataSource({
+      baseId: 'appBase',
+      tableId: 'tblProjects',
+      tableName: 'Projects',
+      headers: ['Name'],
+      rows: [['Alpha']],
+      recordIds: ['rec1'],
+    }))
+    store.upsertSource(createAirtableDataSource({
+      baseId: 'appBase',
+      tableId: 'tblProjects',
+      tableName: 'Projects',
+      headers: ['Name', 'Status'],
+      rows: [['Alpha', 'Live']],
+      recordIds: ['rec1'],
+    }))
 
     expect(store.sources).toHaveLength(1)
     expect(store.sources[0]?.id).toBe('airtable:appBase:tblProjects')
@@ -25,8 +43,22 @@ describe('dataStore Airtable refresh', () => {
 
   it('refreshes all imported Airtable tables for one base without changing source ids', async () => {
     const store = useDataStore()
-    store.addAirtableTable('appBase', 'tblProjects', 'Projects', ['Name'], [['Old']], ['recOld'])
-    store.addAirtableTable('appBase', 'tblPeople', 'People', ['Name'], [['Old Person']], ['recPerson'])
+    store.upsertSource(createAirtableDataSource({
+      baseId: 'appBase',
+      tableId: 'tblProjects',
+      tableName: 'Projects',
+      headers: ['Name'],
+      rows: [['Old']],
+      recordIds: ['recOld'],
+    }))
+    store.upsertSource(createAirtableDataSource({
+      baseId: 'appBase',
+      tableId: 'tblPeople',
+      tableName: 'People',
+      headers: ['Name'],
+      rows: [['Old Person']],
+      recordIds: ['recPerson'],
+    }))
 
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)
@@ -64,7 +96,7 @@ describe('dataStore Airtable refresh', () => {
       } as Response
     })
 
-    const refreshed = await store.refreshAirtableBase('pat-test', 'appBase')
+    const refreshed = await refreshAirtableBase(store, 'pat-test', 'appBase')
 
     expect(refreshed).toBe(2)
     expect(fetchMock).toHaveBeenCalledTimes(3)
@@ -77,3 +109,6 @@ describe('dataStore Airtable refresh', () => {
     expect(store.sources[1]?.rows).toEqual([['New Person']])
   })
 })
+
+
+

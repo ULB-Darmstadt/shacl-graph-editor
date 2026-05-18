@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { CsvDataSource } from '@/domain/DataSource'
+import type { DataSource } from '@/domain/DataSource'
+import { csvSource } from '@/test/dataSources'
 import {
   alignedRecordIdsForSource,
   buildEnrichmentOutputRows,
@@ -7,13 +8,9 @@ import {
 } from '@/services/mapping/enrichmentRuntime'
 
 describe('enrichmentRuntime', () => {
-  const sources = [{
-    id: 'cities',
-    name: 'Cities',
-    kind: 'csv',
-    headers: ['geoId', 'name'],
-    rows: [['6173331', 'Ottawa'], ['5128581', 'New York']],
-  }] satisfies CsvDataSource[]
+  const sources = [
+    csvSource('cities', 'Cities', ['geoId', 'name'], [['6173331', 'Ottawa'], ['5128581', 'New York']]),
+  ] satisfies DataSource[]
 
   it('resolves a connected source column and collects non-empty values', () => {
     expect(resolveConnectedSourceColumn(sources, 'cities', 'geoId', 'empty')).toMatchObject({
@@ -46,3 +43,5 @@ describe('enrichmentRuntime', () => {
     ])
   })
 })
+
+

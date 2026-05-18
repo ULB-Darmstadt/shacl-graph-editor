@@ -1,8 +1,13 @@
+import { CANVAS_EDGE_STYLES } from '@/features/mapping/canvasTheme'
 import { defineAsyncComponent, markRaw } from 'vue'
 import { mappingEnrichmentNodeId } from '@/domain/Mapping'
 import { createMappingExtensionModule } from '@/features/mapping/extensions/core/createMappingExtensionModule'
+import {
+  createNodeSnapshotHandler,
+  getExtensionNodes,
+} from '@/features/mapping/extensions/core/stateHelpers'
 import type { ExtensionCanvasBuildContext, MappingExtensionSnapshotContext } from '@/features/mapping/extensions/core/types'
-import type { LobidNodeConfig, LobidUiEdge } from '@/features/mapping/mappingNodeTypes'
+import type { LobidNodeConfig, LobidUiEdge } from '@/features/mapping/extensions/modules/nodes/lobid/types'
 import {
   getLobidNode,
   getLobidUiEdges,
@@ -10,18 +15,26 @@ import {
   LOBID_UI_EDGE_STATE_KEY,
   materializeLobidOutputSource,
   runLobidNode,
+  syncLobidShapeMappings,
 } from '@/features/mapping/extensions/modules/nodes/lobid/workflow'
-import { cloneUiEdges } from '@/services/project/projectSnapshot'
-
 const LobidEnrichmentPanel = defineAsyncComponent(() => import('@/features/mapping/components/setup/LobidEnrichmentPanel.vue'))
 const EnrichNode = defineAsyncComponent(() => import('@/features/mapping/components/canvas/EnrichNode.vue'))
 
 function getLobidNodes(context: ExtensionCanvasBuildContext | MappingExtensionSnapshotContext): LobidNodeConfig[] {
-  return context.mappingStore.getExtensionState(LOBID_NODE_STATE_KEY, [] as LobidNodeConfig[])
+  return getExtensionNodes<LobidNodeConfig>(context, LOBID_NODE_STATE_KEY)
 }
 
 function getCanvasLobidUiEdges(context: ExtensionCanvasBuildContext | MappingExtensionSnapshotContext): LobidUiEdge[] {
   return getLobidUiEdges(context.mappingStore)
+}
+
+function cloneLobidNode(node: LobidNodeConfig): LobidNodeConfig {
+  return {
+    ...node,
+    selectedProperties: [...node.selectedProperties],
+    stats: { ...node.stats },
+    results: Object.fromEntries(Object.entries(node.results).map(([key, value]) => [key, { ...value }])),
+  }
 }
 
 export const lobidModule = createMappingExtensionModule({
@@ -49,16 +62,6 @@ export const lobidModule = createMappingExtensionModule({
   canvasNodeTypes: {
     enrichNode: markRaw(EnrichNode),
   },
-  canvasNodePresentationHandlers: [
-    {
-      id: 'node.lobid.canvas-presentation',
-      canPresent: nodeId => nodeId.startsWith('lobid:'),
-      presentation: {
-        inputColor: '#14b8a6',
-        outputColor: '#0f766e',
-      },
-    },
-  ],
   mappingEdgeSourceHandlers: [
     {
       id: 'node.lobid.mapping-edge-source',
@@ -90,14 +93,6 @@ export const lobidModule = createMappingExtensionModule({
           actionLabel: node.stats.totalCount > 0 ? 'Refresh' : 'Run',
           footerNote: 'Outputs available for manual wiring',
           lastError: node.stats.lastError,
-          theme: {
-            headerBackground: '#ccfbf1',
-            headerColor: '#115e59',
-            headerSubtleColor: '#0f766e',
-            previewBorderColor: 'rgba(17, 94, 89, 0.18)',
-            inputHandleColor: '#14b8a6',
-            outputHandleColor: '#0f766e',
-          },
           onOpenConfig: () => context.openSetupDialog('lobid-enrichment', { nodeId: node.id }),
           onPreview: () => context.openNodePreview(node.id),
           onRun: () => context.runNode(node.id),
@@ -112,7 +107,7 @@ export const lobidModule = createMappingExtensionModule({
           target: edge.target,
           targetHandle: edge.targetHandle,
           animated: false,
-          style: { strokeWidth: 2, strokeDasharray: '8 4' },
+          style: CANVAS_EDGE_STYLES.primaryDashed,
         })),
     },
   ],
@@ -189,7 +184,7 @@ export const lobidModule = createMappingExtensionModule({
 
         if (connection.source?.startsWith('src:') && connection.target?.startsWith('lobid:')) {
           if (!sourceHandle.startsWith('h:') || targetHandle !== 'lobid-input') return false
-          context.mappingStore.upsertLobidUiEdge({
+          context.mappingStore.upsertExtensionUiEdge(LOBID_UI_EDGE_STATE_KEY, {
             id: `lobid-ui:${connection.target}:input`,
             source: connection.source,
             sourceHandle,
@@ -201,13 +196,14 @@ export const lobidModule = createMappingExtensionModule({
 
         if (connection.source?.startsWith('lobid:') && connection.target?.startsWith('shape:')) {
           if (!sourceHandle.startsWith('h:') || !targetHandle.startsWith('p:')) return false
-          context.mappingStore.upsertLobidUiEdge({
+          context.mappingStore.upsertExtensionUiEdge(LOBID_UI_EDGE_STATE_KEY, {
             id: `lobid-ui:${connection.source}:${sourceHandle}->${connection.target}:${targetHandle}`,
             source: connection.source,
             sourceHandle,
             target: connection.target,
             targetHandle,
           })
+          syncLobidShapeMappings(context.mappingStore, context.dataStore, connection.source, context.sources)
           return true
         }
 
@@ -215,7 +211,10 @@ export const lobidModule = createMappingExtensionModule({
       },
       deleteUiEdge: (edgeId, context) => {
         if (!edgeId.startsWith('lobid-ui:')) return false
-        context.mappingStore.removeLobidUiEdge(edgeId)
+        const { removed } = context.mappingStore.removeExtensionUiEdge(LOBID_UI_EDGE_STATE_KEY, edgeId)
+        if (removed?.source.startsWith('lobid:') && removed.target.startsWith('shape:')) {
+          syncLobidShapeMappings(context.mappingStore, context.dataStore, removed.source, context.sources)
+        }
         return true
       },
       deleteMappingEdge: (edge, shapeIri, propertyPath, context) => {
@@ -228,37 +227,20 @@ export const lobidModule = createMappingExtensionModule({
           && candidate.targetHandle === `p:${propertyPath}`,
         )
         if (!uiEdge) return false
-        context.mappingStore.removeLobidUiEdge(uiEdge.id)
+        context.mappingStore.removeExtensionUiEdge(LOBID_UI_EDGE_STATE_KEY, uiEdge.id)
+        syncLobidShapeMappings(context.mappingStore, context.dataStore, nodeId, context.sources)
         return true
       },
     },
   ],
   snapshotHandlers: [
-    {
+    createNodeSnapshotHandler<LobidNodeConfig, LobidUiEdge>({
       id: 'node.lobid',
-      createState: context => ({
-        nodes: getLobidNodes(context).map(node => ({
-          ...node,
-          selectedProperties: [...node.selectedProperties],
-          stats: { ...node.stats },
-          results: Object.fromEntries(Object.entries(node.results).map(([key, value]) => [key, { ...value }])),
-        })),
-        uiEdges: cloneUiEdges(getCanvasLobidUiEdges(context)),
-      }),
-      restoreState: (state, context) => {
-        const nextState = (state && typeof state === 'object') ? state as { nodes?: LobidNodeConfig[]; uiEdges?: LobidUiEdge[] } : {}
-        context.mappingStore.setExtensionState(LOBID_NODE_STATE_KEY, (nextState.nodes ?? []).map(node => ({
-          ...node,
-          selectedProperties: [...node.selectedProperties],
-          stats: { ...node.stats },
-          results: Object.fromEntries(Object.entries(node.results).map(([key, value]) => [key, { ...value }])),
-        })))
-        context.mappingStore.setExtensionState(LOBID_UI_EDGE_STATE_KEY, cloneUiEdges(nextState.uiEdges ?? []))
-      },
-      resetState: context => {
-        context.mappingStore.resetExtensionState(LOBID_NODE_STATE_KEY)
-        context.mappingStore.resetExtensionState(LOBID_UI_EDGE_STATE_KEY)
-      },
-    },
+      nodeStateKey: LOBID_NODE_STATE_KEY,
+      uiEdgeStateKey: LOBID_UI_EDGE_STATE_KEY,
+      cloneNode: cloneLobidNode,
+    }),
   ],
 })
+
+

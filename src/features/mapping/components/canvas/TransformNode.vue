@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
 import { Handle, Position } from '@vue-flow/core'
+import { CANVAS_NODE_COLORS } from '@/features/mapping/canvasTheme'
 
 type TransformNodePort = {
   id: string
@@ -38,12 +39,12 @@ function previewNode(): void {
   <div
     class="transform-node"
     :style="{
-      '--transform-header-bg': data.theme?.headerBackground ?? '#fff7ed',
-      '--transform-header-color': data.theme?.headerColor ?? '#9a3412',
-      '--transform-header-subtle': data.theme?.headerSubtleColor ?? '#c2410c',
-      '--transform-preview-border': data.theme?.previewBorderColor ?? 'rgba(154, 52, 18, 0.18)',
-      '--transform-input-handle': data.theme?.inputHandleColor ?? '#ea580c',
-      '--transform-output-handle': data.theme?.outputHandleColor ?? '#c2410c',
+      '--transform-header-bg': data.theme?.headerBackground ?? CANVAS_NODE_COLORS.transform.headerBackground,
+      '--transform-header-color': data.theme?.headerColor ?? CANVAS_NODE_COLORS.transform.headerColor,
+      '--transform-header-subtle': data.theme?.headerSubtleColor ?? CANVAS_NODE_COLORS.transform.subtleColor,
+      '--transform-preview-border': data.theme?.previewBorderColor ?? CANVAS_NODE_COLORS.transform.previewBorderColor,
+      '--transform-input-handle': data.theme?.inputHandleColor ?? CANVAS_NODE_COLORS.transform.inputHandleColor,
+      '--transform-output-handle': data.theme?.outputHandleColor ?? CANVAS_NODE_COLORS.transform.outputHandleColor,
     }"
   >
     <header>
@@ -165,3 +166,4 @@ small.connected { color: #166534; }
 .handle-input { background: var(--transform-input-handle) !important; }
 .handle-output { background: var(--transform-output-handle) !important; }
 </style>
+

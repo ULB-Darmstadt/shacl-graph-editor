@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useDataStore } from '@/stores/dataStore'
 import FileUpload from 'primevue/fileupload'
 import { useToast } from 'primevue/usetoast'
+import { importCsvFiles } from '@/features/mapping/extensions/modules/source-data/csv-file/workflow'
 
 const data = useDataStore()
 const toast = useToast()
@@ -13,7 +14,7 @@ const emit = defineEmits<{ added: [] }>()
 async function onSelect(event: { files: File[] }): Promise<void> {
   isLoading.value = true
   try {
-    await data.addCsvFiles(event.files)
+    await importCsvFiles(data, event.files)
     toast.add({
       severity: 'success',
       summary: 'CSV files loaded',
@@ -63,3 +64,5 @@ async function onSelect(event: { files: File[] }): Promise<void> {
   color: var(--color-text-muted);
 }
 </style>
+
+

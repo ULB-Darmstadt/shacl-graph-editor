@@ -11,8 +11,8 @@ import {
   getGeoNamesInputEdge,
   updateGeoNamesNode,
 } from '@/features/mapping/extensions/modules/nodes/geonames/workflow'
-import { GEO_NAMES_OUTPUT_OPTIONS, type GeoNamesOutputField } from '@/services/infrastructure/integrations/geonamesService'
-import type { GeoNamesNodeConfig } from '@/features/mapping/mappingNodeTypes'
+import { GEO_NAMES_OUTPUT_OPTIONS, type GeoNamesOutputField } from '@/features/mapping/extensions/modules/nodes/geonames/client'
+import type { GeoNamesNodeConfig } from '@/features/mapping/extensions/modules/nodes/geonames/types'
 import { useDataStore } from '@/stores/dataStore'
 import { useMappingStore } from '@/stores/mappingStore'
 
@@ -218,3 +218,5 @@ async function addNode(): Promise<void> {
   flex-wrap: wrap;
 }
 </style>
+
+

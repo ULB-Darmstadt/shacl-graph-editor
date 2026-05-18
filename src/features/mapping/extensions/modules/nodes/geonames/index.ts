@@ -1,8 +1,13 @@
+import { CANVAS_EDGE_STYLES } from '@/features/mapping/canvasTheme'
 import { defineAsyncComponent, markRaw } from 'vue'
 import { mappingEnrichmentNodeId } from '@/domain/Mapping'
 import { createMappingExtensionModule } from '@/features/mapping/extensions/core/createMappingExtensionModule'
+import {
+  createNodeSnapshotHandler,
+  getExtensionNodes,
+} from '@/features/mapping/extensions/core/stateHelpers'
 import type { ExtensionCanvasBuildContext, MappingExtensionSnapshotContext } from '@/features/mapping/extensions/core/types'
-import type { GeoNamesNodeConfig, GeoNamesUiEdge } from '@/features/mapping/mappingNodeTypes'
+import type { GeoNamesNodeConfig, GeoNamesUiEdge } from '@/features/mapping/extensions/modules/nodes/geonames/types'
 import {
   GEONAMES_NODE_STATE_KEY,
   GEONAMES_UI_EDGE_STATE_KEY,
@@ -10,9 +15,8 @@ import {
   getGeoNamesUiEdges,
   materializeGeoNamesOutputSource,
   runGeoNamesNode,
+  syncGeoNamesShapeMappings,
 } from '@/features/mapping/extensions/modules/nodes/geonames/workflow'
-import { cloneUiEdges } from '@/services/project/projectSnapshot'
-
 const GeoNamesEnrichmentPanel = defineAsyncComponent(() => import('@/features/mapping/components/setup/GeoNamesEnrichmentPanel.vue'))
 const EnrichNode = defineAsyncComponent(() => import('@/features/mapping/components/canvas/EnrichNode.vue'))
 
@@ -30,11 +34,20 @@ const outputLabelById = new Map<string, string>([
 ] as const)
 
 function getGeoNamesNodes(context: ExtensionCanvasBuildContext | MappingExtensionSnapshotContext): GeoNamesNodeConfig[] {
-  return context.mappingStore.getExtensionState(GEONAMES_NODE_STATE_KEY, [] as GeoNamesNodeConfig[])
+  return getExtensionNodes<GeoNamesNodeConfig>(context, GEONAMES_NODE_STATE_KEY)
 }
 
 function getCanvasGeoNamesUiEdges(context: ExtensionCanvasBuildContext | MappingExtensionSnapshotContext): GeoNamesUiEdge[] {
   return getGeoNamesUiEdges(context.mappingStore)
+}
+
+function cloneGeoNamesNode(node: GeoNamesNodeConfig): GeoNamesNodeConfig {
+  return {
+    ...node,
+    selectedOutputs: [...node.selectedOutputs],
+    stats: { ...node.stats },
+    results: Object.fromEntries(Object.entries(node.results).map(([key, value]) => [key, { ...value }])),
+  }
 }
 
 export const geoNamesModule = createMappingExtensionModule({
@@ -62,16 +75,6 @@ export const geoNamesModule = createMappingExtensionModule({
   canvasNodeTypes: {
     enrichNode: markRaw(EnrichNode),
   },
-  canvasNodePresentationHandlers: [
-    {
-      id: 'node.geonames.canvas-presentation',
-      canPresent: nodeId => nodeId.startsWith('geonames:'),
-      presentation: {
-        inputColor: '#0ea5e9',
-        outputColor: '#0284c7',
-      },
-    },
-  ],
   mappingEdgeSourceHandlers: [
     {
       id: 'node.geonames.mapping-edge-source',
@@ -103,14 +106,6 @@ export const geoNamesModule = createMappingExtensionModule({
           actionLabel: node.stats.totalCount > 0 ? 'Refresh' : 'Run',
           footerNote: 'Outputs available for manual wiring',
           lastError: node.stats.lastError,
-          theme: {
-            headerBackground: '#e0f2fe',
-            headerColor: '#0f4c81',
-            headerSubtleColor: '#0369a1',
-            previewBorderColor: 'rgba(15, 76, 129, 0.18)',
-            inputHandleColor: '#0ea5e9',
-            outputHandleColor: '#0284c7',
-          },
           onOpenConfig: () => context.openSetupDialog('geonames-enrichment', { nodeId: node.id }),
           onPreview: () => context.openNodePreview(node.id),
           onRun: () => context.runNode(node.id),
@@ -125,7 +120,7 @@ export const geoNamesModule = createMappingExtensionModule({
           target: edge.target,
           targetHandle: edge.targetHandle,
           animated: false,
-          style: { strokeWidth: 2, strokeDasharray: '8 4' },
+          style: CANVAS_EDGE_STYLES.primaryDashed,
         })),
     },
   ],
@@ -202,7 +197,7 @@ export const geoNamesModule = createMappingExtensionModule({
 
         if (connection.source?.startsWith('src:') && connection.target?.startsWith('geonames:')) {
           if (!sourceHandle.startsWith('h:') || targetHandle !== 'geo-input') return false
-          context.mappingStore.upsertGeoNamesUiEdge({
+          context.mappingStore.upsertExtensionUiEdge(GEONAMES_UI_EDGE_STATE_KEY, {
             id: `geo-ui:${connection.target}:input`,
             source: connection.source,
             sourceHandle,
@@ -214,13 +209,14 @@ export const geoNamesModule = createMappingExtensionModule({
 
         if (connection.source?.startsWith('geonames:') && connection.target?.startsWith('shape:')) {
           if (!sourceHandle.startsWith('h:') || !targetHandle.startsWith('p:')) return false
-          context.mappingStore.upsertGeoNamesUiEdge({
+          context.mappingStore.upsertExtensionUiEdge(GEONAMES_UI_EDGE_STATE_KEY, {
             id: `geo-ui:${connection.source}:${sourceHandle}->${connection.target}:${targetHandle}`,
             source: connection.source,
             sourceHandle,
             target: connection.target,
             targetHandle,
           })
+          syncGeoNamesShapeMappings(context.mappingStore, context.dataStore, connection.source, context.sources)
           return true
         }
 
@@ -228,7 +224,10 @@ export const geoNamesModule = createMappingExtensionModule({
       },
       deleteUiEdge: (edgeId, context) => {
         if (!edgeId.startsWith('geo-ui:')) return false
-        context.mappingStore.removeGeoNamesUiEdge(edgeId)
+        const { removed } = context.mappingStore.removeExtensionUiEdge(GEONAMES_UI_EDGE_STATE_KEY, edgeId)
+        if (removed?.source.startsWith('geonames:') && removed.target.startsWith('shape:')) {
+          syncGeoNamesShapeMappings(context.mappingStore, context.dataStore, removed.source, context.sources)
+        }
         return true
       },
       deleteMappingEdge: (edge, shapeIri, propertyPath, context) => {
@@ -241,37 +240,20 @@ export const geoNamesModule = createMappingExtensionModule({
           && candidate.targetHandle === `p:${propertyPath}`,
         )
         if (!uiEdge) return false
-        context.mappingStore.removeGeoNamesUiEdge(uiEdge.id)
+        context.mappingStore.removeExtensionUiEdge(GEONAMES_UI_EDGE_STATE_KEY, uiEdge.id)
+        syncGeoNamesShapeMappings(context.mappingStore, context.dataStore, nodeId, context.sources)
         return true
       },
     },
   ],
   snapshotHandlers: [
-    {
+    createNodeSnapshotHandler<GeoNamesNodeConfig, GeoNamesUiEdge>({
       id: 'node.geonames',
-      createState: context => ({
-        nodes: getGeoNamesNodes(context).map(node => ({
-          ...node,
-          selectedOutputs: [...node.selectedOutputs],
-          stats: { ...node.stats },
-          results: Object.fromEntries(Object.entries(node.results).map(([key, value]) => [key, { ...value }])),
-        })),
-        uiEdges: cloneUiEdges(getCanvasGeoNamesUiEdges(context)),
-      }),
-      restoreState: (state, context) => {
-        const nextState = (state && typeof state === 'object') ? state as { nodes?: GeoNamesNodeConfig[]; uiEdges?: GeoNamesUiEdge[] } : {}
-        context.mappingStore.setExtensionState(GEONAMES_NODE_STATE_KEY, (nextState.nodes ?? []).map(node => ({
-          ...node,
-          selectedOutputs: [...node.selectedOutputs],
-          stats: { ...node.stats },
-          results: Object.fromEntries(Object.entries(node.results).map(([key, value]) => [key, { ...value }])),
-        })))
-        context.mappingStore.setExtensionState(GEONAMES_UI_EDGE_STATE_KEY, cloneUiEdges(nextState.uiEdges ?? []))
-      },
-      resetState: context => {
-        context.mappingStore.resetExtensionState(GEONAMES_NODE_STATE_KEY)
-        context.mappingStore.resetExtensionState(GEONAMES_UI_EDGE_STATE_KEY)
-      },
-    },
+      nodeStateKey: GEONAMES_NODE_STATE_KEY,
+      uiEdgeStateKey: GEONAMES_UI_EDGE_STATE_KEY,
+      cloneNode: cloneGeoNamesNode,
+    }),
   ],
 })
+
+

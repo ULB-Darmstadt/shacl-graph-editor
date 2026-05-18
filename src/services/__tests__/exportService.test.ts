@@ -1,7 +1,7 @@
 import JSZip from 'jszip'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApplicationProfile, parseShaclProfile } from '@/domain/NodeShape'
-import { AirtableDataSource } from '@/domain/DataSource'
+import { airtableSource } from '@/test/dataSources'
 import { MappingState } from '@/domain/Mapping'
 import { buildRoCratePackage } from '@/services/export/exportService'
 
@@ -28,7 +28,7 @@ describe('exportService', () => {
     const profile = parseShaclProfile(SHAPE, 'shape.ttl', 'uploaded')
     ap.upsert(profile)
 
-    const source = new AirtableDataSource('people', 'People', ['Name'], [['Alice']], ['recAAA'])
+    const source = airtableSource('people', 'People', ['Name'], [['Alice']], ['recAAA'])
     const mapping = new MappingState()
     mapping.addOrReplace({
       sourceId: 'people',
@@ -70,7 +70,7 @@ describe('exportService', () => {
     const profile = parseShaclProfile(SHAPE, 'shape.ttl', 'uploaded')
     ap.upsert(profile)
 
-    const source = new AirtableDataSource('people', 'People', ['Name'], [['Alice']], ['recAAA'])
+    const source = airtableSource('people', 'People', ['Name'], [['Alice']], ['recAAA'])
     const mapping = new MappingState()
     mapping.addOrReplace({
       sourceId: 'people',
@@ -122,7 +122,7 @@ _:att1 prov:agent <http://example.org/people/alice> .
     const profile = parseShaclProfile(SHAPE, 'shape.ttl', 'uploaded')
     ap.upsert(profile)
 
-    const source = new AirtableDataSource('people', 'People', ['Name'], [['Alice']], ['recAAA'])
+    const source = airtableSource('people', 'People', ['Name'], [['Alice']], ['recAAA'])
     const mapping = new MappingState()
     mapping.addOrReplace({
       sourceId: 'people',
@@ -150,3 +150,6 @@ _:att1 prov:agent <http://example.org/people/alice> .
     expect(shapeFile.description).toBe('Person profile description')
   })
 })
+
+
+

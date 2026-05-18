@@ -10,8 +10,8 @@ import {
   LOBID_NODE_STATE_KEY,
   updateLobidNode,
 } from '@/features/mapping/extensions/modules/nodes/lobid/workflow'
-import type { LobidNodeConfig } from '@/features/mapping/mappingNodeTypes'
-import { fetchLobidPropertyProposals, type LobidPropertyProposal } from '@/services/infrastructure/integrations/lobidService'
+import type { LobidNodeConfig } from '@/features/mapping/extensions/modules/nodes/lobid/types'
+import { fetchLobidPropertyProposals, type LobidPropertyProposal } from '@/features/mapping/extensions/modules/nodes/lobid/client'
 import { useDataStore } from '@/stores/dataStore'
 import { useMappingStore } from '@/stores/mappingStore'
 
@@ -197,3 +197,5 @@ onMounted(() => { void loadProperties() })
   flex-wrap: wrap;
 }
 </style>
+
+

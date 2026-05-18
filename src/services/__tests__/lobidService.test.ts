@@ -26,7 +26,7 @@ import {
   fetchLobidBatch,
   fetchLobidPropertyProposals,
   normalizeLobidExtendRows,
-} from '@/services/infrastructure/integrations/lobidService'
+} from '@/features/mapping/extensions/modules/nodes/lobid/client'
 
 describe('lobidService', () => {
   beforeEach(async () => {
@@ -96,3 +96,5 @@ describe('lobidService', () => {
     })
   })
 })
+
+

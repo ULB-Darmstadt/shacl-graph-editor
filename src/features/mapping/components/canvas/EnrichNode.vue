@@ -2,6 +2,7 @@
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import { Handle, Position } from '@vue-flow/core'
+import { CANVAS_NODE_COLORS } from '@/features/mapping/canvasTheme'
 
 type EnrichNodeOutput = {
   id: string
@@ -54,12 +55,12 @@ function previewNode(): void {
   <div
     class="enrich-node"
     :style="{
-      '--enrich-header-bg': data.theme?.headerBackground ?? '#e0f2fe',
-      '--enrich-header-color': data.theme?.headerColor ?? '#0f4c81',
-      '--enrich-header-subtle': data.theme?.headerSubtleColor ?? '#0369a1',
-      '--enrich-preview-border': data.theme?.previewBorderColor ?? 'rgba(15, 76, 129, 0.18)',
-      '--enrich-input-handle': data.theme?.inputHandleColor ?? '#0ea5e9',
-      '--enrich-output-handle': data.theme?.outputHandleColor ?? '#0284c7',
+      '--enrich-header-bg': data.theme?.headerBackground ?? CANVAS_NODE_COLORS.enricher.headerBackground,
+      '--enrich-header-color': data.theme?.headerColor ?? CANVAS_NODE_COLORS.enricher.headerColor,
+      '--enrich-header-subtle': data.theme?.headerSubtleColor ?? CANVAS_NODE_COLORS.enricher.subtleColor,
+      '--enrich-preview-border': data.theme?.previewBorderColor ?? CANVAS_NODE_COLORS.enricher.previewBorderColor,
+      '--enrich-input-handle': data.theme?.inputHandleColor ?? CANVAS_NODE_COLORS.enricher.inputHandleColor,
+      '--enrich-output-handle': data.theme?.outputHandleColor ?? CANVAS_NODE_COLORS.enricher.outputHandleColor,
     }"
     @click="openConfig"
   >
@@ -249,3 +250,4 @@ footer {
   background: var(--enrich-output-handle) !important;
 }
 </style>
+

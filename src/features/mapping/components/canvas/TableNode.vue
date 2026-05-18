@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
 import type { DataSource } from '@/domain/DataSource'
+import { CANVAS_NODE_COLORS } from '@/features/mapping/canvasTheme'
 import { useDataStore } from '@/stores/dataStore'
 import { detectLinkedColumns, type LinkedColumnInfo } from '@/services/mapping/linkDetector'
 
@@ -18,7 +19,18 @@ const linkInfo = computed<Map<string, LinkedColumnInfo>>(() => {
 </script>
 
 <template>
-  <div class="table-node">
+  <div
+    class="table-node"
+    :style="{
+      '--table-header-bg': CANVAS_NODE_COLORS.importer.headerBackground,
+      '--table-header-color': CANVAS_NODE_COLORS.importer.headerColor,
+      '--table-preview-border': CANVAS_NODE_COLORS.importer.previewBorderColor,
+      '--table-link-bg': CANVAS_NODE_COLORS.importer.accentBackground,
+      '--table-link-hover-bg': CANVAS_NODE_COLORS.importer.accentHoverBackground,
+      '--table-link-color': CANVAS_NODE_COLORS.importer.handleColor,
+      '--table-handle-color': CANVAS_NODE_COLORS.importer.handleColor,
+    }"
+  >
     <header>
       <Handle
         id="table-parent"
@@ -79,10 +91,10 @@ header {
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  background: #ecfdf5;
+  background: var(--table-header-bg);
   border-bottom: 1px solid var(--color-border);
   font-weight: 600;
-  color: #166534;
+  color: var(--table-header-color);
 }
 .name { flex: 1; word-break: break-all; }
 .preview-btn {
@@ -91,7 +103,7 @@ header {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(22, 101, 52, 0.18);
+  border: 1px solid var(--table-preview-border);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.72);
   color: inherit;
@@ -100,16 +112,8 @@ header {
 
   &:hover {
     background: white;
-    border-color: rgba(22, 101, 52, 0.35);
+    border-color: color-mix(in srgb, var(--table-header-color) 35%, white);
   }
-}
-.badge {
-  font-size: 0.7rem;
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
-  padding: 2px 6px;
-  border-radius: 999px;
-  text-transform: uppercase;
 }
 
 .headers { list-style: none; padding: 0; margin: 0; }
@@ -123,15 +127,15 @@ header {
   &:last-child { border-bottom: none; }
 
   &.is-link {
-    background: #ecfdf5;
-    &:hover { background: #d1fae5; }
+    background: var(--table-link-bg);
+    &:hover { background: var(--table-link-hover-bg); }
   }
   &:not(.is-link):hover { background: var(--color-surface-2); }
 }
 
 .link-icon {
   font-size: 0.75rem;
-  color: #16a34a;
+  color: var(--table-link-color);
   flex-shrink: 0;
 }
 
@@ -158,8 +162,8 @@ header {
   border: 2px solid var(--color-surface-1) !important;
 }
 .handle-parent { background: #d1d5db !important; }
-.handle-source { background: #16a34a !important; }
-.handle-link   { background: #16a34a !important; }
+.handle-source { background: var(--table-handle-color) !important; }
+.handle-link   { background: var(--table-handle-color) !important; }
 
 .meta {
   padding: 6px 12px;
@@ -172,5 +176,6 @@ header {
   gap: 4px;
   flex-wrap: wrap;
 }
-.link-count { color: #92400e; }
 </style>
+
+

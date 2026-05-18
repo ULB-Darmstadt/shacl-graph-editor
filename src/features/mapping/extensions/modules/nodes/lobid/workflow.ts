@@ -1,10 +1,15 @@
 import type { DataSource } from '@/domain/DataSource'
-import type { LobidNodeConfig, LobidUiEdge } from '@/features/mapping/mappingNodeTypes'
+import type { LobidNodeConfig, LobidUiEdge } from '@/features/mapping/extensions/modules/nodes/lobid/types'
 import type { MappingExtensionStoreApi } from '@/features/mapping/extensions/core/types'
-import { runLobidRuntime } from '@/services/mapping/enrichmentNodeRuntime'
+import {
+  getExtensionInputEdge,
+  getExtensionNode,
+  getExtensionUiEdges,
+} from '@/features/mapping/extensions/core/stateHelpers'
+import { runLobidRuntime } from '@/features/mapping/extensions/modules/nodes/lobid/runtime'
 import type { useMappingStore } from '@/stores/mappingStore'
 import type { useDataStore } from '@/stores/dataStore'
-import { applyLobidNodePatch, syncLobidNodeMappings } from '@/services/mapping/mappingEdgeSync'
+import { applyLobidNodePatch, syncLobidNodeMappings } from '@/features/mapping/extensions/modules/nodes/lobid/mapping'
 import { materializeEnrichmentOutputSource } from '@/services/mapping/enrichmentRuntime'
 
 type MappingStore = ReturnType<typeof useMappingStore>
@@ -17,15 +22,15 @@ export const LOBID_NODE_STATE_KEY = 'node.lobid.nodes'
 export const LOBID_UI_EDGE_STATE_KEY = 'node.lobid.uiEdges'
 
 export function getLobidNode(mappingStore: LobidReadStore, nodeId: string): LobidNodeConfig | undefined {
-  return mappingStore.findExtensionNode<LobidNodeConfig>(LOBID_NODE_STATE_KEY, nodeId)
+  return getExtensionNode<LobidNodeConfig>(mappingStore, LOBID_NODE_STATE_KEY, nodeId)
 }
 
 export function getLobidUiEdges(mappingStore: LobidReadStore): LobidUiEdge[] {
-  return mappingStore.getExtensionState(LOBID_UI_EDGE_STATE_KEY, [] as LobidUiEdge[])
+  return getExtensionUiEdges<LobidUiEdge>(mappingStore, LOBID_UI_EDGE_STATE_KEY)
 }
 
 export function getLobidInputEdge(mappingStore: LobidReadStore, nodeId: string): LobidUiEdge | undefined {
-  return getLobidUiEdges(mappingStore).find(edge => edge.target === nodeId && edge.targetHandle === 'lobid-input')
+  return getExtensionInputEdge<LobidUiEdge>(mappingStore, LOBID_UI_EDGE_STATE_KEY, nodeId, 'lobid-input')
 }
 
 export function materializeLobidOutputSource(
@@ -45,7 +50,7 @@ export function materializeLobidOutputSource(
     fields: node.selectedProperties,
     readField: (record, property) => record?.[property] ?? '',
     addResultSource: (headers, rows, recordIds) =>
-      dataStore.addLobidResultSource(nodeId, headers, rows, recordIds),
+      dataStore.addNodeOutputSource('lobid', nodeId, headers, rows, recordIds),
   })
   if (!outputSourceId) return node.outputSourceId
 
@@ -115,7 +120,7 @@ export async function runLobidNode(
       sources,
       forceRefresh,
       addResultSource: (resultNodeId, headers, rows, recordIds) =>
-        dataStore.addLobidResultSource(resultNodeId, headers, rows, recordIds),
+        dataStore.addNodeOutputSource('lobid', resultNodeId, headers, rows, recordIds),
     })
 
     updateLobidNode(mappingStore, dataStore, nodeId, {
@@ -144,3 +149,5 @@ export async function runLobidNode(
     throw error
   }
 }
+
+

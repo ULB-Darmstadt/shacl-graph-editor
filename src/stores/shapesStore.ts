@@ -126,3 +126,5 @@ export const useShapesStore = defineStore('shapes', () => {
     reset,
   }
 })
+
+

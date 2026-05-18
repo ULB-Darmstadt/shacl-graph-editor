@@ -28,3 +28,5 @@ declare module 'shacl-engine/sparql.js' {
   export const validations: Map<unknown, unknown>
   export const targetResolvers: Map<unknown, unknown>
 }
+
+

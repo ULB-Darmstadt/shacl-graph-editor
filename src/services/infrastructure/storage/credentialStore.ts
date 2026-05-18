@@ -82,3 +82,5 @@ export async function loadAirtableCredentials(): Promise<AirtableCredentials | n
 export async function clearAirtableCredentials(): Promise<void> {
   await store.removeItem(KEY_RECORD)
 }
+
+

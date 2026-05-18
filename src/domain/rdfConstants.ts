@@ -37,3 +37,5 @@ export const SH_IN = new NamedNode(PREFIX_SHACL + 'in')
 export const DCT_TITLE = new NamedNode(PREFIX_DCTERMS + 'title')
 export const DCT_CREATOR = new NamedNode(PREFIX_DCTERMS + 'creator')
 export const DCT_DESCRIPTION = new NamedNode(PREFIX_DCTERMS + 'description')
+
+

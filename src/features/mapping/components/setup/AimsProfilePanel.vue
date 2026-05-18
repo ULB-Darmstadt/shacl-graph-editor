@@ -311,3 +311,4 @@ onMounted(() => { void loadProfiles() })
   }
 }
 </style>
+

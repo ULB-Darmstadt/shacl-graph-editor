@@ -33,3 +33,4 @@ function preferredLiteralValue(store: Store, subjectIri: string, predicate: Retu
 
   return preferred.value
 }
+

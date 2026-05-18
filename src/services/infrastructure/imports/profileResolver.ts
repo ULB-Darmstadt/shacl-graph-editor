@@ -103,3 +103,5 @@ async function fetchProfile(iri: string): Promise<ShaclProfile> {
 export async function clearProfileCache(): Promise<void> {
   await Promise.all([cache.clear(), legacyCache.clear()])
 }
+
+

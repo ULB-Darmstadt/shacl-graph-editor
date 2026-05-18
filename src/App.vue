@@ -12,3 +12,5 @@ import AppShell from '@/components/shell/AppShell.vue'
   <Toast position="bottom-right" />
   <ConfirmDialog />
 </template>
+
+

@@ -40,3 +40,5 @@ export default createRouter({
   history: createWebHashHistory(),
   routes,
 })
+
+

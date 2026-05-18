@@ -1,12 +1,18 @@
 import type { DataSource } from '@/domain/DataSource'
-import type { GeoNamesNodeConfig, GeoNamesUiEdge, TransformationUiEdge } from '@/features/mapping/mappingNodeTypes'
+import type { GeoNamesNodeConfig, GeoNamesUiEdge } from '@/features/mapping/extensions/modules/nodes/geonames/types'
+import type { TransformationUiEdge } from '@/features/mapping/extensions/modules/nodes/lat-lng-to-wkt/types'
 import type { MappingExtensionStoreApi } from '@/features/mapping/extensions/core/types'
-import type { GeoNamesOutputField } from '@/services/infrastructure/integrations/geonamesService'
-import { runGeoNamesRuntime } from '@/services/mapping/enrichmentNodeRuntime'
-import { getDependentTransformationNodeIds, syncGeoNamesNodeMappings } from '@/services/mapping/mappingEdgeSync'
+import {
+  getExtensionInputEdge,
+  getExtensionNode,
+  getExtensionUiEdges,
+} from '@/features/mapping/extensions/core/stateHelpers'
+import type { GeoNamesOutputField } from '@/features/mapping/extensions/modules/nodes/geonames/client'
+import { runGeoNamesRuntime } from '@/features/mapping/extensions/modules/nodes/geonames/runtime'
+import { getDependentTransformationNodeIds } from '@/services/mapping/mappingEdgeSync'
 import type { useMappingStore } from '@/stores/mappingStore'
 import type { useDataStore } from '@/stores/dataStore'
-import { applyGeoNamesNodePatch } from '@/services/mapping/mappingEdgeSync'
+import { applyGeoNamesNodePatch, syncGeoNamesNodeMappings } from '@/features/mapping/extensions/modules/nodes/geonames/mapping'
 import { materializeEnrichmentOutputSource } from '@/services/mapping/enrichmentRuntime'
 
 type MappingStore = ReturnType<typeof useMappingStore>
@@ -19,15 +25,15 @@ export const GEONAMES_NODE_STATE_KEY = 'node.geonames.nodes'
 export const GEONAMES_UI_EDGE_STATE_KEY = 'node.geonames.uiEdges'
 
 export function getGeoNamesNode(mappingStore: GeoNamesReadStore, nodeId: string): GeoNamesNodeConfig | undefined {
-  return mappingStore.findExtensionNode<GeoNamesNodeConfig>(GEONAMES_NODE_STATE_KEY, nodeId)
+  return getExtensionNode<GeoNamesNodeConfig>(mappingStore, GEONAMES_NODE_STATE_KEY, nodeId)
 }
 
 export function getGeoNamesUiEdges(mappingStore: GeoNamesReadStore): GeoNamesUiEdge[] {
-  return mappingStore.getExtensionState(GEONAMES_UI_EDGE_STATE_KEY, [] as GeoNamesUiEdge[])
+  return getExtensionUiEdges<GeoNamesUiEdge>(mappingStore, GEONAMES_UI_EDGE_STATE_KEY)
 }
 
 export function getGeoNamesInputEdge(mappingStore: GeoNamesReadStore, nodeId: string): GeoNamesUiEdge | undefined {
-  return getGeoNamesUiEdges(mappingStore).find(edge => edge.target === nodeId && edge.targetHandle === 'geo-input')
+  return getExtensionInputEdge<GeoNamesUiEdge>(mappingStore, GEONAMES_UI_EDGE_STATE_KEY, nodeId, 'geo-input')
 }
 
 export function materializeGeoNamesOutputSource(
@@ -47,7 +53,7 @@ export function materializeGeoNamesOutputSource(
     fields: node.selectedOutputs,
     readField: (feature, output) => feature?.[output as GeoNamesOutputField] ?? '',
     addResultSource: (headers, rows, recordIds) =>
-      dataStore.addGeoNamesResultSource(nodeId, headers as GeoNamesOutputField[], rows, recordIds),
+      dataStore.addNodeOutputSource('geonames', nodeId, headers as GeoNamesOutputField[], rows, recordIds),
   })
   if (!outputSourceId) return node.outputSourceId
 
@@ -127,7 +133,7 @@ export async function runGeoNamesNode(
         })
       },
       addResultSource: (resultNodeId, headers, rows, recordIds) =>
-        dataStore.addGeoNamesResultSource(resultNodeId, headers as GeoNamesOutputField[], rows, recordIds),
+        dataStore.addNodeOutputSource('geonames', resultNodeId, headers as GeoNamesOutputField[], rows, recordIds),
     })
 
     updateGeoNamesNode(mappingStore, dataStore, nodeId, {
@@ -161,3 +167,5 @@ export async function runGeoNamesNode(
     throw error
   }
 }
+
+

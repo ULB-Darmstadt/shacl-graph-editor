@@ -333,3 +333,5 @@ function extractPropertyShape(nodeId: NamedNode | BlankNode, store: Store): Prop
 function propertyKeyFor(property: PropertyShape): string {
   return property.path?.value ?? property.nodeId.value
 }
+
+

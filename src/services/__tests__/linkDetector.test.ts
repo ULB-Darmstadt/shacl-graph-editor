@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CsvDataSource, AirtableDataSource } from '@/domain/DataSource'
+import { airtableSource, csvSource } from '@/test/dataSources'
 import { detectLinkedColumns, detectJoinTables, looksLikeRecordIds } from '@/services/mapping/linkDetector'
 
 describe('linkDetector', () => {
@@ -13,12 +13,12 @@ describe('linkDetector', () => {
   })
 
   it('detects linked-record columns and resolves target source by recID overlap', () => {
-    const stakeholders = new AirtableDataSource('stakeholders', 'Stakeholders',
+    const stakeholders = airtableSource('stakeholders', 'Stakeholders',
       ['Name', 'Website'],
       [['Acton Ostry', 'https://example.com']],
       ['recqqg9hRlNLclOoE'],
     )
-    const buildings = new AirtableDataSource('buildings', 'Buildings',
+    const buildings = airtableSource('buildings', 'Buildings',
       ['Project Name', 'Buildings_Stakeholder_Roles'],
       [['Brock Commons', ['recqqg9hRlNLclOoE']]],
       ['recBLD001AAAAAAA'],
@@ -32,7 +32,7 @@ describe('linkDetector', () => {
   })
 
   it('does not flag plain text columns', () => {
-    const buildings = new AirtableDataSource('buildings', 'Buildings',
+    const buildings = airtableSource('buildings', 'Buildings',
       ['Project Name', 'Country'],
       [['Brock Commons', 'Canada']],
       ['recBLD001AAAAAAA'],
@@ -42,15 +42,15 @@ describe('linkDetector', () => {
   })
 
   it('detects a classic join table (m:n with attribute)', () => {
-    const buildings = new AirtableDataSource('buildings', 'Buildings',
+    const buildings = airtableSource('buildings', 'Buildings',
       ['Project Name'], [['Brock']],
       ['recBLD001AAAAAAAA'],
     )
-    const stakeholders = new AirtableDataSource('stakeholders', 'Stakeholders',
+    const stakeholders = airtableSource('stakeholders', 'Stakeholders',
       ['Name'], [['Acton Ostry']],
       ['recSTK001BBBBBBBB'],
     )
-    const join = new AirtableDataSource('roles', 'Buildings_Stakeholder_Roles',
+    const join = airtableSource('roles', 'Buildings_Stakeholder_Roles',
       ['Building', 'Stakeholder', 'Role'],
       [['recBLD001AAAAAAAA', 'recSTK001BBBBBBBB', 'Architect']],
       ['recROL001CCCCCCCC'],
@@ -64,9 +64,12 @@ describe('linkDetector', () => {
   })
 
   it('handles plain CSV without record IDs gracefully', () => {
-    const csv = new CsvDataSource('plain', 'plain.csv', ['name', 'age'], [['Alice', '30']])
+    const csv = csvSource('plain', 'plain.csv', ['name', 'age'], [['Alice', '30']])
     const detected = detectLinkedColumns(csv, [csv])
     expect(detected).toHaveLength(0)
     expect(detectJoinTables([csv])).toHaveLength(0)
   })
 })
+
+
+

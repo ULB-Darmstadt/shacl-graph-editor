@@ -180,3 +180,6 @@ describe('ApplicationProfile', () => {
     expect(ap.allNodeShapes()).toHaveLength(1)
   })
 })
+
+
+

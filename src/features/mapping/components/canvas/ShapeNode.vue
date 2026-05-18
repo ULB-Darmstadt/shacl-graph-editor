@@ -1,17 +1,15 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
 import type { NodeShape, PropertyShape } from '@/domain/NodeShape'
-import { classifyShape } from '@/domain/NodeShape'
+import { CANVAS_NODE_COLORS } from '@/features/mapping/canvasTheme'
 import { useShapesStore } from '@/stores/shapesStore'
 
 const props = defineProps<{ data: { shape: NodeShape; onPreview?: () => void } }>()
 const shapes = useShapesStore()
 
-const kind = computed(() => classifyShape(props.data.shape))
-const label = computed(() => props.data.shape.label ?? localName(props.data.shape.nodeId.value))
-const inheritedProperties = computed(() => props.data.shape.properties.filter(property => property.inherited))
-const ownProperties = computed(() => props.data.shape.properties.filter(property => !property.inherited))
+const label = () => props.data.shape.label ?? localName(props.data.shape.nodeId.value)
+const inheritedProperties = () => props.data.shape.properties.filter(property => property.inherited)
+const ownProperties = () => props.data.shape.properties.filter(property => !property.inherited)
 
 function localName(iri: string): string {
   return iri.split(/[/#]/).filter(Boolean).pop() ?? iri
@@ -43,7 +41,21 @@ function inheritedFromLabel(p: PropertyShape): string {
 </script>
 
 <template>
-  <div class="shape-node" :class="`kind-${kind}`">
+  <div
+    class="shape-node"
+    :style="{
+      '--shape-header-bg': CANVAS_NODE_COLORS.shape.headerBackground,
+      '--shape-header-color': CANVAS_NODE_COLORS.shape.headerColor,
+      '--shape-preview-border': CANVAS_NODE_COLORS.shape.previewBorderColor,
+      '--shape-ref-bg': CANVAS_NODE_COLORS.shape.accentBackground,
+      '--shape-ref-hover-bg': CANVAS_NODE_COLORS.shape.accentHoverBackground,
+      '--shape-badge-bg': CANVAS_NODE_COLORS.shape.badgeBackground,
+      '--shape-badge-border': CANVAS_NODE_COLORS.shape.badgeBorderColor,
+      '--shape-badge-color': CANVAS_NODE_COLORS.shape.badgeColor,
+      '--shape-handle-color': CANVAS_NODE_COLORS.shape.handleColor,
+      '--shape-inherited-bg': CANVAS_NODE_COLORS.shape.inheritedBackground,
+    }"
+  >
     <header>
       <Handle
         id="shape-header"
@@ -52,7 +64,7 @@ function inheritedFromLabel(p: PropertyShape): string {
         class="handle handle-shape-target"
       />
       <i class="pi pi-bookmark" />
-      <span class="label">{{ label }}</span>
+      <span class="label">{{ label() }}</span>
       <button
         class="preview-btn"
         type="button"
@@ -64,10 +76,10 @@ function inheritedFromLabel(p: PropertyShape): string {
       </button>
     </header>
 
-    <div v-if="inheritedProperties.length > 0" class="section-label">Inherited properties</div>
+    <div v-if="inheritedProperties().length > 0" class="section-label">Inherited properties</div>
     <ul class="properties">
       <li
-        v-for="p in inheritedProperties"
+        v-for="p in inheritedProperties()"
         :key="`inherited:${p.path?.value ?? p.nodeId.value}`"
         class="row inherited-row"
         :class="{ 'is-ref': isObjectRef(p) }"
@@ -107,10 +119,10 @@ function inheritedFromLabel(p: PropertyShape): string {
       </li>
     </ul>
 
-    <div v-if="inheritedProperties.length > 0 && ownProperties.length > 0" class="section-label section-separator">Own properties</div>
+    <div v-if="inheritedProperties().length > 0 && ownProperties().length > 0" class="section-label section-separator">Own properties</div>
     <ul class="properties">
       <li
-        v-for="p in ownProperties"
+        v-for="p in ownProperties()"
         :key="p.path?.value ?? p.nodeId.value"
         class="row"
         :class="{ 'is-ref': isObjectRef(p) }"
@@ -162,11 +174,6 @@ function inheritedFromLabel(p: PropertyShape): string {
   font-size: 0.85rem;
   box-shadow: var(--shadow-sm);
   overflow: hidden;
-
-  &.kind-reference {
-    border-color: #8b5cf6;
-    header { background: #f5f3ff; color: #6d28d9; }
-  }
 }
 
 header {
@@ -175,10 +182,10 @@ header {
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  background: var(--color-accent-soft);
+  background: var(--shape-header-bg);
   border-bottom: 1px solid var(--color-border);
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--shape-header-color);
 }
 .label { flex: 1; word-break: break-all; }
 .preview-btn {
@@ -187,7 +194,7 @@ header {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(99, 102, 241, 0.18);
+  border: 1px solid var(--shape-preview-border);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.72);
   color: inherit;
@@ -196,26 +203,8 @@ header {
 
   &:hover {
     background: white;
-    border-color: rgba(99, 102, 241, 0.35);
+    border-color: color-mix(in srgb, var(--shape-header-color) 35%, white);
   }
-}
-
-.kind-badge {
-  font-size: 0.65rem;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: rgba(0,0,0,0.08);
-  color: inherit;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.target-class {
-  margin: 0;
-  padding: 4px 12px;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  border-bottom: 1px solid var(--color-border);
 }
 
 .properties { list-style: none; padding: 0; margin: 0; }
@@ -245,19 +234,19 @@ header {
   cursor: default;
   &:last-child { border-bottom: none; }
   &.is-ref {
-    background: #f5f3ff;
-    &:hover { background: #ede9fe; }
+    background: var(--shape-ref-bg);
+    &:hover { background: var(--shape-ref-hover-bg); }
   }
   &:not(.is-ref):hover { background: var(--color-surface-2); }
 }
 
 .inherited-row {
-  background: #f8fafc;
+  background: var(--shape-inherited-bg);
 }
 
 .fk-icon {
   font-size: 0.75rem;
-  color: #8b5cf6;
+  color: var(--shape-handle-color);
   flex-shrink: 0;
 }
 
@@ -270,9 +259,9 @@ header {
 
 .fk-badge {
   font-size: 0.7rem;
-  background: #ede9fe;
-  color: #6d28d9;
-  border: 1px solid #c4b5fd;
+  background: var(--shape-badge-bg);
+  color: var(--shape-badge-color);
+  border: 1px solid var(--shape-badge-border);
   padding: 1px 5px;
   border-radius: 4px;
   white-space: nowrap;
@@ -300,9 +289,9 @@ header {
 
 .inheritance-badge {
   font-size: 0.68rem;
-  background: #eef2ff;
-  color: #4338ca;
-  border: 1px solid #c7d2fe;
+  background: var(--shape-badge-bg);
+  color: var(--shape-badge-color);
+  border: 1px solid var(--shape-badge-border);
   padding: 1px 5px;
   border-radius: 4px;
   white-space: nowrap;
@@ -314,8 +303,10 @@ header {
   height: 10px !important;
   border: 2px solid var(--color-surface-1) !important;
 }
-.handle-target      { background: var(--color-accent) !important; }
-.handle-ref-target  { background: #8b5cf6 !important; }
-.handle-ref-source  { background: #8b5cf6 !important; }
+.handle-target      { background: var(--shape-handle-color) !important; }
+.handle-ref-target  { background: var(--shape-handle-color) !important; }
+.handle-ref-source  { background: var(--shape-handle-color) !important; }
 .handle-shape-target { background: #d1d5db !important; }
 </style>
+
+
