@@ -18,11 +18,11 @@ function displayCell(value: unknown): string {
   <section class="transform-preview">
     <div class="preview-block">
       <header>
-        <h3>Input</h3>
-        <p v-if="inputSource">{{ inputSource.rows.length }} rows · {{ inputSource.headers.length }} columns</p>
+        <h3 class="panel-title">Input</h3>
+        <p v-if="inputSource" class="helper-text">{{ inputSource.rows.length }} rows · {{ inputSource.headers.length }} columns</p>
       </header>
       <div v-if="inputSource" class="table-scroll">
-        <table>
+        <table class="data-table">
           <thead>
             <tr>
               <th v-for="header in inputSource.headers" :key="header">{{ header }}</th>
@@ -40,11 +40,11 @@ function displayCell(value: unknown): string {
 
     <div class="preview-block">
       <header>
-        <h3>Output</h3>
-        <p v-if="outputSource">{{ outputSource.rows.length }} rows · {{ outputSource.headers.length }} columns</p>
+        <h3 class="panel-title">Output</h3>
+        <p v-if="outputSource" class="helper-text">{{ outputSource.rows.length }} rows · {{ outputSource.headers.length }} columns</p>
       </header>
       <div v-if="outputSource" class="table-scroll">
-        <table>
+        <table class="data-table">
           <thead>
             <tr>
               <th v-for="header in outputSource.headers" :key="header">{{ header }}</th>
@@ -75,19 +75,6 @@ function displayCell(value: unknown): string {
   gap: var(--space-3);
 }
 
-header {
-  h3 {
-    margin: 0 0 4px;
-    font-size: 1rem;
-  }
-
-  p {
-    margin: 0;
-    color: var(--color-text-muted);
-    font-size: 0.85rem;
-  }
-}
-
 .table-scroll {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -96,27 +83,14 @@ header {
   background: var(--color-surface);
 }
 
-table {
+.data-table {
   width: max-content;
   min-width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85rem;
 }
 
-th,
-td {
-  text-align: left;
-  vertical-align: top;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--color-border);
+.data-table th,
+.data-table td {
   white-space: nowrap;
-}
-
-th {
-  position: sticky;
-  top: 0;
-  background: var(--color-surface-2);
-  font-weight: 600;
 }
 
 .empty {

@@ -86,7 +86,7 @@ onMounted(() => { void loadProfiles() })
 <template>
   <div class="aims-profile-panel">
     <div class="toolbar">
-      <label class="field search-field">
+      <label class="field field-stack search-field">
         <span>Profile durchsuchen</span>
         <InputText v-model="search" placeholder="RO-kit dataset" fluid />
       </label>
@@ -128,8 +128,8 @@ onMounted(() => { void loadProfiles() })
         <template v-if="selectedProfile">
           <header class="detail-header">
             <div>
-              <h3>{{ selectedProfile.name }}</h3>
-              <p>{{ selectedProfile.description || 'Keine Beschreibung hinterlegt.' }}</p>
+              <h3 class="panel-title">{{ selectedProfile.name }}</h3>
+              <p class="helper-text">{{ selectedProfile.description || 'Keine Beschreibung hinterlegt.' }}</p>
             </div>
             <Tag :value="String(selectedProfile.state ?? 'public')" severity="info" />
           </header>
@@ -159,7 +159,7 @@ onMounted(() => { void loadProfiles() })
       </section>
     </div>
 
-    <div class="actions">
+    <div class="actions actions-row actions-row--end">
       <Button
         label="Ausgewaehltes Profil laden"
         icon="pi pi-plus"
@@ -183,12 +183,6 @@ onMounted(() => { void loadProfiles() })
   align-items: end;
   gap: var(--space-3);
   flex-wrap: wrap;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
 }
 
 .search-field {
@@ -262,16 +256,6 @@ onMounted(() => { void loadProfiles() })
   align-items: start;
   justify-content: space-between;
   gap: var(--space-3);
-
-  h3,
-  p {
-    margin: 0;
-  }
-
-  p {
-    margin-top: 4px;
-    color: var(--color-text-muted);
-  }
 }
 
 .detail-grid {
@@ -292,11 +276,6 @@ onMounted(() => { void loadProfiles() })
     overflow-wrap: anywhere;
     font-family: var(--font-mono);
   }
-}
-
-.actions {
-  display: flex;
-  justify-content: flex-end;
 }
 
 .empty-list,

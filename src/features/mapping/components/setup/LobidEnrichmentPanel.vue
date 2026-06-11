@@ -102,7 +102,7 @@ onMounted(() => { void loadProperties() })
       Die Erweiterung nutzt die lobid-gnd Data-extension-API fuer den Typ <strong>Work</strong> und verarbeitet die gesamte verbundene ID-Liste in einem Extend-Request.
     </Message>
 
-    <label class="field">
+    <label class="field field-stack">
       <span>Output properties</span>
       <Listbox
         v-model="selectedProperties"
@@ -125,13 +125,13 @@ onMounted(() => { void loadProperties() })
       </template>
     </Message>
 
-    <section class="io-grid">
-      <div class="io-block">
-        <h3>Input</h3>
+    <section class="io-grid flow-io-grid">
+      <div class="io-block flow-io-block">
+        <h3 class="panel-title">Input</h3>
         <Tag value="Lobid / GND Work ID" severity="info" />
       </div>
-      <div class="io-block">
-        <h3>Output</h3>
+      <div class="io-block flow-io-block">
+        <h3 class="panel-title">Output</h3>
         <div class="output-list">
           <Tag v-for="propertyId in selectedProperties" :key="propertyId" :value="propertyId" severity="success" />
         </div>
@@ -140,7 +140,7 @@ onMounted(() => { void loadProperties() })
 
     <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
 
-    <div class="actions">
+    <div class="actions actions-row actions-row--start">
       <Button
         :label="currentNode ? 'Save Lobid node' : 'Add Lobid node'"
         :icon="currentNode ? 'pi pi-check' : 'pi pi-plus'"
@@ -159,30 +159,10 @@ onMounted(() => { void loadProperties() })
 }
 
 .field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
   max-width: 560px;
-  font-size: 0.9rem;
 }
 
-.io-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: var(--space-3);
-}
-
-.io-block {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-1);
-
-  h3 { margin: 0; font-size: 0.95rem; }
-}
+.io-block .panel-title { margin-bottom: 0; }
 
 .output-list {
   display: flex;
@@ -190,12 +170,6 @@ onMounted(() => { void loadProperties() })
   flex-wrap: wrap;
 }
 
-.actions {
-  display: flex;
-  justify-content: flex-start;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
 </style>
 
 

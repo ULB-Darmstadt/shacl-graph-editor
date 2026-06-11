@@ -437,7 +437,7 @@ function localName(iri: string): string {
         <nav v-if="stack.length > 1" class="breadcrumb" aria-label="Navigation history">
           <template v-for="(iri, idx) in stack" :key="iri + idx">
             <button
-              class="crumb"
+              class="crumb link-button"
               :class="{ active: idx === stack.length - 1 }"
               :disabled="idx === stack.length - 1"
               @click="jumpTo(idx)"
@@ -447,7 +447,7 @@ function localName(iri: string): string {
             <span v-if="idx < stack.length - 1" class="crumb-sep">></span>
           </template>
         </nav>
-        <span class="iri" :title="currentSubject.iri">{{ localName(currentSubject.iri) }}</span>
+        <span class="iri mono-meta" :title="currentSubject.iri">{{ localName(currentSubject.iri) }}</span>
         <span class="classes">
           <Tag
             v-for="cls in currentSubject.classes"
@@ -532,21 +532,14 @@ function localName(iri: string): string {
   font-size: 0.85rem;
 }
 .crumb {
-  background: transparent;
-  border: 0;
   padding: 4px 8px;
   border-radius: var(--radius-sm);
-  cursor: pointer;
-  color: var(--color-primary);
   font-size: 0.85rem;
   &:hover:not(:disabled) { background: var(--color-surface-2); }
   &.active { color: var(--color-text); cursor: default; }
 }
 .crumb-sep { color: var(--color-text-muted); }
 .iri {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
   margin-left: auto;
 }
 .classes { display: flex; gap: 4px; flex-wrap: wrap; }

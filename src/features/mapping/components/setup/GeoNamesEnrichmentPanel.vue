@@ -98,12 +98,12 @@ async function addNode(): Promise<void> {
 
 <template>
   <div class="geonames-panel">
-    <label class="field">
+    <label class="field field-stack">
       <span>GeoNames username</span>
       <InputText v-model="username" placeholder="username" fluid />
     </label>
 
-    <label class="field">
+    <label class="field field-stack">
       <span>Output properties</span>
       <Listbox
         v-model="selectedOutputs"
@@ -131,13 +131,13 @@ async function addNode(): Promise<void> {
       </template>
     </Message>
 
-    <section class="io-grid">
-      <div class="io-block">
-        <h3>Input</h3>
+    <section class="io-grid flow-io-grid">
+      <div class="io-block flow-io-block">
+        <h3 class="panel-title">Input</h3>
         <Tag value="GeoNames ID" severity="info" />
       </div>
-      <div class="io-block">
-        <h3>Output</h3>
+      <div class="io-block flow-io-block">
+        <h3 class="panel-title">Output</h3>
         <div class="output-list">
           <Tag v-for="field in selectedOutputs" :key="field" :value="outputLabelById.get(field) ?? field" severity="success" />
         </div>
@@ -146,7 +146,7 @@ async function addNode(): Promise<void> {
 
     <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
 
-    <div class="actions">
+    <div class="actions actions-row actions-row--start">
       <Button
         :label="currentNode ? 'Save GeoNames node' : 'Add GeoNames node'"
         :icon="currentNode ? 'pi pi-check' : 'pi pi-plus'"
@@ -165,30 +165,10 @@ async function addNode(): Promise<void> {
 }
 
 .field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
   max-width: 560px;
-  font-size: 0.9rem;
 }
 
-.io-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: var(--space-3);
-}
-
-.io-block {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-1);
-
-  h3 { margin: 0; font-size: 0.95rem; }
-}
+.io-block .panel-title { margin-bottom: 0; }
 
 .output-list {
   display: flex;
@@ -211,12 +191,6 @@ async function addNode(): Promise<void> {
   }
 }
 
-.actions {
-  display: flex;
-  justify-content: flex-start;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
 </style>
 
 

@@ -15,13 +15,13 @@ function displayCell(value: unknown): string {
   <section class="table-preview">
     <header class="preview-header">
       <div>
-        <h3>{{ props.source.name }}</h3>
-        <p>{{ props.source.rows.length }} rows · {{ props.source.headers.length }} columns</p>
+        <h3 class="panel-title">{{ props.source.name }}</h3>
+        <p class="helper-text">{{ props.source.rows.length }} rows · {{ props.source.headers.length }} columns</p>
       </div>
     </header>
 
     <div class="table-scroll">
-      <table>
+      <table class="data-table">
         <thead>
           <tr>
             <th v-for="header in props.source.headers" :key="header">{{ header }}</th>
@@ -44,19 +44,6 @@ function displayCell(value: unknown): string {
   gap: var(--space-3);
 }
 
-.preview-header {
-  h3 {
-    margin: 0 0 4px;
-    font-size: 1rem;
-  }
-
-  p {
-    margin: 0;
-    color: var(--color-text-muted);
-    font-size: 0.85rem;
-  }
-}
-
 .table-scroll {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -66,33 +53,19 @@ function displayCell(value: unknown): string {
   background: var(--color-surface);
 }
 
-table {
+.data-table {
   width: max-content;
   min-width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85rem;
   table-layout: auto;
 }
 
-th,
-td {
-  text-align: left;
-  vertical-align: top;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--color-border);
+.data-table th,
+.data-table td {
   white-space: nowrap;
 }
 
-th {
-  position: sticky;
-  top: 0;
-  background: var(--color-surface-2);
-  font-weight: 600;
+.data-table th {
   z-index: 1;
-}
-
-tbody tr:last-child td {
-  border-bottom: 0;
 }
 </style>
 

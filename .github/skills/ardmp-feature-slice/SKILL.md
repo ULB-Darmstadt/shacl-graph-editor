@@ -14,9 +14,9 @@ Use this workflow for features that should work end-to-end, not just in one file
 
 ## Step 1: Find The Owning Layer
 
-- Canvas or interaction features usually start in [src/views/AppView.vue](src/views/AppView.vue).
-- Browse or read-side features usually start in [src/views/BrowseView.vue](src/views/BrowseView.vue).
-- Metadata and export flow features usually start in [src/views/ExportView.vue](src/views/ExportView.vue) or [src/stores/metadataStore.ts](src/stores/metadataStore.ts).
+- Canvas or interaction features usually start in [src/views/PrepareView.vue](src/views/PrepareView.vue).
+- Browse or read-side features usually start in [src/views/ReviewView.vue](src/views/ReviewView.vue).
+- Metadata and export flow features usually start in [src/views/PublishView.vue](src/views/PublishView.vue) or [src/stores/metadataStore.ts](src/stores/metadataStore.ts).
 - Mapping semantics usually live in [src/domain/Mapping.ts](src/domain/Mapping.ts) or [src/stores/mappingStore.ts](src/stores/mappingStore.ts).
 - SHACL parsing and shape behavior usually start in [src/domain/NodeShape.ts](src/domain/NodeShape.ts), [src/stores/shapesStore.ts](src/stores/shapesStore.ts), or [src/stores/metadataStore.ts](src/stores/metadataStore.ts).
 - RDF or export features usually start in [src/services/rdfGenerator.ts](src/services/rdfGenerator.ts), [src/services/shaclValidator.ts](src/services/shaclValidator.ts), [src/services/browseService.ts](src/services/browseService.ts), or [src/services/exportService.ts](src/services/exportService.ts).
@@ -30,10 +30,10 @@ When a feature touches one area, inspect the likely adjacent areas before editin
 - Canvas interaction -> [src/views/AppView.vue](src/views/AppView.vue), node components in [src/components/mapping](src/components/mapping), [src/stores/mappingStore.ts](src/stores/mappingStore.ts)
 - Mapping semantics -> [src/services/autoMatcher.ts](src/services/autoMatcher.ts), [src/services/rdfGenerator.ts](src/services/rdfGenerator.ts), mapping import/export paths
 - Shape classification or SHACL parsing -> [src/stores/shapesStore.ts](src/stores/shapesStore.ts), [src/stores/metadataStore.ts](src/stores/metadataStore.ts), [src/services/rdfGenerator.ts](src/services/rdfGenerator.ts), [src/services/shaclValidator.ts](src/services/shaclValidator.ts)
-- Browse output -> [src/services/browseService.ts](src/services/browseService.ts), [src/views/BrowseView.vue](src/views/BrowseView.vue)
+- Browse output -> [src/services/browseService.ts](src/services/browseService.ts), [src/views/ReviewView.vue](src/views/ReviewView.vue)
 - Export fields or package contents -> [src/services/exportService.ts](src/services/exportService.ts), [src/services/roCrate.ts](src/services/roCrate.ts)
 - New importer or enricher options -> [src/domain/DataSource.ts](src/domain/DataSource.ts), [src/stores/dataStore.ts](src/stores/dataStore.ts), the matching integration service, and any node/runtime state in [src/stores/mappingStore.ts](src/stores/mappingStore.ts)
-- Metadata flow changes -> [src/views/ExportView.vue](src/views/ExportView.vue), [src/stores/metadataStore.ts](src/stores/metadataStore.ts), [src/services/datasetMetadata.ts](src/services/datasetMetadata.ts), and any remaining legacy shacl-form paths
+- Metadata flow changes -> [src/views/PublishView.vue](src/views/PublishView.vue), [src/stores/metadataStore.ts](src/stores/metadataStore.ts), [src/services/datasetMetadata.ts](src/services/datasetMetadata.ts), and any remaining legacy shacl-form paths
 
 ## Step 3: Make The Smallest Viable Change
 

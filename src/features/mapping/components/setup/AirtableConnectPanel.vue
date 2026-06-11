@@ -185,13 +185,13 @@ async function forgetCredentials(): Promise<void> {
 <template>
   <div class="airtable-panel">
     <div class="form">
-      <label>
+      <label class="field-stack">
         <span>Personal Access Token</span>
         <Password v-model="pat" :feedback="false" toggle-mask placeholder="patXXXXXXXXX" fluid />
       </label>
-      <label>
+      <label class="field-stack">
         <span>Base</span>
-        <select v-model="baseId" :disabled="bases.length === 0 || isLoadingTables" @change="handleBaseSelection">
+        <select v-model="baseId" class="form-select" :disabled="bases.length === 0 || isLoadingTables" @change="handleBaseSelection">
           <option value="">Select a base</option>
           <option v-for="base in bases" :key="base.id" :value="base.id">
             {{ base.name }}
@@ -245,24 +245,11 @@ async function forgetCredentials(): Promise<void> {
   max-width: 480px;
 }
 label {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  font-size: 0.9rem;
 }
 .form-actions {
   display: flex;
   gap: var(--space-2);
   flex-wrap: wrap;
-}
-
-select {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text);
-  padding: 0.7rem 0.8rem;
-  font: inherit;
 }
 
 .tables {

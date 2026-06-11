@@ -39,13 +39,13 @@ If you cannot name those four items, the refactor is not ready.
 - [src/views/AppView.vue](src/views/AppView.vue) with [src/services/graphLayout.ts](src/services/graphLayout.ts): avoid breaking canvas rebuild and layout sequencing.
 - [src/stores/mappingStore.ts](src/stores/mappingStore.ts) with [src/domain/Mapping.ts](src/domain/Mapping.ts): mapping contract changes usually ripple into generation and export.
 - [src/services/rdfGenerator.ts](src/services/rdfGenerator.ts), [src/services/shaclValidator.ts](src/services/shaclValidator.ts), and [src/services/exportService.ts](src/services/exportService.ts): keep the end-to-end dataset pipeline aligned.
-- [src/views/ExportView.vue](src/views/ExportView.vue) with [src/stores/metadataStore.ts](src/stores/metadataStore.ts): keep the active metadata workflow intact while reviewing older shacl-form-based paths.
+- [src/views/PublishView.vue](src/views/PublishView.vue) with [src/stores/metadataStore.ts](src/stores/metadataStore.ts): keep the active metadata workflow intact while reviewing older shacl-form-based paths.
 
 ## Typical Refactor Targets
 
 - Break orchestration overload out of [src/views/AppView.vue](src/views/AppView.vue) before adding more setup, preview, validation, or node-runtime logic there.
 - Split [src/services](src/services) by domain responsibility instead of continuing to accumulate unrelated helpers under one flat folder.
-- Review [src/components/mapping/ShaclFormNode.vue](src/components/mapping/ShaclFormNode.vue) and similar legacy paths as removal or merge candidates if [src/views/ExportView.vue](src/views/ExportView.vue) already owns the active workflow.
+- Review [src/components/mapping/ShaclFormNode.vue](src/components/mapping/ShaclFormNode.vue) and similar legacy paths as removal or merge candidates if [src/views/PublishView.vue](src/views/PublishView.vue) already owns the active workflow.
 - Separate mapping runtime concerns from long-lived mapping state when working in [src/stores/mappingStore.ts](src/stores/mappingStore.ts).
 - Introduce persistence-ready ports only at clean boundaries; do not thread IndexedDB logic through views or domain classes.
 

@@ -59,8 +59,8 @@ useShaclFormViewer({
 <template>
   <section class="shape-preview">
     <header class="preview-header">
-      <h3>{{ title }}</h3>
-      <p>{{ props.shape.targetClass?.value ?? props.shape.nodeId.value }}</p>
+      <h3 class="panel-title">{{ title }}</h3>
+      <p class="helper-text shape-target">{{ props.shape.targetClass?.value ?? props.shape.nodeId.value }}</p>
     </header>
 
     <div v-if="isLoading" class="empty-state">
@@ -70,8 +70,8 @@ useShaclFormViewer({
 
     <div v-else-if="hasSubjects" class="record-toolbar">
       <label class="record-picker">
-        <span>Record</span>
-        <select v-model="selectedSubjectIri">
+        <span class="meta-label">Record</span>
+        <select v-model="selectedSubjectIri" class="form-select">
           <option v-for="subject in subjects" :key="subject.iri" :value="subject.iri">
             {{ subject.label }}
           </option>
@@ -107,19 +107,10 @@ useShaclFormViewer({
   gap: var(--space-3);
 }
 
-.preview-header {
-  h3 {
-    margin: 0 0 4px;
-    font-size: 1rem;
-  }
-
-  p {
-    margin: 0;
-    color: var(--color-text-muted);
-    font-size: 0.8rem;
-    font-family: var(--font-mono);
-    word-break: break-all;
-  }
+.shape-target {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  word-break: break-all;
 }
 
 .form-shell {
@@ -147,21 +138,11 @@ useShaclFormViewer({
   flex-direction: column;
   gap: 6px;
 
-  span {
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--color-text-muted);
-  }
-
-  select {
+  .form-select {
     min-width: 280px;
     padding: 8px 10px;
-    border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
     background: var(--color-surface-1);
-    font: inherit;
-    color: var(--color-text);
   }
 }
 

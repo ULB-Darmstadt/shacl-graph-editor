@@ -59,10 +59,10 @@ function deleteNode(): void {
         <span>{{ data.subtitle }}</span>
       </div>
       <div class="header-actions">
-        <button class="preview-btn delete-btn" type="button" title="Delete node" aria-label="Delete node" @click.stop="deleteNode">
+        <button class="preview-btn delete-btn icon-pill-button icon-pill-button--danger" type="button" title="Delete node" aria-label="Delete node" @click.stop="deleteNode">
           <i class="pi pi-trash" />
         </button>
-        <button class="preview-btn" type="button" title="Preview transform" aria-label="Preview transform" @click.stop="previewNode">
+        <button class="preview-btn icon-pill-button" type="button" title="Preview transform" aria-label="Preview transform" @click.stop="previewNode">
           <i class="pi pi-eye" />
         </button>
       </div>
@@ -118,16 +118,9 @@ header {
 }
 
 .preview-btn {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   border: 1px solid var(--transform-preview-border);
-  border-radius: 999px;
   background: rgba(255, 255, 255, 0.72);
   color: inherit;
-  cursor: pointer;
 
   &:hover {
     background: white;
@@ -142,12 +135,6 @@ header {
 }
 
 .delete-btn {
-  border-color: rgba(185, 28, 28, 0.18);
-
-  &:hover {
-    border-color: rgba(185, 28, 28, 0.4);
-    color: #b91c1c;
-  }
 }
 
 .inputs {

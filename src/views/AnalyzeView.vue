@@ -380,11 +380,11 @@ function removeDataframe(dataframeId: string): void {
 
 <template>
   <div class="explore-view">
-    <header class="view-header">
+    <header class="page-header page-header--wide">
       <div>
-        <h1>Explore (WIP)</h1>
-        <p class="subtitle">
-          Explore is a saved-chart dashboard. Create or edit diagrams through a two-step dialog: first choose or define the dataframe, then configure the chart.
+        <h1 class="page-title">Analyze</h1>
+        <p class="page-subtitle analyze-subtitle">
+          Analyze is a saved-chart dashboard. Create or edit diagrams through a two-step dialog: first choose or define the dataframe, then configure the chart.
         </p>
       </div>
       <div class="view-header__actions">
@@ -393,7 +393,7 @@ function removeDataframe(dataframeId: string): void {
     </header>
 
     <Message v-if="!canExplore" severity="warn" :closable="false">
-      Load source data first. Explore materializes dataframes from the current generated RDF graph and the loaded SHACL shapes.
+      Load source data first. Analyze materializes dataframes from the current generated RDF graph and the loaded SHACL shapes.
     </Message>
 
     <Message v-else-if="datasetError" severity="error" :closable="false">
@@ -403,13 +403,13 @@ function removeDataframe(dataframeId: string): void {
     <section v-else class="surface-card saved-charts">
       <div class="saved-charts__header">
         <div>
-          <h2>Saved Charts</h2>
-          <p>Only persisted diagrams are shown here. Dataframes are managed inside the chart dialog.</p>
+          <h2 class="section-title">Saved Charts</h2>
+          <p class="helper-text">Only persisted diagrams are shown here. Dataframes are managed inside the chart dialog.</p>
         </div>
       </div>
 
       <div v-if="savedCharts.length" class="saved-charts__content">
-        <div class="saved-chart-tabs" role="tablist" aria-label="Saved explore charts">
+        <div class="saved-chart-tabs" role="tablist" aria-label="Saved analyze charts">
           <button
             v-for="entry in savedCharts"
             :key="entry.chart.id"
@@ -426,7 +426,7 @@ function removeDataframe(dataframeId: string): void {
         <article v-if="activeSavedChart" class="saved-chart-card">
           <div class="saved-chart-card__header">
             <div>
-              <h3>{{ activeSavedChart.chart.title }}</h3>
+              <h3 class="panel-title">{{ activeSavedChart.chart.title }}</h3>
             </div>
             <div class="saved-chart-card__actions">
               <Button icon="pi pi-pen-to-square" text @click="openEditDialog(activeSavedChart.chart.id)" />
@@ -468,8 +468,8 @@ function removeDataframe(dataframeId: string): void {
       <div v-if="builderStep === 1" class="dialog-section">
         <div class="builder-panel__header">
           <div>
-            <h2>Step 1: Dataframe</h2>
-            <p>{{ dataframeMode === 'edit' ? 'Editing the selected dataframe.' : 'Either select a saved dataframe or create a new one for this chart.' }}</p>
+            <h2 class="section-title">Step 1: Dataframe</h2>
+            <p class="helper-text">{{ dataframeMode === 'edit' ? 'Editing the selected dataframe.' : 'Either select a saved dataframe or create a new one for this chart.' }}</p>
           </div>
           <div class="mode-switch">
             <Button label="Use existing" :severity="dataframeMode === 'select' ? 'contrast' : 'secondary'" :outlined="dataframeMode !== 'select'" @click="dataframeMode = 'select'" />
@@ -499,9 +499,9 @@ function removeDataframe(dataframeId: string): void {
           </div>
 
           <section class="surface-subsection">
-            <h3>Saved dataframe preview</h3>
+            <h3 class="panel-title">Saved dataframe preview</h3>
             <div v-if="selectedChartDataframeModel?.rows.length" class="table-preview">
-              <table>
+              <table class="data-table data-table--comfortable">
                 <thead>
                   <tr>
                     <th v-for="column in selectedChartDataframeModel.definition.columns" :key="column.id">
@@ -572,9 +572,9 @@ function removeDataframe(dataframeId: string): void {
           </Message>
 
           <section class="surface-subsection">
-            <h3>Dataframe Preview</h3>
+            <h3 class="panel-title">Dataframe Preview</h3>
             <div v-if="dataframeDraftModel?.rows.length" class="table-preview">
-              <table>
+              <table class="data-table data-table--comfortable">
                 <thead>
                   <tr>
                     <th v-for="column in dataframeDraftModel.definition.columns" :key="column.id">
@@ -609,8 +609,8 @@ function removeDataframe(dataframeId: string): void {
       <div v-else class="dialog-section">
         <div class="builder-panel__header">
           <div>
-            <h2>Step 2: Chart Builder</h2>
-            <p>Configure the saved dataframe as a chart. Scatter plots support explicit defaults for color and dot size.</p>
+            <h2 class="section-title">Step 2: Chart Builder</h2>
+            <p class="helper-text">Configure the saved dataframe as a chart. Scatter plots support explicit defaults for color and dot size.</p>
           </div>
         </div>
 
@@ -761,15 +761,15 @@ function removeDataframe(dataframeId: string): void {
 
         <div class="preview-grid">
           <section class="surface-subsection">
-            <h3>Chart Preview</h3>
+            <h3 class="panel-title">Chart Preview</h3>
             <ExploreChartCanvas v-if="previewChart" :option="previewChart" :height="340" />
             <p v-else class="empty-state">Select the required fields to render a preview.</p>
           </section>
 
           <section class="surface-subsection">
-            <h3>Dataframe Rows</h3>
+            <h3 class="panel-title">Dataframe Rows</h3>
             <div v-if="selectedChartDataframeModel?.rows.length" class="table-preview">
-              <table>
+              <table class="data-table data-table--comfortable">
                 <thead>
                   <tr>
                     <th v-for="column in selectedChartDataframeModel.definition.columns" :key="column.id">
@@ -816,34 +816,13 @@ function removeDataframe(dataframeId: string): void {
   gap: var(--space-5);
 }
 
-.view-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--space-4);
-
-  h1 {
-    margin: 0 0 var(--space-2);
-  }
-}
-
-.subtitle {
-  margin: 0;
-  color: var(--color-text-muted);
+.analyze-subtitle {
   max-width: 74ch;
 }
 
 .view-header__actions {
   display: flex;
   align-items: center;
-}
-
-.surface-card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
-  box-shadow: var(--shadow-sm);
 }
 
 .saved-charts {
@@ -861,16 +840,6 @@ function removeDataframe(dataframeId: string): void {
   justify-content: space-between;
   align-items: flex-start;
   gap: var(--space-3);
-
-  h2,
-  h3 {
-    margin: 0 0 var(--space-1);
-  }
-
-  p {
-    margin: 0;
-    color: var(--color-text-muted);
-  }
 }
 
 .saved-chart-card__actions,
@@ -994,17 +963,6 @@ function removeDataframe(dataframeId: string): void {
   justify-content: flex-end;
 }
 
-.surface-subsection {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
-  background: var(--color-surface-2);
-
-  h3 {
-    margin-top: 0;
-  }
-}
-
 .danger-zone {
   display: flex;
   justify-content: flex-end;
@@ -1049,26 +1007,6 @@ function removeDataframe(dataframeId: string): void {
 
 .table-preview {
   overflow: auto;
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.95rem;
-  }
-
-  th,
-  td {
-    border-bottom: 1px solid var(--color-border);
-    padding: 10px 12px;
-    text-align: left;
-    vertical-align: top;
-  }
-
-  th {
-    position: sticky;
-    top: 0;
-    background: var(--color-surface-2);
-  }
 }
 
 .empty-state {

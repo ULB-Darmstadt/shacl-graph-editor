@@ -206,15 +206,15 @@ async function copyTurtle(): Promise<void> {
 
 <template>
   <div class="browse-view" :class="{ 'is-ttl-layout': layout === 'ttl' }">
-    <header class="view-header">
+    <header class="page-header">
       <div>
-        <h1>Browse</h1>
-        <p class="subtitle">Inspect the generated RDF subjects as a flat list or raw Turtle.</p>
+        <h1 class="page-title">Review</h1>
+        <p class="page-subtitle">Inspect the generated RDF subjects as a flat list or raw Turtle.</p>
       </div>
     </header>
 
     <Message v-if="!canBrowse" severity="warn" :closable="false">
-      Load source data to browse generated RDF. Profiles and explicit mappings remain optional while staging mappings are active.
+      Load source data to review generated RDF. Profiles and explicit mappings remain optional while staging mappings are active.
     </Message>
 
     <Message v-if="generationError" severity="error" :closable="false">
@@ -224,7 +224,7 @@ async function copyTurtle(): Promise<void> {
     <template v-if="canBrowse && model">
       <!-- Filter toolbar -->
       <div class="toolbar">
-        <label class="search-filter">
+        <label class="search-filter form-stack">
           <span>Search</span>
           <span class="p-input-icon-left search-wrapper">
             <i class="pi pi-search" />
@@ -236,9 +236,9 @@ async function copyTurtle(): Promise<void> {
           </span>
         </label>
 
-        <label class="class-filter">
+        <label class="class-filter form-stack">
           <span>Class</span>
-          <select v-model="selectedClass">
+          <select v-model="selectedClass" class="form-select">
             <option value="">All classes</option>
             <option v-for="option in classOptions" :key="option.value" :value="option.value">
               {{ option.label }}
@@ -246,14 +246,14 @@ async function copyTurtle(): Promise<void> {
           </select>
         </label>
 
-        <label class="view-filter">
+        <label class="view-filter form-stack">
           <span>View</span>
           <SelectButton
             v-model="layout"
             :options="layoutOptions"
             option-label="label"
             option-value="value"
-            aria-label="Browse layout"
+            aria-label="Review layout"
           >
             <template #option="slotProps">
               <i :class="slotProps.option.icon" />
@@ -296,16 +296,16 @@ async function copyTurtle(): Promise<void> {
 
       <!-- List layout (pivot) -->
       <div v-else class="list-table-wrapper">
-        <table class="list-table">
+        <table class="list-table data-table">
           <thead>
             <tr>
               <th class="col-label">
                 <div class="col-name">Label</div>
-                <div class="col-path">@id</div>
+                <div class="col-path mono-meta">@id</div>
               </th>
               <th class="col-label">
                 <div class="col-name">Classes</div>
-                <div class="col-path">rdf:type</div>
+                <div class="col-path mono-meta">rdf:type</div>
               </th>
               <th
                 v-for="col in listColumns"
@@ -313,7 +313,7 @@ async function copyTurtle(): Promise<void> {
                 :title="col.predicate"
               >
                 <div class="col-name">{{ col.label }}</div>
-                <div class="col-path">{{ col.predicate }}</div>
+                <div class="col-path mono-meta">{{ col.predicate }}</div>
               </th>
             </tr>
           </thead>
@@ -326,7 +326,7 @@ async function copyTurtle(): Promise<void> {
             >
               <td class="cell-label">
                 <div class="cell-name">{{ subject.label }}</div>
-                <div class="cell-iri" :title="subject.iri">{{ localName(subject.iri) }}</div>
+                <div class="cell-iri mono-meta" :title="subject.iri">{{ localName(subject.iri) }}</div>
               </td>
               <td>
                 <div class="class-chip-row">
@@ -349,7 +349,7 @@ async function copyTurtle(): Promise<void> {
                 >
                   <button
                     v-if="property.isResource && property.resolvedLabel"
-                    class="ref-btn"
+                    class="ref-btn link-button"
                     :title="property.value"
                     @click.stop="openDetail({ iri: property.value, label: property.resolvedLabel, classes: [], properties: [] })"
                   >
@@ -381,7 +381,7 @@ async function copyTurtle(): Promise<void> {
 
 <style scoped lang="scss">
 .browse-view {
-  max-width: 1400px;
+  max-width: 1440px;
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -397,15 +397,6 @@ async function copyTurtle(): Promise<void> {
   box-sizing: border-box;
   overflow: hidden;
 }
-.view-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-
-.view-header h1 { margin: 0 0 var(--space-1); font-size: 1.75rem; }
-.subtitle { margin: 0; color: var(--color-text-muted); }
 
 .toolbar {
   display: flex;
@@ -420,11 +411,6 @@ async function copyTurtle(): Promise<void> {
 .search-filter,
 .class-filter,
 .view-filter {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
 }
 
 .search-filter {
@@ -444,15 +430,6 @@ async function copyTurtle(): Promise<void> {
 .class-filter,
 .view-filter {
   min-width: 220px;
-}
-
-.class-filter select {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text);
-  padding: 0.7rem 0.8rem;
-  font: inherit;
 }
 
 .layout-label { margin-left: var(--space-1); }
@@ -495,38 +472,17 @@ async function copyTurtle(): Promise<void> {
   background: var(--color-surface);
 }
 .list-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85rem;
-  th, td {
-    text-align: left;
-    padding: var(--space-2) var(--space-3);
-    border-bottom: 1px solid var(--color-border);
-    vertical-align: top;
-  }
   th {
     background: var(--color-bg);
-    font-weight: 600;
-    position: sticky;
-    top: 0;
   }
-  tr:last-child td { border-bottom: 0; }
 }
 .col-name { font-weight: 600; }
 .col-path {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--color-text-muted);
   font-weight: 400;
   margin-top: 2px;
   word-break: break-all;
 }
 .cell-label .cell-name { font-weight: 500; }
-.cell-label .cell-iri {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--color-text-muted);
-}
 .cell-value {
   word-break: break-word;
   & + .cell-value { margin-top: 2px; }
@@ -537,18 +493,6 @@ async function copyTurtle(): Promise<void> {
   cursor: pointer;
   transition: background-color 0.15s;
   &:hover { background: var(--color-surface-1); }
-}
-
-.ref-btn {
-  background: transparent;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  cursor: pointer;
-  color: var(--color-primary);
-  font: inherit;
-  text-align: left;
-  &:hover { text-decoration: underline; }
 }
 
 .ttl-details {

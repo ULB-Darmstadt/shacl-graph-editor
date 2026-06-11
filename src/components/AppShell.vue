@@ -9,7 +9,7 @@ const router = useRouter()
 
 const activeMode = computed<AppModeKey>(() => {
   const matchedMode = APP_MODES.find(mode => route.path.startsWith(mode.path))
-  return matchedMode?.key ?? 'app'
+  return matchedMode?.key ?? 'prepare'
 })
 
 function navigate(modeKey: AppModeKey): void {
@@ -25,7 +25,7 @@ function navigate(modeKey: AppModeKey): void {
       <div class="app-shell__brand">
         <i class="pi pi-sitemap app-shell__brand-icon" />
         <div class="app-shell__brand-copy">
-          <h1>Architectural RDM-Pipeline</h1>
+          <h1 class="app-shell__title">Architectural RDM-Pipeline</h1>
         </div>
       </div>
 
@@ -84,12 +84,11 @@ function navigate(modeKey: AppModeKey): void {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
 
-  h1 {
-    margin: 0;
-    font-size: 1.3rem;
-    font-weight: 600;
-  }
+.app-shell__title {
+  margin: 0;
+  font-size: 1.3rem;
 }
 
 .app-shell__nav {

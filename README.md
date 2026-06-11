@@ -3,7 +3,7 @@
 Architectural RDM-Pipeline is a browser-based tool for turning tabular research
 data into structured RDF datasets. It combines SHACL application profiles,
 CSV or Airtable sources, visual mapping, enrichment services, SHACL validation,
-metadata capture, and RO-Crate export in one Vue single-page application.
+metadata capture, and RO-Crate publishing in one Vue single-page application.
 
 The app is designed for research data workflows where datasets should be
 understandable, reproducible, and publishable without hand-writing Turtle files
@@ -16,7 +16,7 @@ or maintaining one-off conversion scripts.
 ## What You Can Do
 
 - Load SHACL profiles in Turtle format and resolve `owl:imports`.
-- Import source data from CSV files or Airtable tables.
+- Prepare source data from CSV files or Airtable tables.
 - Load a built-in showcase project from the mapping view for demonstrations or onboarding.
 - Build mappings visually on a Vue Flow canvas by connecting source columns to
   SHACL property shapes.
@@ -25,10 +25,10 @@ or maintaining one-off conversion scripts.
 - Add enrichment nodes for GeoNames and Lobid/GND workflows.
 - Transform latitude/longitude columns into GeoSPARQL WKT points.
 - Generate RDF from the current mapping.
-- Browse generated RDF subjects as cards, tables, or Turtle.
+- Review generated RDF subjects as cards, tables, or Turtle.
 - Validate generated RDF against the loaded SHACL profiles.
-- Capture RO-Crate dataset metadata through a SHACL-form based export view.
-- Export a ZIP package containing:
+- Capture RO-Crate dataset metadata through a SHACL-form based publish view.
+- Publish a ZIP package containing:
   - `ro-crate-metadata.json`
   - generated RDF as `data/dataset.ttl`
   - source tables as CSV
@@ -46,17 +46,17 @@ handover.
 
 ## Main Workflow
 
-1. Open the mapping view.
+1. Open the Prepare view.
 2. Optionally load the built-in showcase project from `Options` for a ready-made example.
 3. Add source data, for example a CSV file or an Airtable base.
 4. Add a target schema by uploading a SHACL profile or loading an embedded
    profile.
 5. Connect table columns to SHACL properties on the canvas.
 6. Optionally add enrichment or transformation nodes.
-7. Review generated RDF in the browse view.
+7. Review generated RDF in the Review view.
 8. Check validation results.
-9. Complete dataset metadata in the export view.
-10. Export the RO-Crate ZIP.
+9. Complete dataset metadata in the Publish view.
+10. Publish the RO-Crate ZIP.
 
 ## Technology
 

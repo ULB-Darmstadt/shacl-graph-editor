@@ -70,7 +70,7 @@ function stagingTitleForHeader(header: string): string {
       <i class="pi pi-table" />
       <span class="name">{{ data.source.name }}</span>
       <button
-        class="preview-btn"
+        class="preview-btn icon-pill-button"
         type="button"
         title="Preview table"
         aria-label="Preview table"
@@ -141,16 +141,9 @@ header {
 }
 .name { flex: 1; word-break: break-all; }
 .preview-btn {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   border: 1px solid var(--table-preview-border);
-  border-radius: 999px;
   background: rgba(255, 255, 255, 0.72);
   color: inherit;
-  cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease;
 
   &:hover {

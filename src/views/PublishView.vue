@@ -149,14 +149,14 @@ useShaclFormViewer({
 
 <template>
   <div class="export-view">
-    <header class="view-header">
+    <header class="page-header">
       <div>
-        <h1>Export</h1>
-        <p class="subtitle">Maintain the RO-Crate metadata through the RO-kit dataset profile and then export the package.</p>
+        <h1 class="page-title">Publish</h1>
+        <p class="page-subtitle">Maintain the RO-Crate metadata through the RO-kit dataset profile and then publish the package.</p>
       </div>
       <Button
         icon="pi pi-download"
-        label="Export RO-Crate"
+        label="Download RO-Crate"
         :disabled="!canExport || Boolean(loadError)"
         :loading="isExporting"
         @click="exportCrate"
@@ -164,7 +164,7 @@ useShaclFormViewer({
     </header>
 
     <Message v-if="!canExport" severity="warn" :closable="false">
-      Load source data to export a package with generic staging RDF and RML. Target schema and explicit mappings remain optional.
+      Load source data to publish a package with generic staging RDF and RML. Target schema and explicit mappings remain optional.
     </Message>
     <Message v-if="loadError" severity="error" :closable="false">
       {{ loadError }}
@@ -174,8 +174,8 @@ useShaclFormViewer({
       <section class="metadata-section">
         <header class="section-header">
           <div>
-            <h2>RO-kit Dataset</h2>
-            <p>Saved metadata is shown in the viewer. Edit it explicitly and apply changes by saving.</p>
+            <h2 class="section-title">RO-kit Dataset</h2>
+            <p class="helper-text">Saved metadata is shown in the viewer. Edit it explicitly and apply changes by saving.</p>
           </div>
           <div class="section-actions">
             <Tag value="RO-kit dataset" severity="warn" />
@@ -203,7 +203,7 @@ useShaclFormViewer({
           </div>
         </header>
 
-        <div v-if="isResolvingImports" class="inline-status">
+        <div v-if="isResolvingImports" class="inline-status inline-meta">
           <i class="pi pi-spin pi-spinner" />
           <span>Resolving imports...</span>
         </div>
@@ -214,7 +214,7 @@ useShaclFormViewer({
 
         <template v-else>
           <Message v-if="!metadataTurtle && !isEditing" severity="info" :closable="false">
-            No metadata saved yet. Start editing to capture the export metadata.
+            No metadata saved yet. Start editing to capture the publish metadata.
           </Message>
 
           <shacl-form
@@ -231,7 +231,7 @@ useShaclFormViewer({
 
           <div v-else class="editor-shell">
             <Message severity="warn" :closable="false">
-              Changes are only applied to export and tab switches after saving.
+              Changes are only applied to publish and tab switches after saving.
             </Message>
             <shacl-form
               :key="editorFormKey"
@@ -260,20 +260,6 @@ useShaclFormViewer({
   gap: var(--space-4);
 }
 
-.view-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-3);
-
-  h1 { margin: 0 0 var(--space-1); font-size: 1.75rem; }
-}
-
-.subtitle {
-  margin: 0;
-  color: var(--color-text-muted);
-}
-
 .export-layout {
   display: block;
 }
@@ -293,17 +279,6 @@ useShaclFormViewer({
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-3);
-
-  h2,
-  p { margin: 0; }
-
-  h2 { font-size: 1.1rem; }
-  p {
-    margin-top: 4px;
-    font-size: 0.85rem;
-    color: var(--color-text-muted);
-    line-height: 1.5;
-  }
 }
 
 .section-actions {
@@ -312,14 +287,6 @@ useShaclFormViewer({
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--space-2);
-}
-
-.inline-status {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--color-text-muted);
-  font-size: 0.85rem;
 }
 
 .editor-shell {

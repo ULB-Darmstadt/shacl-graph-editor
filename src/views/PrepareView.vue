@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * ImportView — unified main view that merges setup and mapping into the import workflow.
+ * PrepareView — unified main view that merges setup and mapping into the prepare workflow.
  *
  * Components are added via the Menubar (top): source data, target schema,
  * enrichment, transformation, and reset. The canvas itself
@@ -160,8 +160,8 @@ const hasNothing = computed(() =>
     <div class="canvas-wrapper">
       <div v-if="hasNothing" class="empty-state">
         <i class="pi pi-plus-circle" />
-        <h2>Add components</h2>
-        <p>Use the top menu to add <strong>Source Data</strong>, <strong>Target Schema</strong>, <strong>Enrichment</strong>, and <strong>Transformation</strong>, or open <strong>Options</strong> to load the built-in example.</p>
+        <h2 class="section-title">Add components</h2>
+        <p class="helper-text">Use the top menu to add <strong>Source Data</strong>, <strong>Target Schema</strong>, <strong>Enrichment</strong>, and <strong>Transformation</strong>, or open <strong>Options</strong> to load the built-in example.</p>
       </div>
       <VueFlow
         v-else
@@ -262,8 +262,8 @@ const hasNothing = computed(() =>
   text-align: center;
   padding: var(--space-5);
   .pi-plus-circle { font-size: 3rem; color: var(--color-accent); }
-  h2 { margin: 0; font-size: 1.25rem; color: var(--color-text); }
-  p { margin: 0; max-width: 480px; line-height: 1.55; }
+  .section-title { color: var(--color-text); }
+  .helper-text { max-width: 480px; }
 }
 
 </style>
