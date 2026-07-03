@@ -29,6 +29,7 @@ import Button from 'primevue/button'
 import Tag from 'primevue/tag'
 import type { BrowseModel, BrowseSubject } from '@/services/browse/browseService'
 import type { NodeShape } from '@/domain/NodeShape'
+import { thumbnailUrlForSubject } from '@/features/browse/browseViewHelpers'
 import { useShaclFormViewer, type ShaclFormElement } from '@/features/shacl/useShaclFormViewer'
 
 const formsWithLeafletViewer = new WeakSet<HTMLElement>()
@@ -98,6 +99,11 @@ const subjectsByIri = computed(() => {
 const currentSubject = computed<BrowseSubject | null>(() => {
   const iri = currentIri.value
   return iri ? subjectsByIri.value.get(iri) ?? null : null
+})
+
+const thumbnailUrl = computed<string | null>(() => {
+  if (!currentSubject.value) return null
+  return thumbnailUrlForSubject(currentSubject.value) ?? null
 })
 
 /** Resolves the NodeShape whose targetClass matches one of the subject's classes. */
@@ -485,7 +491,16 @@ function localName(iri: string): string {
         </button>
       </div>
 
-      <div v-if="activeTab === 'factsheet'" class="form-pane" role="tabpanel">
+      <div v-if="activeTab === 'factsheet'" class="factsheet-pane" role="tabpanel">
+        <div v-if="thumbnailUrl" class="subject-preview">
+          <img
+            :src="thumbnailUrl"
+            :alt="`Thumbnail for ${currentSubject.label}`"
+            class="subject-preview-image"
+            loading="lazy"
+          >
+        </div>
+        <div class="form-pane">
           <shacl-form
             ref="formRef"
             :key="currentIri ?? 'subject'"
@@ -495,6 +510,7 @@ function localName(iri: string): string {
             data-language="en"
             data-show-root-shape-label="false"
           />
+        </div>
       </div>
 
       <section v-if="activeTab === 'relationships'" class="relationship-pane" role="tabpanel">
@@ -573,6 +589,27 @@ function localName(iri: string): string {
   &.active { color: var(--color-text); background: var(--color-surface); box-shadow: var(--shadow-sm); }
   &:disabled { opacity: 0.55; cursor: not-allowed; }
   i { font-size: 0.85rem; }
+}
+
+.factsheet-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.subject-preview {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.subject-preview-image {
+  display: block;
+  max-width: min(100%, 420px);
+  max-height: 240px;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-1);
 }
 
 .form-pane {

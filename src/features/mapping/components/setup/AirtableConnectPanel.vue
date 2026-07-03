@@ -139,7 +139,7 @@ async function importSelected(): Promise<void> {
       const records = await svc.fetchTableRecords(table.id)
       const fieldOrder = table.fields?.map(field => field.name) ?? []
       const primaryFieldName = table.fields?.find(field => field.id === table.primaryFieldId)?.name
-      const { headers, rows, recordIds } = AirtableService.recordsToTable(records, fieldOrder)
+      const { headers, rows, recordIds } = AirtableService.recordsToTable(records, fieldOrder, table.fields)
       data.upsertSource(createAirtableDataSource({
         baseId: baseId.value,
         tableId: table.id,

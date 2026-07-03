@@ -7,6 +7,9 @@ export interface BrowseColumn {
   label: string
 }
 
+const XSD_ANY_URI = 'http://www.w3.org/2001/XMLSchema#anyURI'
+const SCHEMA_IMAGE_IRI = 'http://schema.org/image'
+
 export function localName(iri: string): string {
   const idx = Math.max(iri.lastIndexOf('#'), iri.lastIndexOf('/'))
   return idx >= 0 ? iri.slice(idx + 1) : iri
@@ -28,10 +31,15 @@ export function displayBrowseValue(property: BrowsePropertyValue): string {
   return property.value
 }
 
+export function thumbnailUrlForSubject(subject: BrowseSubject): string | undefined {
+  return subject.properties.find(isThumbnailProperty)?.value
+}
+
 export function columnsForSubjects(subjects: BrowseSubject[]): BrowseColumn[] {
   const seen = new Map<string, string>()
   for (const subject of subjects) {
     for (const property of subject.properties) {
+      if (isThumbnailProperty(property)) continue
       if (!seen.has(property.predicate)) seen.set(property.predicate, property.label)
     }
   }
@@ -50,6 +58,22 @@ export function classLabelsForSubject(
 ): string[] {
   if (subject.classes.length === 0) return ['Untyped']
   return subject.classes.map(cls => labelsByIri.get(cls) ?? localName(cls))
+}
+
+function isThumbnailProperty(property: BrowsePropertyValue): boolean {
+  if (property.predicate !== SCHEMA_IMAGE_IRI) return false
+  if (property.isResource) return false
+  if (!isHttpUrl(property.value)) return false
+  return property.datatype === XSD_ANY_URI
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
 }
 
 

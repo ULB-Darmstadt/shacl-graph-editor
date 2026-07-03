@@ -28,6 +28,7 @@ import {
   columnsForSubjects,
   localName,
   subjectMatchesSearch,
+  thumbnailUrlForSubject,
   valuesForColumn,
 } from '@/features/browse/browseViewHelpers'
 import Message from 'primevue/message'
@@ -132,9 +133,10 @@ watch(
 )
 
 // ---------- View state ----------
-const layout = ref<'list' | 'ttl'>('list')
+const layout = ref<'list' | 'card' | 'ttl'>('list')
 const layoutOptions = [
   { value: 'list',  icon: 'pi pi-list',     label: 'List' },
+  { value: 'card',  icon: 'pi pi-th-large', label: 'Cards' },
   { value: 'ttl',   icon: 'pi pi-code',     label: 'TTL' },
 ]
 const search = ref('')
@@ -208,6 +210,14 @@ const listColumns = computed(() =>
 
 function classLabelsFor(subject: BrowseSubject): string[] {
   return classLabelsForSubject(subject, classLabelsByIri.value)
+}
+
+function thumbnailUrl(subject: BrowseSubject): string | undefined {
+  return thumbnailUrlForSubject(subject)
+}
+
+function subjectId(subject: BrowseSubject): string {
+  return localName(subject.iri)
 }
 
 async function copyTurtle(): Promise<void> {
@@ -315,14 +325,51 @@ async function copyTurtle(): Promise<void> {
         <pre class="ttl-output">{{ ttlOutput }}</pre>
       </section>
 
+      <section v-else-if="layout === 'card'" class="card-grid" aria-label="Subject cards">
+        <article
+          v-for="subject in visibleSubjects"
+          :key="subject.iri"
+          class="subject-card"
+          @click="openDetail(subject)"
+        >
+          <div class="subject-card__media">
+            <img
+              v-if="thumbnailUrl(subject)"
+              :src="thumbnailUrl(subject)"
+              :alt="`Thumbnail for ${subject.label}`"
+              class="subject-card__thumbnail"
+              loading="lazy"
+            >
+            <div v-else class="subject-card__thumbnail subject-card__thumbnail--empty" aria-hidden="true" />
+          </div>
+          <div class="subject-card__body">
+            <div class="subject-card__label">{{ subject.label }}</div>
+            <div class="subject-card__meta mono-meta">{{ subjectId(subject) }}</div>
+            <div class="subject-card__classes">
+              <Tag
+                v-for="classLabel in classLabelsFor(subject)"
+                :key="`${subject.iri}-card-${classLabel}`"
+                :value="classLabel"
+                severity="info"
+              />
+            </div>
+          </div>
+        </article>
+      </section>
+
       <!-- List layout (pivot) -->
       <div v-else class="list-table-wrapper">
         <table class="list-table data-table">
           <thead>
             <tr>
               <th class="col-label">
-                <div class="col-name">Label</div>
-                <div class="col-path mono-meta">@id</div>
+                <div class="cell-label-layout cell-label-layout--header">
+                  <span class="record-thumbnail-slot" aria-hidden="true" />
+                  <div class="cell-label-copy">
+                    <div class="col-name">Label</div>
+                    <div class="col-path mono-meta">@id</div>
+                  </div>
+                </div>
               </th>
               <th class="col-label">
                 <div class="col-name">Classes</div>
@@ -346,8 +393,20 @@ async function copyTurtle(): Promise<void> {
               @click="openDetail(subject)"
             >
               <td class="cell-label">
-                <div class="cell-name">{{ subject.label }}</div>
-                <div class="cell-iri mono-meta" :title="subject.iri">{{ localName(subject.iri) }}</div>
+                <div class="cell-label-layout">
+                  <img
+                    v-if="thumbnailUrl(subject)"
+                    :src="thumbnailUrl(subject)"
+                    :alt="`Thumbnail for ${subject.label}`"
+                    class="record-thumbnail"
+                    loading="lazy"
+                  >
+                  <span v-else class="record-thumbnail-slot" aria-hidden="true" />
+                  <div class="cell-label-copy">
+                    <div class="cell-name">{{ subject.label }}</div>
+                    <div class="cell-iri mono-meta" :title="subject.iri">{{ localName(subject.iri) }}</div>
+                  </div>
+                </div>
               </td>
               <td>
                 <div class="class-chip-row">
@@ -503,7 +562,32 @@ async function copyTurtle(): Promise<void> {
   margin-top: 2px;
   word-break: break-all;
 }
+.cell-label-layout--header {
+  align-items: flex-start;
+}
+.cell-label-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+.cell-label-copy {
+  min-width: 0;
+}
 .cell-label .cell-name { font-weight: 500; }
+.record-thumbnail-slot {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
+}
+.record-thumbnail {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-1);
+}
 .cell-value {
   word-break: break-word;
   & + .cell-value { margin-top: 2px; }
@@ -514,6 +598,74 @@ async function copyTurtle(): Promise<void> {
   cursor: pointer;
   transition: background-color 0.15s;
   &:hover { background: var(--color-surface-1); }
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-4);
+}
+
+.subject-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-sm);
+  }
+}
+
+.subject-card__media {
+  width: 100%;
+}
+
+.subject-card__thumbnail {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-1);
+  display: block;
+}
+
+.subject-card__thumbnail--empty {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--color-surface-1) 92%, #ffffff 8%), var(--color-surface-1));
+}
+
+.subject-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.subject-card__label {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.subject-card__meta {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  word-break: break-word;
+}
+
+.subject-card__classes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .ttl-details {

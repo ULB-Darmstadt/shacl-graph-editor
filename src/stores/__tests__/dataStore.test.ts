@@ -67,7 +67,15 @@ describe('dataStore Airtable refresh', () => {
           ok: true,
           json: async () => ({
             tables: [
-              { id: 'tblProjects', name: 'Projects', fields: [{ id: 'fldStatus', name: 'Status', type: 'singleLineText' }, { id: 'fldName', name: 'Name', type: 'singleLineText' }] },
+              {
+                id: 'tblProjects',
+                name: 'Projects',
+                fields: [
+                  { id: 'fldStatus', name: 'Status', type: 'singleLineText' },
+                  { id: 'fldName', name: 'Name', type: 'singleLineText' },
+                  { id: 'fldThumbnail', name: 'Thumbnail', type: 'multipleAttachments' },
+                ],
+              },
               { id: 'tblPeople', name: 'People', fields: [{ id: 'fldName', name: 'Name', type: 'singleLineText' }] },
             ],
           }),
@@ -77,7 +85,16 @@ describe('dataStore Airtable refresh', () => {
       if (url.includes('/tblProjects')) {
         return {
           ok: true,
-          json: async () => ({ records: [{ id: 'recProject1', fields: { Name: 'New Project', Status: 'Live' } }] }),
+          json: async () => ({
+            records: [{
+              id: 'recProject1',
+              fields: {
+                Name: 'New Project',
+                Status: 'Live',
+                Thumbnail: [{ url: 'https://cdn.example.org/buildings/new-project.jpg' }],
+              },
+            }],
+          }),
         } as Response
       }
 
@@ -104,8 +121,8 @@ describe('dataStore Airtable refresh', () => {
       'airtable:appBase:tblProjects',
       'airtable:appBase:tblPeople',
     ])
-    expect(store.sources[0]?.headers).toEqual(['Status', 'Name'])
-    expect(store.sources[0]?.rows).toEqual([['Live', 'New Project']])
+    expect(store.sources[0]?.headers).toEqual(['Status', 'Name', 'Thumbnail'])
+    expect(store.sources[0]?.rows).toEqual([['Live', 'New Project', 'https://cdn.example.org/buildings/new-project.jpg']])
     expect(store.sources[1]?.rows).toEqual([['New Person']])
   })
 })

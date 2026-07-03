@@ -36,6 +36,10 @@ export interface AirtableRecord {
   fields: Record<string, unknown>
 }
 
+interface AirtableAttachmentLike {
+  url?: unknown
+}
+
 export class AirtableService {
   constructor(private readonly pat: string, private readonly baseId?: string) {}
 
@@ -89,20 +93,48 @@ export class AirtableService {
     return this.baseId
   }
 
-  static recordsToTable(records: AirtableRecord[], fieldOrder: string[] = []): {
+  static recordsToTable(records: AirtableRecord[], fieldOrder: string[] = [], fields: AirtableField[] = []): {
     headers: string[]
     rows: unknown[][]
     recordIds: string[]
   } {
     const headerSet = new Set<string>(fieldOrder)
+    const fieldTypesByName = new Map(fields.map(field => [field.name, field.type] as const))
     for (const r of records) {
       for (const k of Object.keys(r.fields)) headerSet.add(k)
     }
     const headers = Array.from(headerSet)
-    const rows = records.map(r => headers.map(h => r.fields[h] ?? null))
+    const rows = records.map(r => headers.map(h => normalizeAirtableCellValue(r.fields[h], fieldTypesByName.get(h))))
     const recordIds = records.map(r => r.id)
     return { headers, rows, recordIds }
   }
+}
+
+function normalizeAirtableCellValue(value: unknown, fieldType: string | undefined): unknown {
+  if (fieldType === 'multipleAttachments') {
+    return firstAttachmentUrl(value)
+  }
+
+  return value ?? null
+}
+
+function firstAttachmentUrl(value: unknown): string | null {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const url = attachmentUrl(entry)
+      if (url) return url
+    }
+    return null
+  }
+
+  return attachmentUrl(value)
+}
+
+function attachmentUrl(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null
+
+  const url = (value as AirtableAttachmentLike).url
+  return typeof url === 'string' && url.trim() ? url.trim() : null
 }
 
 export function airtableFieldToDataSourceColumn(field: AirtableField): DataSourceColumn {

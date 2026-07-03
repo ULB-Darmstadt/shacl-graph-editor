@@ -92,7 +92,7 @@ export async function refreshAirtableBase(dataStore: DataStore, pat: string, bas
     const metadataTable = metadataTableById.get(tableId)
     const primaryFieldName = metadataTable?.fields?.find(field => field.id === metadataTable.primaryFieldId)?.name
     const columns = metadataTable?.fields?.map(airtableFieldToDataSourceColumn)
-    const { headers, rows, recordIds } = AirtableService.recordsToTable(records, fieldOrder)
+    const { headers, rows, recordIds } = AirtableService.recordsToTable(records, fieldOrder, metadataTable?.fields)
     dataStore.upsertSource(createAirtableDataSource({
       baseId,
       tableId,
