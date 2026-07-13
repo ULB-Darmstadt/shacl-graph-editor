@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { ApplicationProfile, classifyShape, parseShaclProfile } from '@/domain/NodeShape'
+import {
+  ApplicationProfile,
+  classifyShape,
+  parseShaclProfile,
+  propertyConstraintSummary,
+  propertyDatatypeTargets,
+  propertyRelationshipKinds,
+  propertyNodeTargets,
+} from '@/domain/NodeShape'
 
 const SAMPLE_TTL = `
 @prefix sh:   <http://www.w3.org/ns/shacl#> .
@@ -88,6 +96,55 @@ ex:ConcreteShape a sh:NodeShape ;
   ] .
 `
 
+const LOGICAL_CONSTRAINT_TTL = `
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <http://example.org/> .
+
+ex:LogicalShape a sh:NodeShape ;
+  dct:title "Logical shape" ;
+  sh:targetClass ex:Logical ;
+  sh:property [
+    sh:name "Date of production" ;
+    sh:path ex:dateOfProduction ;
+    sh:or (
+      [ sh:datatype xsd:gYear ; sh:name "Single year" ]
+      [ sh:datatype xsd:string ; sh:name "Year range" ]
+    ) ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:name "Stakeholder" ;
+    sh:path ex:stakeholder ;
+    sh:qualifiedValueShape [
+      sh:node ex:StakeholderShape ;
+      sh:class ex:Stakeholder ;
+      sh:name "Stakeholder shape" ;
+    ] ;
+    sh:qualifiedMinCount 1 ;
+  ] .
+`
+
+const MIXED_OR_CLASSIFICATION_TTL = `
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <http://example.org/> .
+
+ex:MixedShape a sh:NodeShape ;
+  dct:title "Mixed shape" ;
+  sh:targetClass ex:Mixed ;
+  sh:property [
+    sh:name "Mixed field" ;
+    sh:path ex:mixedField ;
+    sh:or (
+      [ sh:datatype xsd:string ; sh:name "Literal branch" ]
+      [ sh:node ex:TargetShape ; sh:name "Node branch" ]
+    ) ;
+  ] .
+`
+
 describe('parseShaclProfile', () => {
   it('parses a NodeShape with its property shapes', () => {
     const profile = parseShaclProfile(SAMPLE_TTL, 'sample.ttl', 'uploaded')
@@ -121,6 +178,31 @@ describe('parseShaclProfile', () => {
   it('classifies mixed stakeholder-style shapes as data, not reference', () => {
     const profile = parseShaclProfile(STAKEHOLDER_TTL, 'stakeholder.ttl', 'uploaded')
     expect(classifyShape(profile.nodeShapes[0])).toBe('data')
+  })
+
+  it('classifies sh:or properties with both literal and node branches as data', () => {
+    const profile = parseShaclProfile(MIXED_OR_CLASSIFICATION_TTL, 'mixed.ttl', 'uploaded')
+    expect(classifyShape(profile.nodeShapes[0])).toBe('data')
+  })
+
+  it('parses sh:or alternatives and qualified value shapes for canvas rendering', () => {
+    const profile = parseShaclProfile(LOGICAL_CONSTRAINT_TTL, 'logical.ttl', 'uploaded')
+    const shape = profile.nodeShapes[0]
+
+    const logicalProperty = shape.properties[0]
+    expect(propertyDatatypeTargets(logicalProperty).map(target => target.value)).toEqual([
+      'http://www.w3.org/2001/XMLSchema#gYear',
+      'http://www.w3.org/2001/XMLSchema#string',
+    ])
+    expect(propertyConstraintSummary(logicalProperty)).toBe('Single year | Year range')
+    expect(propertyRelationshipKinds(logicalProperty)).toEqual(['sh:or'])
+
+    const qualifiedProperty = shape.properties[1]
+    expect(propertyNodeTargets(qualifiedProperty).map(target => target.value)).toEqual([
+      'http://example.org/StakeholderShape',
+    ])
+    expect(propertyConstraintSummary(qualifiedProperty)).toBe('1..* Stakeholder shape')
+    expect(propertyRelationshipKinds(qualifiedProperty)).toEqual(['sh:qualifiedValueShape'])
   })
 })
 

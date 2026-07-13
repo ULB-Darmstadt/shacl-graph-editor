@@ -32,6 +32,13 @@ export const SH_PATTERN = new NamedNode(PREFIX_SHACL + 'pattern')
 export const SH_ORDER = new NamedNode(PREFIX_SHACL + 'order')
 export const SH_CLASS = new NamedNode(PREFIX_SHACL + 'class')
 export const SH_IN = new NamedNode(PREFIX_SHACL + 'in')
+export const SH_OR = new NamedNode(PREFIX_SHACL + 'or')
+export const SH_AND = new NamedNode(PREFIX_SHACL + 'and')
+export const SH_XONE = new NamedNode(PREFIX_SHACL + 'xone')
+export const SH_NOT = new NamedNode(PREFIX_SHACL + 'not')
+export const SH_QUALIFIED_VALUE_SHAPE = new NamedNode(PREFIX_SHACL + 'qualifiedValueShape')
+export const SH_QUALIFIED_MIN_COUNT = new NamedNode(PREFIX_SHACL + 'qualifiedMinCount')
+export const SH_QUALIFIED_MAX_COUNT = new NamedNode(PREFIX_SHACL + 'qualifiedMaxCount')
 
 // ─── Dublin Core metadata ─────────────────────────────────────────────────────
 export const DCT_TITLE = new NamedNode(PREFIX_DCTERMS + 'title')

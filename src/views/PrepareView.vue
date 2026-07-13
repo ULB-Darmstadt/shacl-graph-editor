@@ -125,10 +125,11 @@ const {
   resetUiState: resetCanvasUiState,
 })
 
-const { nodes, edges, nodeTypes } = useCanvasGraph({
+const { nodes, edges, nodeTypes, edgeTypes } = useCanvasGraph({
   dataStore: data,
   mappingStore: mapping,
   sources,
+  allShapes: nodeShapes,
   canvasShapes,
   toast,
   confirm,
@@ -178,6 +179,7 @@ const hasNothing = computed(() =>
         v-model:nodes="nodes"
         v-model:edges="edges"
         :node-types="nodeTypes"
+        :edge-types="edgeTypes"
         :default-edge-options="{ animated: false, type: 'default' }"
         fit-view-on-init
       >

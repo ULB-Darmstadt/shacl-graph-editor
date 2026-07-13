@@ -33,6 +33,7 @@ import { mappingExtensionModules } from '@/features/mapping/extensions/modules'
  */
 const TableNode = defineAsyncComponent(() => import('@/features/mapping/components/canvas/TableNode.vue'))
 const ShapeNode = defineAsyncComponent(() => import('@/features/mapping/components/canvas/ShapeNode.vue'))
+const RelationEdge = defineAsyncComponent(() => import('@/features/mapping/components/canvas/RelationEdge.vue'))
 
 export type {
   DataSourceImportDefinition,
@@ -79,6 +80,10 @@ export const canvasNodeTypes = {
   ...extensionCanvasNodeTypes,
   tableNode: markRaw(TableNode),
   shapeNode: markRaw(ShapeNode),
+}
+
+export const canvasEdgeTypes = {
+  default: markRaw(RelationEdge),
 }
 const defaultNodePositions: Partial<Record<string, Node['position']>> = {
   ...Object.assign({}, ...mappingExtensionModules.map(module => module.defaultNodePositions ?? {})),

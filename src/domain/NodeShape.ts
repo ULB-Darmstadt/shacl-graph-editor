@@ -1,4 +1,4 @@
-import { graph, parse, type NamedNode, type BlankNode, type Literal, type Store } from 'rdflib'
+import { graph, parse, type BlankNode, type Literal, type NamedNode, type Store } from 'rdflib'
 import {
   DCT_CREATOR, DCT_DESCRIPTION, DCT_TITLE,
   OWL_IMPORTS, RDFS_LABEL, SH_NODE_SHAPE, SH_PROPERTY,
@@ -6,6 +6,17 @@ import {
   SH_DATATYPE, SH_NODE, SH_NODE_KIND, SH_MIN_COUNT,
   SH_MAX_COUNT, SH_PATTERN, SH_ORDER, SH_CLASS,
 } from './rdfConstants'
+import {
+  applyConstraintPredicate,
+  propertyHasDirectValueSemantics,
+  propertyNodeTargets,
+  propertyDatatypeTargets,
+  propertyConstraintSummary,
+  propertyRelationshipKinds,
+  localName,
+  type PropertyConstraint,
+  type PropertyConstraintCarrier,
+} from './propertyConstraints'
 
 const DEFAULT_BASE_URI = 'http://example.org/'
 
@@ -13,7 +24,7 @@ const DEFAULT_BASE_URI = 'http://example.org/'
  * Parsed PropertyShape from a SHACL graph.
  * Only the fields required for the mapping UI are surfaced here.
  */
-export interface PropertyShape {
+export interface PropertyShape extends PropertyConstraintCarrier {
   nodeId: NamedNode | BlankNode
   /** sh:name (Literal) — UI label */
   name?: string
@@ -21,17 +32,6 @@ export interface PropertyShape {
   description?: string
   /** sh:path (NamedNode) — RDF predicate */
   path?: NamedNode
-  /** sh:datatype */
-  datatype?: NamedNode
-  /** sh:node — IRI of a referenced NodeShape (for object refs) */
-  node?: NamedNode
-  /** sh:nodeKind */
-  nodeKind?: NamedNode
-  /** sh:class */
-  cls?: NamedNode
-  minCount?: number
-  maxCount?: number
-  pattern?: string
   order?: number
   /** True when this property comes from a node-level inherited shape. */
   inherited?: boolean
@@ -89,11 +89,11 @@ export function classifyShape(shape: NodeShape): ShapeKind {
   if (shape.targetClass && FORM_TARGET_CLASSES.has(shape.targetClass.value)) return 'form'
 
   // Any directly mappable property keeps the shape in the regular data lane.
-  const hasDirectValueProp = shape.properties.some(p => p.path && !p.node)
+  const hasDirectValueProp = shape.properties.some(p => p.path && propertyHasDirectValueSemantics(p))
   if (hasDirectValueProp) return 'data'
 
   // Has only sh:node FK properties
-  const hasFkProp = shape.properties.some(p => p.node)
+  const hasFkProp = shape.properties.some(p => propertyNodeTargets(p).length > 0)
   if (hasFkProp) return 'reference'
 
   return 'data' // fallback
@@ -317,14 +317,8 @@ function extractPropertyShape(nodeId: NamedNode | BlankNode, store: Store): Prop
     if (p === SH_NAME.value && obj.termType === 'Literal') ps.name = obj.value
     else if (p === SH_DESCRIPTION.value && obj.termType === 'Literal') ps.description = obj.value
     else if (p === SH_PATH.value && obj.termType === 'NamedNode') ps.path = obj
-    else if (p === SH_DATATYPE.value && obj.termType === 'NamedNode') ps.datatype = obj
-    else if (p === SH_NODE.value && obj.termType === 'NamedNode') ps.node = obj
-    else if (p === SH_NODE_KIND.value && obj.termType === 'NamedNode') ps.nodeKind = obj
-    else if (p === SH_CLASS.value && obj.termType === 'NamedNode') ps.cls = obj
-    else if (p === SH_MIN_COUNT.value && obj.termType === 'Literal') ps.minCount = Number(obj.value)
-    else if (p === SH_MAX_COUNT.value && obj.termType === 'Literal') ps.maxCount = Number(obj.value)
-    else if (p === SH_PATTERN.value && obj.termType === 'Literal') ps.pattern = obj.value
     else if (p === SH_ORDER.value && obj.termType === 'Literal') ps.order = Number(obj.value)
+    else applyConstraintPredicate(ps, p, t.object as any, store)
   })
 
   return ps
@@ -333,5 +327,14 @@ function extractPropertyShape(nodeId: NamedNode | BlankNode, store: Store): Prop
 function propertyKeyFor(property: PropertyShape): string {
   return property.path?.value ?? property.nodeId.value
 }
+
+export {
+  localName,
+  propertyConstraintSummary,
+  propertyDatatypeTargets,
+  propertyNodeTargets,
+  propertyRelationshipKinds,
+}
+export type { PropertyConstraint }
 
 

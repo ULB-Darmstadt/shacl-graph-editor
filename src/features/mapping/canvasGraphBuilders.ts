@@ -1,21 +1,21 @@
 import type { Edge, Node } from '@vue-flow/core'
 import type { DataSource } from '@/domain/DataSource'
 import type { MappingEdge } from '@/domain/Mapping'
-import type { NodeShape } from '@/domain/NodeShape'
+import { propertyNodeTargets, propertyRelationshipKinds, type NodeShape, type PropertyShape } from '@/domain/NodeShape'
+import { applyDefaultExtensionEdgeStyle, propertyRelationshipLabel, type CanvasEdgeKind } from '@/features/mapping/canvasEdgeLabels'
 import { CANVAS_EDGE_STYLES } from '@/features/mapping/canvasTheme'
+import {
+  buildCanvasInheritedShapeNodeId,
+  buildCanvasShapeNodeId,
+  buildInheritedOriginEdges,
+  collectVisibleShapeNodeDescriptors,
+  inheritedOriginShapesForRoot,
+  inheritedPropertyPrefixCount,
+  parseCanvasShapeNodeTarget,
+  type ShapeCanvasNodeData,
+} from '@/features/mapping/inheritanceCanvas'
 import { resolveMappingEdgeCanvasSource } from '@/features/mapping/mappingExtensionRegistry'
 import { detectLinkedColumns } from '@/services/mapping/linkDetector'
-
-export function applyDefaultExtensionEdgeStyle(edge: Omit<Edge, 'type'> & { type?: string }): Edge {
-  return {
-    ...edge,
-    type: edge.type ?? 'default',
-    style: {
-      ...CANVAS_EDGE_STYLES.primary,
-      ...(edge.style ?? {}),
-    },
-  }
-}
 
 export function buildCanvasSourceNodes(
   sources: DataSource[],
@@ -30,29 +30,50 @@ export function buildCanvasSourceNodes(
 }
 
 export function buildCanvasShapeNodes(
-  shapes: NodeShape[],
+  rootShapes: NodeShape[],
+  allShapes: NodeShape[],
+  expandedShapeNodeIds: Set<string>,
   openShapePreview: (shape: NodeShape) => void | Promise<void>,
+  toggleInherited: (nodeId: string) => void,
 ): Node[] {
-  return shapes.map(shape => ({
-    id: `shape:${shape.nodeId.value}`,
+  const descriptors = collectVisibleShapeNodeDescriptors(rootShapes, allShapes, expandedShapeNodeIds)
+
+  return descriptors.map(descriptor => ({
+    id: descriptor.nodeId,
     type: 'shapeNode',
     position: { x: 0, y: 0 },
-    data: { shape, onPreview: () => openShapePreview(shape) },
+    data: {
+      shape: descriptor.shape,
+      ownerShapeIri: descriptor.ownerShapeIri,
+      representedShapeIri: descriptor.representedShapeIri,
+      inheritedOriginShapes: inheritedOriginShapesForRoot(descriptor.shape, allShapes),
+      inheritedPropertyCount: inheritedPropertyPrefixCount(descriptor.shape, allShapes),
+      interactive: !descriptor.isInheritedProxy,
+      anchorNodeId: descriptor.anchorNodeId,
+      inheritedIndex: descriptor.inheritedIndex,
+      canToggleInherited: descriptor.canToggleInherited,
+      inheritedExpanded: descriptor.inheritedExpanded,
+      isInheritedProxy: descriptor.isInheritedProxy,
+      onToggleInherited: descriptor.canToggleInherited ? () => toggleInherited(descriptor.nodeId) : undefined,
+      onPreview: descriptor.isInheritedProxy ? undefined : () => openShapePreview(descriptor.shape),
+    } satisfies ShapeCanvasNodeData,
   }))
 }
 
 export function buildCanvasMappingEdges(
   mappingEdges: MappingEdge[],
-  shapes: NodeShape[],
+  allShapes: NodeShape[],
   visibleNodeIds: Set<string>,
 ): Edge[] {
+  const allShapesByIri = new Map(allShapes.map(shape => [shape.nodeId.value, shape]))
+
   return mappingEdges.flatMap(edge => {
-    const targetShape = shapes.find(shape => shape.nodeId.value === edge.shapeIri)
+    const targetShape = allShapesByIri.get(edge.shapeIri)
     if (!targetShape) return []
 
     const targetProperty = targetShape.properties.find(property => property.path?.value === edge.propertyPath)
     const sourceDescriptor = resolveMappingEdgeCanvasSource(edge) ?? { source: `src:${edge.sourceId}` }
-    const target = `shape:${edge.shapeIri}`
+    const target = buildCanvasShapeNodeId(edge.shapeIri)
     if (!visibleNodeIds.has(sourceDescriptor.source) || !visibleNodeIds.has(target)) return []
 
     return [{
@@ -61,11 +82,14 @@ export function buildCanvasMappingEdges(
       sourceHandle: sourceDescriptor.sourceHandle ?? `h:${edge.sourceHeader}`,
       target,
       targetHandle: `p:${edge.propertyPath}`,
+      label: targetProperty ? propertyRelationshipLabel(targetProperty) : '',
       animated: true,
       type: 'default',
       style: CANVAS_EDGE_STYLES.primary,
       data: {
-        isFkProp: Boolean(targetProperty?.node),
+        isFkProp: targetProperty ? propertyNodeTargets(targetProperty).length > 0 : false,
+        relationLabel: targetProperty ? propertyRelationshipLabel(targetProperty) : '',
+        edgeKind: 'mapping' satisfies CanvasEdgeKind,
       },
     }]
   })
@@ -73,11 +97,15 @@ export function buildCanvasMappingEdges(
 
 export function buildCanvasStructuralEdges(
   visibleSources: DataSource[],
-  shapes: NodeShape[],
+  rootShapes: NodeShape[],
+  allShapes: NodeShape[] = rootShapes,
+  expandedShapeNodeIds: Set<string> = new Set(),
+  visibleNodeIds?: Set<string>,
 ): Edge[] {
   return [
     ...buildTableRelationEdges(visibleSources),
-    ...buildShapeReferenceEdges(shapes),
+    ...buildShapeReferenceEdges(rootShapes, allShapes, expandedShapeNodeIds, visibleNodeIds),
+    ...buildInheritedOriginEdges(rootShapes, allShapes, expandedShapeNodeIds, visibleNodeIds, CANVAS_EDGE_STYLES.structural),
   ]
 }
 
@@ -94,9 +122,14 @@ function buildTableRelationEdges(visibleSources: DataSource[]): Edge[] {
         sourceHandle: `h:${linkedColumn.header}`,
         target: `src:${linkedColumn.bestTargetSourceId}`,
         targetHandle: 'table-parent',
+        label: '',
         type: 'default',
         animated: false,
         style: CANVAS_EDGE_STYLES.structural,
+        data: {
+          relationLabel: '',
+          edgeKind: 'structural' satisfies CanvasEdgeKind,
+        },
       })
     }
   }
@@ -104,24 +137,39 @@ function buildTableRelationEdges(visibleSources: DataSource[]): Edge[] {
   return edges
 }
 
-function buildShapeReferenceEdges(shapes: NodeShape[]): Edge[] {
+function buildShapeReferenceEdges(
+  rootShapes: NodeShape[],
+  allShapes: NodeShape[],
+  expandedShapeNodeIds: Set<string>,
+  visibleNodeIds?: Set<string>,
+): Edge[] {
   const edges: Edge[] = []
-  const canvasIriSet = new Set(shapes.map(shape => shape.nodeId.value))
 
-  for (const shape of shapes) {
+  for (const shape of rootShapes) {
     for (const property of shape.properties) {
-      if (!property.node || !property.path) continue
-      if (!canvasIriSet.has(property.node.value)) continue
-      edges.push({
-        id: `ref:${shape.nodeId.value}::${property.path.value}->${property.node.value}`,
-        source: `shape:${shape.nodeId.value}`,
-        sourceHandle: `ref:${property.path.value}`,
-        target: `shape:${property.node.value}`,
-        targetHandle: 'shape-header',
-        type: 'default',
-        animated: false,
-        style: CANVAS_EDGE_STYLES.structural,
-      })
+      if (!property.path) continue
+      const targetNodes = propertyNodeTargets(property)
+      if (targetNodes.length === 0) continue
+      const source = buildCanvasShapeNodeId(shape.nodeId.value)
+      for (const targetNode of targetNodes) {
+        const target = findVisibleShapeNodeId(targetNode.value, visibleNodeIds)
+        if (!source || !target) continue
+        edges.push({
+          id: `ref:${shape.nodeId.value}::${property.path.value}->${targetNode.value}`,
+          source,
+          sourceHandle: `ref:${property.path.value}`,
+          target,
+          targetHandle: 'shape-header',
+          label: propertyRelationshipLabel(property),
+          type: 'default',
+          animated: false,
+          style: CANVAS_EDGE_STYLES.structural,
+          data: {
+            relationLabel: propertyRelationshipLabel(property),
+            edgeKind: 'structural' satisfies CanvasEdgeKind,
+          },
+        })
+      }
     }
   }
 
@@ -150,3 +198,28 @@ export function shouldAutoLayoutCanvas(existingNodes: Node[], nextNodes: Node[])
   const existingIds = new Set(existingNodes.map(node => node.id))
   return nextNodes.some(node => !existingIds.has(node.id))
 }
+
+function findVisibleShapeNodeId(shapeIri: string, visibleNodeIds?: Set<string>): string | null {
+  if (!visibleNodeIds || visibleNodeIds.size === 0) return buildCanvasShapeNodeId(shapeIri)
+
+  const preferredNodeId = buildCanvasShapeNodeId(shapeIri)
+  if (visibleNodeIds.has(preferredNodeId)) return preferredNodeId
+
+  for (const nodeId of visibleNodeIds) {
+    const target = parseCanvasShapeNodeTarget(nodeId)
+    if (target?.representedShapeIri === shapeIri) return nodeId
+  }
+
+  return null
+}
+function localName(iri: string): string {
+  return iri.split(/[/#]/).filter(Boolean).pop() ?? iri
+}
+
+export {
+  applyDefaultExtensionEdgeStyle,
+  buildCanvasInheritedShapeNodeId,
+  buildCanvasShapeNodeId,
+  parseCanvasShapeNodeTarget,
+}
+export type { ShapeCanvasNodeData }

@@ -2,6 +2,7 @@ import { onBeforeUnmount, onMounted, ref, type Ref } from 'vue'
 import { useVueFlow, type Connection, type EdgeMouseEvent } from '@vue-flow/core'
 import { createColumnMappingEdge } from '@/domain/Mapping'
 import type { DataSource } from '@/domain/DataSource'
+import { parseCanvasShapeNodeTarget } from '@/features/mapping/canvasGraphBuilders'
 import { getConnectionHandlers } from '@/features/mapping/mappingExtensionRegistry'
 import type { useDataStore } from '@/stores/dataStore'
 import type { useMappingStore } from '@/stores/mappingStore'
@@ -46,10 +47,11 @@ export function useCanvasConnections(options: UseCanvasConnectionsOptions) {
     if (!connection.source || !connection.target) return
     const sourceHandle = connection.sourceHandle ?? ''
     const targetHandle = connection.targetHandle ?? ''
+    const targetShape = parseCanvasShapeNodeTarget(connection.target)
 
-    if (connection.source.startsWith('src:') && connection.target.startsWith('shape:')) {
+    if (connection.source.startsWith('src:') && targetShape) {
       const sourceId = connection.source.slice(4)
-      const shapeIri = connection.target.slice(6)
+      const shapeIri = targetShape.ownerShapeIri
       const sourceHeader = sourceHandle.startsWith('h:') ? sourceHandle.slice(2) : ''
       const propertyPath = targetHandle.startsWith('p:') ? targetHandle.slice(2) : ''
       if (!sourceHeader || !propertyPath) return
@@ -155,7 +157,7 @@ export function useCanvasConnections(options: UseCanvasConnectionsOptions) {
 }
 
 function isStructuralEdge(edgeId: string): boolean {
-  return edgeId.startsWith('ref:') || edgeId.startsWith('air:') || edgeId.startsWith('tbl:')
+  return edgeId.startsWith('ref:') || edgeId.startsWith('air:') || edgeId.startsWith('tbl:') || edgeId.startsWith('inh:')
 }
 
 

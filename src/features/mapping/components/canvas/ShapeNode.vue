@@ -1,15 +1,19 @@
 <script setup lang="ts">
 import { Handle, Position } from '@vue-flow/core'
-import type { NodeShape, PropertyShape } from '@/domain/NodeShape'
+import { propertyConstraintSummary, propertyDatatypeTargets, propertyNodeTargets, type PropertyShape } from '@/domain/NodeShape'
 import { CANVAS_NODE_COLORS } from '@/features/mapping/canvasTheme'
+import type { ShapeCanvasNodeData } from '@/features/mapping/canvasGraphBuilders'
 import { useShapesStore } from '@/stores/shapesStore'
 
-const props = defineProps<{ data: { shape: NodeShape; onPreview?: () => void } }>()
+const props = defineProps<{ data: ShapeCanvasNodeData }>()
 const shapes = useShapesStore()
 
 const label = () => props.data.shape.label ?? localName(props.data.shape.nodeId.value)
-const inheritedProperties = () => props.data.shape.properties.filter(property => property.inherited)
-const ownProperties = () => props.data.shape.properties.filter(property => !property.inherited)
+const inheritedProperties = () => props.data.shape.properties.slice(0, inheritedPropertyPrefixCount())
+const ownProperties = () => props.data.shape.properties.slice(inheritedPropertyPrefixCount())
+const showInheritedToggle = () => Boolean(props.data.canToggleInherited)
+const inheritedToggleIcon = () => (props.data.inheritedExpanded ? 'pi pi-chevron-right' : 'pi pi-chevron-down')
+const primaryProperties = () => inheritedProperties()
 
 function localName(iri: string): string {
   return iri.split(/[/#]/).filter(Boolean).pop() ?? iri
@@ -19,14 +23,22 @@ function propertyLabel(p: PropertyShape): string {
   return p.name ?? (p.path ? localName(p.path.value) : p.nodeId.value)
 }
 
+function propertyKey(p: PropertyShape): string {
+  return p.path?.value ?? p.nodeId.value
+}
+
 function isObjectRef(p: PropertyShape): boolean {
-  return Boolean(p.node)
+  return propertyNodeTargets(p).length > 0
 }
 
 function refShapeLabel(p: PropertyShape): string {
-  if (!p.node) return ''
-  const linked = shapes.ap.findNodeShape(p.node.value)
-  return linked?.label ?? localName(p.node.value)
+  const nodeTargets = propertyNodeTargets(p)
+  return nodeTargets
+    .map(node => {
+      const linked = shapes.ap.findNodeShape(node.value)
+      return linked?.label ?? localName(node.value)
+    })
+    .join(' | ')
 }
 
 function cardinality(p: PropertyShape): string {
@@ -37,6 +49,61 @@ function cardinality(p: PropertyShape): string {
 
 function inheritedFromLabel(p: PropertyShape): string {
   return p.inheritedFromShapeLabel ?? (p.inheritedFromShapeIri ? localName(p.inheritedFromShapeIri) : 'Inherited shape')
+}
+
+function datatypeBadgeLabel(p: PropertyShape): string | null {
+  const summary = propertyConstraintSummary(p)
+  if (summary) return summary
+
+  const datatypeTargets = propertyDatatypeTargets(p)
+  if (datatypeTargets.length === 1) return localName(datatypeTargets[0].value)
+  if (datatypeTargets.length > 1) return datatypeTargets.map(target => localName(target.value)).join(' | ')
+  return null
+}
+
+function isInteractive(): boolean {
+  return props.data.interactive !== false
+}
+
+function inheritedPropertyPrefixCount(): number {
+  if (props.data.inheritedPropertyCount !== undefined) return props.data.inheritedPropertyCount
+
+  let longestPrefix = 0
+
+  const inheritedOriginShapes = props.data.inheritedOriginShapes
+    ?? (props.data.shape.inheritedShapeIris ?? [])
+      .map(inheritedShapeIri => shapes.ap.findNodeShape(inheritedShapeIri))
+      .filter((shape): shape is NonNullable<typeof shape> => Boolean(shape))
+
+  for (const inheritedShape of inheritedOriginShapes) {
+    if (!inheritedShape) continue
+
+    const prefixLength = sharedPropertyPrefixLength(props.data.shape.properties, inheritedShape.properties)
+    if (prefixLength > longestPrefix) longestPrefix = prefixLength
+  }
+
+  if (longestPrefix > 0) return longestPrefix
+  return props.data.shape.properties.filter(property => property.inherited).length
+}
+
+function sharedPropertyPrefixLength(parentProperties: PropertyShape[], inheritedShapeProperties: PropertyShape[]): number {
+  const length = Math.min(parentProperties.length, inheritedShapeProperties.length)
+  let index = 0
+
+  while (index < length) {
+    if (!propertiesMatch(parentProperties[index], inheritedShapeProperties[index])) {
+      break
+    }
+    index += 1
+  }
+
+  return index
+}
+
+function propertiesMatch(left: PropertyShape, right: PropertyShape): boolean {
+  if (propertyKey(left) === propertyKey(right)) return true
+  if (propertyLabel(left) === propertyLabel(right)) return true
+  return false
 }
 </script>
 
@@ -56,16 +123,25 @@ function inheritedFromLabel(p: PropertyShape): string {
       '--shape-inherited-bg': CANVAS_NODE_COLORS.shape.inheritedBackground,
     }"
   >
-    <header>
+    <header :class="{ 'header-inherited': data.isInheritedProxy }">
       <Handle
+        v-if="isInteractive()"
         id="shape-header"
         type="target"
         :position="Position.Left"
         class="handle handle-shape-target"
       />
+      <Handle
+        v-else-if="data.isInheritedProxy"
+        id="inheritance-target"
+        type="target"
+        :position="Position.Left"
+        class="handle structural-anchor"
+      />
       <i class="pi pi-bookmark" />
       <span class="label">{{ label() }}</span>
       <button
+        v-if="data.onPreview"
         class="preview-btn"
         type="button"
         title="Preview shape"
@@ -76,56 +152,34 @@ function inheritedFromLabel(p: PropertyShape): string {
       </button>
     </header>
 
-    <div v-if="inheritedProperties().length > 0" class="section-label">Inherited properties</div>
+    <div v-if="data.isInheritedProxy" class="proxy-banner">Inherited origin</div>
+
+    <button
+      v-if="showInheritedToggle()"
+      class="section-toggle"
+      type="button"
+      :aria-expanded="data.inheritedExpanded"
+      @click.stop="data.onToggleInherited?.()"
+    >
+      <span>Inherited properties</span>
+      <Handle
+        id="inheritance-source"
+        type="source"
+        :position="Position.Right"
+        class="handle structural-anchor section-anchor"
+      />
+      <i :class="inheritedToggleIcon()" />
+    </button>
+
     <ul class="properties">
       <li
-        v-for="p in inheritedProperties()"
-        :key="`inherited:${p.path?.value ?? p.nodeId.value}`"
-        class="row inherited-row"
-        :class="{ 'is-ref': isObjectRef(p) }"
-      >
-        <Handle
-          v-if="p.path"
-          :id="`p:${p.path.value}`"
-          type="target"
-          :position="Position.Left"
-          class="handle"
-          :class="isObjectRef(p) ? 'handle-ref-target' : 'handle-target'"
-        />
-
-        <template v-if="isObjectRef(p)">
-          <i class="pi pi-link fk-icon" :title="refShapeLabel(p)" />
-          <span class="prop-name">{{ propertyLabel(p) }}</span>
-          <span class="prop-meta">{{ cardinality(p) }}</span>
-          <Handle
-            v-if="p.path"
-            :id="`ref:${p.path.value}`"
-            type="source"
-            :position="Position.Right"
-            class="handle handle-ref-source"
-          />
-        </template>
-
-        <template v-else>
-          <span class="prop-name">{{ propertyLabel(p) }}</span>
-          <span v-if="p.datatype" class="type-badge">{{ localName(p.datatype.value) }}</span>
-          <span class="prop-meta">{{ cardinality(p) }}</span>
-        </template>
-
-        <i class="pi pi-sitemap inheritance-icon" :title="`Inherited from ${inheritedFromLabel(p)}`" />
-      </li>
-    </ul>
-
-    <div v-if="inheritedProperties().length > 0 && ownProperties().length > 0" class="section-label section-separator">Own properties</div>
-    <ul class="properties">
-      <li
-        v-for="p in ownProperties()"
+        v-for="p in primaryProperties()"
         :key="p.path?.value ?? p.nodeId.value"
         class="row"
-        :class="{ 'is-ref': isObjectRef(p) }"
+        :class="{ 'is-ref': isObjectRef(p), 'inherited-row': p.inherited }"
       >
         <Handle
-          v-if="p.path"
+          v-if="p.path && isInteractive()"
           :id="`p:${p.path.value}`"
           type="target"
           :position="Position.Left"
@@ -139,7 +193,7 @@ function inheritedFromLabel(p: PropertyShape): string {
           <span class="prop-name">{{ propertyLabel(p) }}</span>
           <span class="prop-meta">{{ cardinality(p) }}</span>
           <Handle
-            v-if="p.path"
+            v-if="p.path && isInteractive()"
             :id="`ref:${p.path.value}`"
             type="source"
             :position="Position.Right"
@@ -150,7 +204,50 @@ function inheritedFromLabel(p: PropertyShape): string {
         <!-- Regular literal property -->
         <template v-else>
           <span class="prop-name">{{ propertyLabel(p) }}</span>
-          <span v-if="p.datatype" class="type-badge">{{ localName(p.datatype.value) }}</span>
+          <span v-if="datatypeBadgeLabel(p)" class="type-badge">{{ datatypeBadgeLabel(p) }}</span>
+          <span class="prop-meta">{{ cardinality(p) }}</span>
+        </template>
+
+        <i v-if="p.inherited" class="pi pi-sitemap inheritance-icon" :title="`Inherited from ${inheritedFromLabel(p)}`" />
+      </li>
+    </ul>
+
+    <div v-if="inheritedProperties().length > 0 && ownProperties().length > 0" class="section-label">
+      Own Properties
+    </div>
+
+    <ul v-if="ownProperties().length > 0" class="properties">
+      <li
+        v-for="p in ownProperties()"
+        :key="`own:${p.path?.value ?? p.nodeId.value}`"
+        class="row"
+        :class="{ 'is-ref': isObjectRef(p) }"
+      >
+        <Handle
+          v-if="p.path && isInteractive()"
+          :id="`p:${p.path.value}`"
+          type="target"
+          :position="Position.Left"
+          class="handle"
+          :class="isObjectRef(p) ? 'handle-ref-target' : 'handle-target'"
+        />
+
+        <template v-if="isObjectRef(p)">
+          <i class="pi pi-link fk-icon" :title="refShapeLabel(p)" />
+          <span class="prop-name">{{ propertyLabel(p) }}</span>
+          <span class="prop-meta">{{ cardinality(p) }}</span>
+          <Handle
+            v-if="p.path && isInteractive()"
+            :id="`ref:${p.path.value}`"
+            type="source"
+            :position="Position.Right"
+            class="handle handle-ref-source"
+          />
+        </template>
+
+        <template v-else>
+          <span class="prop-name">{{ propertyLabel(p) }}</span>
+          <span v-if="datatypeBadgeLabel(p)" class="type-badge">{{ datatypeBadgeLabel(p) }}</span>
           <span class="prop-meta">{{ cardinality(p) }}</span>
         </template>
       </li>
@@ -181,7 +278,21 @@ header {
   font-weight: 600;
   color: var(--shape-header-color);
 }
+.header-inherited {
+  background: #f3f4f6;
+  color: #4b5563;
+}
 .label { flex: 1; word-break: break-all; }
+.proxy-banner {
+  padding: 6px 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6b7280;
+  background: #f9fafb;
+  border-bottom: 1px solid var(--color-border);
+}
 .preview-btn {
   width: 28px;
   height: 28px;
@@ -205,17 +316,45 @@ header {
 
 .section-label {
   padding: 6px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--color-text-muted);
-  background: var(--color-surface-2);
-  border-bottom: 1px solid var(--color-border);
 }
 
-.section-separator {
-  border-top: 1px solid var(--color-border);
+.section-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+
+  &:hover {
+    background: color-mix(in srgb, var(--color-surface-2) 86%, white);
+  }
+
+  i {
+    flex-shrink: 0;
+  }
+}
+
+.section-anchor {
+  right: 30px !important;
 }
 
 .row {
@@ -235,7 +374,7 @@ header {
 }
 
 .inherited-row {
-  background: var(--shape-inherited-bg);
+  background: #f9fafb;
 }
 
 .fk-icon {
@@ -280,6 +419,14 @@ header {
   width: 10px !important;
   height: 10px !important;
   border: 2px solid var(--color-surface-1) !important;
+}
+.structural-anchor {
+  width: 8px !important;
+  height: 8px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  border: 0 !important;
+  background: transparent !important;
 }
 .handle-target      { background: var(--shape-handle-color) !important; }
 .handle-ref-target  { background: var(--shape-handle-color) !important; }
