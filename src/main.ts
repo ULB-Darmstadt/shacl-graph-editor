@@ -5,11 +5,11 @@ import Aura from '@primevue/themes/aura'
 import ToastService from 'primevue/toastservice'
 import ConfirmationService from 'primevue/confirmationservice'
 
-import App from './App.vue'
-import router from './router'
+import App from '@/app/App.vue'
+import router from '@/app/router'
 
 import 'primeicons/primeicons.css'
-import './styles/global.scss'
+import '@/shared/styles/global.scss'
 
 const app = createApp(App)
 

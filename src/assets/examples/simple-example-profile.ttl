@@ -1,0 +1,213 @@
+@prefix dash: <http://datashapes.org/dash#> .
+@prefix dbo: <http://dbpedia.org/ontology/> .
+@prefix dcat: <http://www.w3.org/ns/dcat#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix geo: <http://www.opengis.net/ont/geosparql#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix schema: <http://schema.org/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix aps: <https://w3id.org/nfdi4ing/profiles/> .
+
+aps:35a308f5-be0c-4ec4-aa37-7427911ca540 dcterms:created "2024-07-30"^^xsd:date ;
+	dcterms:creator "Stephan Tittel" ;
+	dcterms:description "RO-kit Gebäudedatensatz mit Metadatenfeldern für z.B. Geolokationen und Materialien"@de, "RO-kit building dataset with metadata fields for e.g. locations and materials"@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:subject <https://github.com/tibonto/dfgfo/410-01> ;
+	dcterms:title "RO-kit building dataset"@en, "RO-kit Gebäudedatensatz"@de ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports aps:beeb6ea5-92df-417a-8447-9a4b0b187ed7, aps:4a5d4526-34d4-4b00-8f8f-4b13dd48e6d6 ;
+	sh:closed false ;
+	sh:node aps:4a5d4526-34d4-4b00-8f8f-4b13dd48e6d6 ;
+	sh:property [
+		sh:datatype xsd:string ;
+		sh:description "Construction material (eg. concrete, steel, iron, stone, brick, wood)." ;
+		sh:order 1 ;
+		sh:path dbo:constructionMaterial ;
+		sh:name "Construction material" ;
+	], [
+		sh:node aps:beeb6ea5-92df-417a-8447-9a4b0b187ed7 ;
+		sh:description "Location of the building" ;
+		sh:order 2 ;
+		sh:path dcterms:spatial ;
+		sh:name "Location" ;
+	] .
+
+aps:beeb6ea5-92df-417a-8447-9a4b0b187ed7 dcterms:created "2024-07-30"^^xsd:date ;
+	dcterms:creator "Stephan Tittel" ;
+	dcterms:description "RO-kit Geolokation"@de, "RO-kit geolocation"@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "RO-kit Geolokation"@de, "RO-kit geolocation"@en ;
+	a sh:NodeShape ;
+	sh:closed false ;
+	sh:property [
+		sh:datatype geo:wktLiteral ;
+		sh:description "Format WKT, e.g. POINT(8.65 49.87)" ;
+		sh:order 1 ;
+		sh:path geo:asWKT ;
+		sh:name "Coordinates" ;
+		sh:maxCount 1 ;
+		sh:pattern "^POINT\\([+\\-]?(?:[0-9]*[.])?[0-9]+ [+\\-]?(?:[0-9]*[.])?[0-9]+\\)$|^POLYGON\\(\\((?:[+\\-]?(?:[0-9]*[.])?[0-9]+[ ,]?){3,}\\)\\)$" ;
+		sh:minCount 1 ;
+	], [
+		sh:description "Description of the location" ;
+		sh:order 2 ;
+		sh:path dcterms:description ;
+		sh:name "Description" ;
+		sh:maxCount 1 ;
+	] ;
+	rdfs:label "Location" ;
+	sh:targetClass dcterms:Location .
+
+aps:4a5d4526-34d4-4b00-8f8f-4b13dd48e6d6 dcterms:created "2024-07-30"^^xsd:date ;
+	dcterms:creator "Stephan Tittel" ;
+	dcterms:description "RO-kit base dataset with minimal metadata fields"@en, "RO-kit Basisdatensatz mit minimalen Metadatenfeldern"@de ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:subject <https://github.com/tibonto/dfgfo/410-01> ;
+	dcterms:title "RO-kit Datensatz"@de, "RO-kit dataset"@en ;
+	a sh:NodeShape ;
+	owl:imports aps:7ad5af4d-e6c2-4365-b314-a707176aa362 ;
+	sh:closed false ;
+	sh:property [
+		sh:node aps:7ad5af4d-e6c2-4365-b314-a707176aa362 ;
+		sh:description "Involved persons/organisations"@en, "Beteiligte Personen/Organisationen"@de ;
+		sh:order 5 ;
+		sh:path prov:qualifiedAttribution ;
+		sh:name "Attribution" ;
+	], [
+		sh:datatype xsd:date ;
+		sh:description "Datum der Herausgabe des Datensatzes"@de, "Date this dataset has been issued"@en ;
+		sh:order 4 ;
+		sh:path dcterms:issued ;
+		sh:name "Issued" ;
+		sh:maxCount 1 ;
+		sh:minCount 1 ;
+	], [
+		sh:description "Lizenz des Datensatzes"@de, "License of the dataset"@en ;
+		sh:order 3 ;
+		sh:path dcterms:license ;
+		sh:name "License" ;
+		sh:maxCount 1 ;
+		sh:minCount 1 ;
+		sh:nodeKind sh:IRI ;
+		sh:in (
+			<http://creativecommons.org/licenses/by/4.0/>
+			<http://creativecommons.org/licenses/by-nc/4.0/>
+		) ;
+	], [
+		sh:datatype rdf:langString ;
+		sh:description "Beschreibung des Datensatzes"@de, "Description of the dataset"@en ;
+		sh:order 2 ;
+		sh:path dcterms:description ;
+		sh:name "Description" ;
+		sh:maxCount 2 ;
+		sh:minCount 1 ;
+		dash:singleLine false ;
+		sh:languageIn (
+			"en"
+			"de"
+		) ;
+		sh:uniqueLang true ;
+	], [
+		sh:datatype rdf:langString ;
+		sh:description "Name of the dataset"@en, "Name des Datensatzes"@de ;
+		sh:order 1 ;
+		sh:path dcterms:title ;
+		sh:name "Name" ;
+		sh:maxCount 2 ;
+		sh:minCount 1 ;
+		sh:languageIn (
+			"en"
+			"de"
+		) ;
+		sh:uniqueLang true ;
+	] ;
+	sh:targetClass dcat:Dataset .
+
+aps:7ad5af4d-e6c2-4365-b314-a707176aa362 dcterms:created "2024-07-30"^^xsd:date ;
+	dcterms:creator "Stephan Tittel" ;
+	dcterms:description "RO-kit attribution"@en, "RO-kit Attributierung"@de ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "RO-kit attribution"@en, "RO-kit Attributierung"@de ;
+	a sh:NodeShape ;
+	owl:imports aps:cfd46135-71f0-4647-aa65-6d34839fb620, aps:3a566450-14ce-432d-9d10-9e1c83b8477a, <https://w3id.org/nfdi4ing/metadata4ing/> ;
+	sh:closed false ;
+	sh:property [
+		sh:order 1 ;
+		sh:path prov:agent ;
+		sh:maxCount 1 ;
+		sh:minCount 1 ;
+		sh:or (
+			[
+				sh:node aps:cfd46135-71f0-4647-aa65-6d34839fb620 ;
+				rdfs:label "Person" ;
+				sh:class foaf:Person ;
+			]
+			[
+				sh:node aps:3a566450-14ce-432d-9d10-9e1c83b8477a ;
+				rdfs:label "Organisation" ;
+				sh:class foaf:Organisation ;
+			]
+		) ;
+	], [
+		sh:order 2 ;
+		sh:path dcat:hadRole ;
+		sh:name "Role" ;
+		sh:minCount 1 ;
+		sh:class prov:Role ;
+	] ;
+	sh:targetClass prov:Attribution .
+
+aps:cfd46135-71f0-4647-aa65-6d34839fb620 dcterms:created "2024-07-30"^^xsd:date ;
+	dcterms:creator "Stephan Tittel" ;
+	dcterms:description "RO-kit Person"@de, "RO-kit person"@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "RO-kit Person"@de, "RO-kit person"@en ;
+	a sh:NodeShape ;
+	sh:closed false ;
+	sh:property [
+		sh:datatype xsd:string ;
+		sh:order 2 ;
+		sh:path dcterms:identifier ;
+		sh:name "ORCID ID" ;
+		sh:maxCount 1 ;
+		sh:pattern "^https://orcid.org/\\d{4}-\\d{4}-\\d{4}-\\d{4}$" ;
+	], [
+		sh:order 1 ;
+		sh:path foaf:name ;
+		sh:name "Name" ;
+		sh:maxCount 1 ;
+		sh:minCount 1 ;
+	] ;
+	rdfs:label "Person" ;
+	sh:targetClass foaf:Person .
+
+aps:3a566450-14ce-432d-9d10-9e1c83b8477a dcterms:created "2024-07-30"^^xsd:date ;
+	dcterms:creator "Stephan Tittel" ;
+	dcterms:description "RO-kit organisation"@en, "RO-kit Organisation"@de ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "RO-kit organisation"@en, "RO-kit Organisation"@de ;
+	a sh:NodeShape ;
+	sh:closed false ;
+	sh:property [
+		sh:order 2 ;
+		sh:path schema:Address ;
+		sh:name "Address" ;
+	], [
+		sh:order 1 ;
+		sh:path foaf:name ;
+		sh:name "Name" ;
+		sh:maxCount 1 ;
+		sh:minCount 1 ;
+	] ;
+	rdfs:label "Organisation" ;
+	sh:targetClass foaf:Organisation .
+
+<http://creativecommons.org/licenses/by/4.0/> rdfs:label "CC-BY" .
+
+<http://creativecommons.org/licenses/by-nc/4.0/> rdfs:label "CC-BY-NC" .
+

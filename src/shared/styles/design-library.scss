@@ -1,0 +1,94 @@
+:root {
+  --ui-font-size-caption: 0.75rem;
+  --ui-font-size-label: 0.85rem;
+  --ui-font-size-body: 0.9rem;
+  --ui-font-size-title: 1.125rem;
+  --ui-font-size-tab: 0.9rem;
+}
+
+.ui-sidepanel-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-1);
+  box-shadow: var(--shadow-sm);
+}
+
+.ui-sidepanel-kicker {
+  color: var(--color-primary);
+  font-size: var(--ui-font-size-caption);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ui-sidepanel-title {
+  font-family: var(--font-heading);
+  font-size: var(--ui-font-size-title);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.ui-sidepanel-meta {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--ui-font-size-caption);
+  line-height: 1.4;
+}
+
+.ui-sidepanel-tab {
+  font-family: var(--font-sans);
+  font-size: var(--ui-font-size-tab);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ui-sidepanel-section-title {
+  font-family: var(--font-sans);
+  font-size: var(--ui-font-size-body);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.ui-sidepanel-field-label {
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--ui-font-size-label);
+  line-height: 1.35;
+}
+
+.ui-sidepanel-field-input {
+  font-family: var(--font-sans);
+  font-size: var(--ui-font-size-body);
+  line-height: 1.45;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, var(--color-surface) 0%, var(--color-surface-1) 100%);
+  box-shadow: var(--shadow-sm), inset 0 -2px 0 var(--color-border-soft);
+}
+
+.ui-sidepanel-field-input.is-link .ui-sidepanel-field-value {
+  color: var(--color-text-muted);
+  text-decoration: underline;
+}
+
+.ui-sidepanel-field-input.is-placeholder .ui-sidepanel-field-value {
+  color: var(--color-text-muted);
+}
+
+.ui-sidepanel-field-suffix,
+.ui-sidepanel-field-icon,
+.ui-sidepanel-field-info {
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-size-label);
+}
+
+.ui-sidepanel-choice {
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--ui-font-size-body);
+  line-height: 1.35;
+}
+
+.ui-sidepanel-choice.active {
+  color: var(--color-text);
+}

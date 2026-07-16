@@ -1,44 +1,35 @@
-# SHACL Editor
+# SHACL Graph Editor
 
-SHACL Editor is a browser-based node editor for loading, resolving and
-inspecting SHACL profiles. The application is focused on profile
-representation: Turtle files and profiles from the Metadata Profile Service are
-loaded into a graph-oriented canvas where NodeShapes and their relationships
-can be explored visually.
+SHACL Graph Editor is a browser-based editor for the workflow:
 
-The current app scope is intentionally narrow. It no longer manages tabular
-source data, mapping pipelines, SHACL validation, review dashboards or publish
-workflows.
+1. import SHACL profiles
+2. inspect and edit shapes on a graph canvas
+3. export SHACL again
 
-## What You Can Do
+The application focuses on a clean separation between domain model, SHACL import,
+editor behavior, and SHACL export.
 
-- Load SHACL profiles from Turtle files.
-- Load SHACL profiles from the Metadata Profile Service.
-- Resolve `owl:imports` recursively with local cache support.
-- Inspect NodeShapes and references in the node editor canvas.
-- Open a SHACL-form-based preview for loaded shapes.
-- Save and reload lightweight project snapshots containing the loaded profiles.
+## Features
 
-## Main Workflow
+- Import SHACL from local Turtle files
+- Load profiles from the Metadata Profile Service
+- Resolve `owl:imports`
+- Visualize linked `sh:node` relations on a canvas
+- Edit profiles and fields in the sidebar
+- Preview shapes with `@ulb-darmstadt/shacl-form`
+- Export the current editor state as SHACL/Turtle
 
-1. Open the editor view.
-2. Load one or more Turtle files or choose a profile from the Metadata Profile Service.
-3. Inspect the resulting shape graph in the canvas.
-4. Open shape previews to inspect individual nodes in more detail.
-5. Save the current profile set as a project snapshot when needed.
+## Tech Stack
 
-## Technology
-
-- Vue 3 and TypeScript
+- Vue 3
+- TypeScript
 - Vite
 - Pinia
 - Vue Router
 - PrimeVue
-- Vue Flow and Dagre
+- Vue Flow
+- Dagre
 - rdflib
-- `@ulb-darmstadt/shacl-form`
-- localForage
-- Vitest
 
 ## Development
 
@@ -49,56 +40,54 @@ npm install
 npm run dev
 npm run type-check
 npm run lint
-npm run test
 npm run build
 ```
 
-The local dev server is served by Vite, usually at:
+Local development usually runs at:
 
 ```text
 http://localhost:5173/
 ```
 
-## Repository Layout
+## Repository Structure
 
 ```text
 src/
-  assets/profiles/      bundled SHACL profiles
-  components/           app-wide shell and shared UI
-  domain/               SHACL domain parsing and model types
-  features/mapping/     node editor canvas and profile loading dialogs
-  features/shacl/       SHACL form viewer integration
-  router/               route definitions
-  services/infrastructure/
-                        profile import and caching adapters
-  services/project/     lightweight project snapshot handling
-  stores/               active project and shape stores
-  styles/               global SCSS and design tokens
-  views/                route-level editor view
+  app/                  app shell and router wiring
+  application/          editor state and application services
+  assets/               bundled example and showcase profiles
+  domain/profiles/      profile, shape, and field domain model
+  infrastructure/       SHACL parsing, serialization, external profile access
+  presentation/         editor UI, dialogs, canvas, inspector, preview
+  shared/               shared RDF helpers and global styles
+public/
+  dfgfo.ttl             subject heading source
+  shacl-logo.png        app branding
 ```
+
+## Architecture
+
+- `domain/profiles` contains the clean editor data model.
+- `infrastructure/shacl` contains SHACL import and export logic.
+- `application/profiles` coordinates editor mutations and workflows.
+- `presentation/features/editor` contains the graph editor UI.
+
+This keeps the intended workflow explicit in the repository:
+import SHACL -> edit in the graph editor -> export SHACL.
 
 ## Deployment
 
-The app is a static hash-routed SPA and can be deployed to GitHub Pages. The
-production base path is derived in `vite.config.ts` from the repository name
-when the GitHub Actions workflow runs, so the source code does not hardcode a
-Pages path.
+The app is a static SPA and can be deployed to GitHub Pages.
 
-The deployment workflow:
+The included GitHub Actions workflow:
 
 - installs dependencies with `npm ci`
 - runs type checking
-- builds the Vite app
-- uploads `dist/`
-- deploys through GitHub Pages
+- builds the app
+- publishes `dist/` to GitHub Pages
 
-For GitHub Pages, set the repository Pages source to **GitHub Actions**.
-
-## Project Status
-
-The project is under active development as a dedicated SHACL profile editor.
-Current work is centered on import resolution, canvas representation and shape
-inspection rather than end-to-end dataset production.
+In production, the Vite base path is derived from the GitHub repository name,
+so the same build can be deployed under the target repository path.
 
 ## License
 
