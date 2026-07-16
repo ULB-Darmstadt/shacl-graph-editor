@@ -6,7 +6,7 @@ SHACL Graph Editor is a browser-based editor for the workflow:
 2. inspect and edit shapes on a graph canvas
 3. export SHACL again
 
-## (DEMO)[https://ulb-darmstadt.github.io/shacl-graph-editor/#/editor]
+## [OPEN DEMO](https://ulb-darmstadt.github.io/shacl-graph-editor/#/editor)
 
 ## Features
 
