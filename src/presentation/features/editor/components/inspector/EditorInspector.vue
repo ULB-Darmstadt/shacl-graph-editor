@@ -20,6 +20,7 @@ import {
   type ShaclProfile,
 } from '@/domain/profiles'
 import type { PropertyEditorType } from '@/application/profiles/profileEditorStore'
+import InspectorAutocompleteField from '@/presentation/features/editor/components/inspector/InspectorAutocompleteField.vue'
 import InspectorEditableField from '@/presentation/features/editor/components/inspector/InspectorEditableField.vue'
 import InspectorReadOnlyField from '@/presentation/features/editor/components/inspector/InspectorReadOnlyField.vue'
 import InspectorConstraintRangeField from '@/presentation/features/editor/components/inspector/InspectorConstraintRangeField.vue'
@@ -76,7 +77,6 @@ const props = defineProps<{
 const confirm = useConfirm()
 const activeTab = ref<InspectorTab>('basic')
 const subjectHeadingOptions = ref<SelectOption[]>([])
-const CUSTOM_IRI_OPTION_VALUE = '__custom__'
 
 const isPropertyInspector = computed(() => props.shape !== null && props.property !== null)
 const inspectorTitle = computed(() => {
@@ -91,15 +91,6 @@ const propertyRelations = computed(() => props.property ? propertyRelationshipKi
 const propertyConstraintText = computed(() => props.property ? propertyConstraintSummary(props.property) ?? null : null)
 const propertyAllowedValuesText = computed(() => props.property?.allowedValues?.join('\n') ?? null)
 const propertyTypeValue = computed<PropertyEditorType>(() => props.property?.editorType ?? 'datatype')
-const propertyTermOptions = computed(() => [
-  ...PROPERTY_TERM_OPTIONS,
-  { label: 'Custom IRI', value: CUSTOM_IRI_OPTION_VALUE },
-])
-const selectedSuggestedTerm = computed(() => {
-  const path = props.property?.path?.value?.trim()
-  if (!path) return ''
-  return PROPERTY_TERM_OPTIONS.some(option => option.value === path) ? path : CUSTOM_IRI_OPTION_VALUE
-})
 const inheritanceOptions = computed(() =>
   props.allShapes
     .filter(shape => shape.nodeId.value !== props.shape?.nodeId.value)
@@ -177,11 +168,6 @@ function onNodeTargetChange(value: string): void {
 function onPropertyTypeChange(value: string): void {
   if (!props.shape || !props.property) return
   props.setPropertyType(props.shape.nodeId.value, props.property.nodeId.value, value as PropertyEditorType)
-}
-
-function onSuggestedTermChange(value: string): void {
-  if (value === CUSTOM_IRI_OPTION_VALUE) return
-  updateProperty('path', value)
 }
 
 function onPropertyMinModeChange(mode: 'inclusive' | 'exclusive'): void {
@@ -291,20 +277,13 @@ function requestDeleteProperty(): void {
           <section class="inspector-section">
             <h3 class="inspector-section-title ui-sidepanel-section-title">Basic Information</h3>
 
-            <InspectorEditableField
-              label="Suggested Terms"
-              :value="selectedSuggestedTerm"
-              placeholder=""
-              :options="propertyTermOptions"
-              helper-text="Choose a schema.org suggestion or set your own Term IRI below."
-              @update:value="onSuggestedTermChange"
-            />
-            <InspectorEditableField
+            <InspectorAutocompleteField
               label="Term IRI"
               :value="property.path?.value ?? null"
+              :options="PROPERTY_TERM_OPTIONS"
               placeholder="https://..."
               :invalid="missingPropertyTerm"
-              :helper-text="missingPropertyTerm ? 'A Term IRI is required for this field.' : 'Custom IRIs are supported.'"
+              :helper-text="missingPropertyTerm ? 'A Term IRI is required for this field.' : 'Type your own IRI or choose a suggested term while typing.'"
               @update:value="updateProperty('path', $event)"
             />
             <InspectorEditableField
