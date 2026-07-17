@@ -20,7 +20,10 @@ export const PROFILE_LICENSE_OPTIONS: SelectOption[] = [
 export const PROPERTY_TYPE_OPTIONS: SelectOption[] = [
   { label: 'Datatype', value: 'datatype' },
   { label: 'Node Kind', value: 'nodeKind' },
+  { label: 'Class', value: 'class' },
   { label: 'Satisfies Profile', value: 'profile' },
+  { label: 'Satisfies Profile (m-n times)', value: 'qualifiedProfile' },
+  { label: 'Satisfies One Of Profiles', value: 'oneOfProfiles' },
   { label: 'List', value: 'list' },
 ]
 

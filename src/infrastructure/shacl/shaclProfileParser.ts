@@ -18,7 +18,7 @@ import {
   SH_PROPERTY,
   SH_TARGET_CLASS,
 } from '@/shared/rdf/rdfConstants'
-import { applyConstraintPredicate, localName } from '@/shared/rdf/propertyConstraints'
+import { applyConstraintPredicate, inferPropertyEditorType, localName } from '@/shared/rdf/propertyConstraints'
 import type { NodeShape, PropertyShape, ShaclProfile } from '@/domain/profiles'
 
 const DEFAULT_BASE_URI = 'http://example.org/'
@@ -28,9 +28,10 @@ export function parseShaclProfile(
   source: string,
   origin: ShaclProfile['origin'],
   iriHint?: string,
+  mediaType?: string,
 ): ShaclProfile {
   const store: Store = graph()
-  parse(rawTurtle, store, DEFAULT_BASE_URI, 'text/turtle')
+  parse(rawTurtle, store, DEFAULT_BASE_URI, normalizeRdfMediaType(mediaType, rawTurtle))
 
   const nodeShapeSubjects = new Set<string>()
   store.match(null, null, SH_NODE_SHAPE, null).forEach(statement => {
@@ -64,22 +65,47 @@ export function parseShaclProfile(
   }
 }
 
+function normalizeRdfMediaType(mediaType: string | undefined, content: string): string {
+  const normalized = mediaType?.split(';', 1)[0]?.trim().toLowerCase()
+  if (normalized === 'application/rdf+xml' || normalized === 'application/xml' || normalized === 'text/xml') {
+    return 'application/rdf+xml'
+  }
+  if (normalized === 'application/ld+json' || normalized === 'application/json') {
+    return 'application/ld+json'
+  }
+  if (normalized === 'text/n3' || normalized === 'application/n-triples' || normalized === 'text/turtle') {
+    return 'text/turtle'
+  }
+
+  const trimmed = content.trimStart()
+  if (trimmed.startsWith('<?xml') || trimmed.startsWith('<rdf:RDF') || trimmed.startsWith('<!DOCTYPE')) {
+    return 'application/rdf+xml'
+  }
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    return 'application/ld+json'
+  }
+  return 'text/turtle'
+}
+
 function extractNodeShape(nodeId: NamedNode, store: Store): NodeShape {
   const shape: NodeShape = { nodeId, properties: [], inheritedShapeIris: [] }
+  const preferredLabel = createPreferredLiteralTracker()
+  const preferredRdfsLabel = createPreferredLiteralTracker()
+  const preferredDescription = createPreferredLiteralTracker()
 
   store.match(nodeId, null, null, null).forEach(statement => {
     const predicate = statement.predicate.value
     const object = statement.object as Literal | NamedNode | BlankNode
 
     if (predicate === DCT_TITLE.value) {
-      if (object.termType === 'Literal' && !shape.label) shape.label = object.value
+      if (object.termType === 'Literal') preferredLabel.consider(object)
     } else if (predicate === RDFS_LABEL.value) {
       if (object.termType === 'Literal') {
-        if (!shape.rdfsLabel) shape.rdfsLabel = object.value
-        if (!shape.label) shape.label = object.value
+        preferredRdfsLabel.consider(object)
+        preferredLabel.consider(object)
       }
     } else if (predicate === DCT_DESCRIPTION.value) {
-      if (object.termType === 'Literal') shape.description = object.value
+      if (object.termType === 'Literal') preferredDescription.consider(object)
     } else if (predicate === DCT_CREATOR.value) {
       if (object.termType === 'Literal') shape.creator = object.value
       else if (object.termType === 'NamedNode') shape.creator = localName(object.value)
@@ -102,27 +128,62 @@ function extractNodeShape(nodeId: NamedNode, store: Store): NodeShape {
     }
   })
 
+  shape.label = preferredLabel.value
+  shape.rdfsLabel = preferredRdfsLabel.value
+  shape.description = preferredDescription.value
   shape.properties.sort((left, right) => (left.order ?? 999) - (right.order ?? 999))
   return shape
 }
 
 function extractPropertyShape(nodeId: NamedNode | BlankNode, store: Store): PropertyShape {
   const propertyShape: PropertyShape = { nodeId }
+  const preferredName = createPreferredLiteralTracker()
+  const preferredDescription = createPreferredLiteralTracker()
 
   store.match(nodeId, null, null, null).forEach(statement => {
     const predicate = statement.predicate.value
     const object = statement.object as Literal | NamedNode | BlankNode
-    if (predicate === SH_NAME.value && object.termType === 'Literal') propertyShape.name = object.value
-    else if (predicate === SH_DESCRIPTION.value && object.termType === 'Literal') propertyShape.description = object.value
+    if (predicate === SH_NAME.value && object.termType === 'Literal') preferredName.consider(object)
+    else if (predicate === SH_DESCRIPTION.value && object.termType === 'Literal') preferredDescription.consider(object)
     else if (predicate === SH_PATH.value && object.termType === 'NamedNode') propertyShape.path = object
     else if (predicate === SH_ORDER.value && object.termType === 'Literal') propertyShape.order = Number(object.value)
     else applyConstraintPredicate(propertyShape, predicate, object, store)
   })
 
-  if (propertyShape.node) propertyShape.editorType = 'profile'
-  else if (propertyShape.allowedValues !== undefined) propertyShape.editorType = 'list'
-  else if (propertyShape.nodeKind) propertyShape.editorType = 'nodeKind'
-  else propertyShape.editorType = 'datatype'
+  propertyShape.name = preferredName.value
+  propertyShape.description = preferredDescription.value
+  propertyShape.editorType = inferPropertyEditorType(propertyShape)
 
   return propertyShape
+}
+
+function createPreferredLiteralTracker(): {
+  value: string | undefined
+  consider: (literal: Literal) => void
+} {
+  let bestScore = -1
+  let bestValue: string | undefined
+
+  return {
+    get value() {
+      return bestValue
+    },
+    consider(literal: Literal) {
+      const score = languagePreferenceScore(literal)
+      if (score > bestScore) {
+        bestScore = score
+        bestValue = literal.value
+      }
+    },
+  }
+}
+
+function languagePreferenceScore(literal: Literal): number {
+  const language = literal.lang?.toLowerCase() ?? ''
+  if (language === 'en') return 3
+  if (language.startsWith('en-')) return 3
+  if (language === 'de') return 2
+  if (language.startsWith('de-')) return 2
+  if (!language) return 1
+  return 0
 }

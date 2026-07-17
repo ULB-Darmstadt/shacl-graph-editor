@@ -101,11 +101,15 @@ function serializePropertyShape(property: PropertyShape): string {
   pushLiteralStatement(statements, 'sh:description', property.description)
   pushNamedNodeStatement(statements, 'sh:datatype', property.datatype?.value)
   pushNamedNodeStatement(statements, 'sh:node', property.node?.value)
+  pushNamedNodeStatement(statements, 'sh:qualifiedValueShape', property.qualifiedValueShape?.node?.value)
   pushNamedNodeStatement(statements, 'sh:nodeKind', property.nodeKind?.value)
   pushNamedNodeStatement(statements, 'sh:class', property.cls?.value)
   pushStringListStatement(statements, 'sh:in', property.allowedValues)
+  pushConstraintListStatement(statements, 'sh:or', property.alternatives)
   pushNumericStatement(statements, 'sh:minCount', property.minCount)
   pushNumericStatement(statements, 'sh:maxCount', property.maxCount)
+  pushNumericStatement(statements, 'sh:qualifiedMinCount', property.qualifiedMinCount)
+  pushNumericStatement(statements, 'sh:qualifiedMaxCount', property.qualifiedMaxCount)
   pushLiteralStatement(statements, 'sh:pattern', property.pattern)
   pushNumericStatement(statements, 'sh:order', property.order)
   pushLiteralStatement(statements, 'sh:message', property.message)
@@ -134,6 +138,16 @@ function determineProfileImports(profile: ShaclProfile, shapeToProfile: Map<stri
     for (const property of shape.properties.filter(property => !property.inherited)) {
       const owner = property.node?.value ? shapeToProfile.get(property.node.value) : undefined
       if (owner && owner !== profile.iri) imports.add(owner)
+
+      const qualifiedOwner = property.qualifiedValueShape?.node?.value
+        ? shapeToProfile.get(property.qualifiedValueShape.node.value)
+        : undefined
+      if (qualifiedOwner && qualifiedOwner !== profile.iri) imports.add(qualifiedOwner)
+
+      for (const alternative of property.alternatives ?? []) {
+        const alternativeOwner = alternative.node?.value ? shapeToProfile.get(alternative.node.value) : undefined
+        if (alternativeOwner && alternativeOwner !== profile.iri) imports.add(alternativeOwner)
+      }
     }
   }
 
@@ -180,6 +194,49 @@ function pushStringListStatement(statements: string[], predicate: string, values
     .map(value => isLikelyIri(value) ? term(value) : `"${escapeLiteral(value)}"`)
   if (serialized.length === 0) return
   statements.push(`${predicate} ( ${serialized.join(' ')} )`)
+}
+
+function pushConstraintListStatement(
+  statements: string[],
+  predicate: string,
+  constraints: Array<{
+    node?: { value: string }
+    datatype?: { value: string }
+    nodeKind?: { value: string }
+    cls?: { value: string }
+    label?: string
+    description?: string
+    pattern?: string
+  }> | undefined,
+): void {
+  if (!constraints?.length) return
+  const serialized = constraints
+    .map(serializeConstraintNode)
+    .filter(Boolean)
+  if (serialized.length === 0) return
+  statements.push(`${predicate} (\n    ${serialized.join('\n    ')}\n  )`)
+}
+
+function serializeConstraintNode(constraint: {
+  node?: { value: string }
+  datatype?: { value: string }
+  nodeKind?: { value: string }
+  cls?: { value: string }
+  label?: string
+  description?: string
+  pattern?: string
+}): string {
+  const fragments: string[] = []
+  pushNamedNodeStatement(fragments, 'sh:node', constraint.node?.value)
+  pushNamedNodeStatement(fragments, 'sh:datatype', constraint.datatype?.value)
+  pushNamedNodeStatement(fragments, 'sh:nodeKind', constraint.nodeKind?.value)
+  pushNamedNodeStatement(fragments, 'sh:class', constraint.cls?.value)
+  pushLiteralStatement(fragments, 'rdfs:label', constraint.label)
+  pushLiteralStatement(fragments, 'sh:description', constraint.description)
+  pushLiteralStatement(fragments, 'sh:pattern', constraint.pattern)
+  if (fragments.length === 0) return ''
+  if (fragments.length === 1) return `[ ${fragments[0]} ; ]`.replace(' ; ]', ' ]')
+  return `[ ${fragments[0]} ; ${fragments.slice(1).join(' ; ')} ]`
 }
 
 function term(iri: string): string {

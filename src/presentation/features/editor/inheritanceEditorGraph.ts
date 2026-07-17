@@ -1,4 +1,5 @@
 import type { NodeShape, PropertyShape } from '@/domain/profiles'
+import { propertyNodeTargets } from '@/domain/profiles'
 
 export interface ShapeEditorNodeData {
   shape: NodeShape
@@ -32,26 +33,81 @@ interface VisibleShapeNodeDescriptor {
   representedShapeIri: string
 }
 
+export function collectReachableShapeIris(rootShapes: NodeShape[], allShapes: NodeShape[]): string[] {
+  const allShapesByIri = new Map(allShapes.map(shape => [shape.nodeId.value, shape]))
+  const queue = rootShapes.map(shape => shape.nodeId.value)
+  const visited = new Set<string>()
+  const ordered: string[] = []
+
+  while (queue.length > 0) {
+    const shapeIri = queue.shift()
+    if (!shapeIri || visited.has(shapeIri)) continue
+
+    visited.add(shapeIri)
+    ordered.push(shapeIri)
+
+    const shape = allShapesByIri.get(shapeIri)
+    if (!shape) continue
+
+    for (const property of shape.properties) {
+      for (const target of propertyNodeTargets(property)) {
+        if (visited.has(target.value)) continue
+        if (!allShapesByIri.has(target.value)) continue
+        queue.push(target.value)
+      }
+    }
+  }
+
+  return ordered
+}
+
 export function buildEditorShapeNodeId(shapeIri: string): string {
   return `shape:${shapeIri}`
 }
 
-export function parseEditorShapeNodeTarget(nodeId: string): { representedShapeIri: string } | null {
-  if (!nodeId.startsWith('shape:')) return null
-  return { representedShapeIri: nodeId.slice('shape:'.length) }
+export function buildEditorQualifiedProxyNodeId(shapeIri: string): string {
+  return `shape-proxy:${shapeIri}`
+}
+
+export function parseEditorShapeNodeTarget(nodeId: string): { representedShapeIri: string; proxy: boolean } | null {
+  if (nodeId.startsWith('shape-proxy:')) {
+    return { representedShapeIri: nodeId.slice('shape-proxy:'.length), proxy: true }
+  }
+  if (nodeId.startsWith('shape:')) {
+    return { representedShapeIri: nodeId.slice('shape:'.length), proxy: false }
+  }
+  return null
 }
 
 export function collectVisibleShapeNodeDescriptors(
   rootShapes: NodeShape[],
-  _allShapes: NodeShape[],
+  allShapes: NodeShape[],
   _expandedShapeNodeIds: Set<string>,
 ): VisibleShapeNodeDescriptor[] {
-  return rootShapes.map(shape => ({
+  const reachableShapeIris = collectReachableShapeIris(rootShapes, allShapes)
+  const rootShapeIris = new Set(rootShapes.map(shape => shape.nodeId.value))
+  const allShapesByIri = new Map(allShapes.map(shape => [shape.nodeId.value, shape]))
+
+  const descriptors = rootShapes.map(shape => ({
     nodeId: buildEditorShapeNodeId(shape.nodeId.value),
     shape,
     ownerShapeIri: shape.nodeId.value,
     representedShapeIri: shape.nodeId.value,
   }))
+
+  for (const targetIri of reachableShapeIris) {
+    if (rootShapeIris.has(targetIri)) continue
+    const targetShape = allShapesByIri.get(targetIri)
+    if (!targetShape) continue
+    descriptors.push({
+      nodeId: buildEditorQualifiedProxyNodeId(targetIri),
+      shape: targetShape,
+      ownerShapeIri: targetShape.nodeId.value,
+      representedShapeIri: targetShape.nodeId.value,
+    })
+  }
+
+  return descriptors
 }
 
 export function inheritedOriginShapesForRoot(shape: NodeShape, allShapes: NodeShape[]): NodeShape[] {

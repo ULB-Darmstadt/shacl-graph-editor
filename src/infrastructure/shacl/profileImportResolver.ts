@@ -15,7 +15,10 @@ const legacyCache = localforage.createInstance({
 interface CachedProfile {
   ttl: string
   fetchedAt: string
+  mediaType?: string
 }
+
+const RDF_PROXY_URL = 'https://rdf.nfdi4ing.de/kge/api/v1/rdfproxy?url='
 
 export interface ResolveResult {
   errors: Array<{ iri: string; error: string }>
@@ -23,9 +26,10 @@ export interface ResolveResult {
 
 export async function resolveProfileImportsRecursive(applicationProfile: ApplicationProfile): Promise<ResolveResult> {
   const errors: Array<{ iri: string; error: string }> = []
+  const failedImports = new Set<string>()
 
   while (true) {
-    const missingImports = collectMissingImports(applicationProfile)
+    const missingImports = collectMissingImports(applicationProfile, failedImports)
     if (missingImports.length === 0) return { errors }
 
     const fetchedProfiles = await Promise.allSettled(missingImports.map(iri => fetchProfile(iri)))
@@ -37,6 +41,7 @@ export async function resolveProfileImportsRecursive(applicationProfile: Applica
         applicationProfile.upsert(result.value)
         addedCount += 1
       } else {
+        failedImports.add(iri)
         errors.push({
           iri,
           error: result.reason instanceof Error ? result.reason.message : String(result.reason),
@@ -48,12 +53,12 @@ export async function resolveProfileImportsRecursive(applicationProfile: Applica
   }
 }
 
-function collectMissingImports(applicationProfile: ApplicationProfile): string[] {
+function collectMissingImports(applicationProfile: ApplicationProfile, failedImports: Set<string>): string[] {
   const missing = new Set<string>()
 
   for (const profile of applicationProfile.list()) {
     for (const importIri of profile.imports) {
-      if (!applicationProfile.profiles.has(importIri)) {
+      if (!applicationProfile.profiles.has(importIri) && !failedImports.has(importIri)) {
         missing.add(importIri)
       }
     }
@@ -65,26 +70,69 @@ function collectMissingImports(applicationProfile: ApplicationProfile): string[]
 async function fetchProfile(iri: string): Promise<ShaclProfile> {
   const cached = await cache.getItem<CachedProfile>(iri)
   if (cached?.ttl) {
-    return parseShaclProfile(cached.ttl, iri, 'fetched', iri)
+    return parseShaclProfile(cached.ttl, iri, 'fetched', iri, cached.mediaType)
   }
 
   const legacyCached = await legacyCache.getItem<CachedProfile>(iri)
   if (legacyCached?.ttl) {
     await cache.setItem<CachedProfile>(iri, legacyCached)
-    return parseShaclProfile(legacyCached.ttl, iri, 'fetched', iri)
+    return parseShaclProfile(legacyCached.ttl, iri, 'fetched', iri, legacyCached.mediaType)
   }
 
-  const response = await fetch(iri, {
-    headers: {
-      accept: 'text/turtle, text/plain;q=0.9, */*;q=0.1',
-    },
+  const fetched = await fetchProfileTextWithFallbacks(iri)
+  await cache.setItem<CachedProfile>(iri, {
+    ttl: fetched.text,
+    fetchedAt: new Date().toISOString(),
+    mediaType: fetched.mediaType,
   })
+  return parseShaclProfile(fetched.text, iri, 'fetched', iri, fetched.mediaType)
+}
 
-  if (!response.ok) {
-    throw new Error(`Import download failed: ${response.status}`)
+async function fetchProfileTextWithFallbacks(iri: string): Promise<{ text: string; mediaType?: string }> {
+  let lastError: unknown
+
+  for (const candidate of buildFetchCandidates(iri)) {
+    try {
+      const response = await fetch(buildProxyUrl(candidate), {
+        headers: {
+          accept: 'text/turtle, application/ld+json, application/rdf+xml, text/plain;q=0.9, */*;q=0.1',
+        },
+      })
+
+      if (!response.ok) {
+        lastError = new Error(`Import download failed: ${response.status}`)
+        continue
+      }
+
+      return {
+        text: await response.text(),
+        mediaType: response.headers.get('content-type') ?? undefined,
+      }
+    } catch (error) {
+      lastError = error
+    }
   }
 
-  const ttl = await response.text()
-  await cache.setItem<CachedProfile>(iri, { ttl, fetchedAt: new Date().toISOString() })
-  return parseShaclProfile(ttl, iri, 'fetched', iri)
+  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? 'Import download failed'))
+}
+
+function buildFetchCandidates(iri: string): string[] {
+  const candidates = new Set<string>()
+  const queue = [iri]
+
+  if (iri.startsWith('http://')) {
+    queue.unshift(`https://${iri.slice('http://'.length)}`)
+  }
+
+  for (const candidate of queue) {
+    candidates.add(candidate)
+    if (candidate.endsWith('/')) candidates.add(candidate.slice(0, -1))
+    else candidates.add(`${candidate}/`)
+  }
+
+  return [...candidates]
+}
+
+function buildProxyUrl(targetUrl: string): string {
+  return `${RDF_PROXY_URL}${encodeURIComponent(targetUrl)}`
 }

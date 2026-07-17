@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { NamedNode } from 'rdflib'
 import { computed, shallowRef, ref } from 'vue'
-import { ApplicationProfile, classifyShape, type NodeShape, type PropertyShape, type ShaclProfile } from '@/domain/profiles'
+import { ApplicationProfile, classifyShape, propertyNodeTargets, type NodeShape, type PropertyShape, type ShaclProfile } from '@/domain/profiles'
 import {
   importProfileFromTurtle,
   importUploadedProfileFile,
@@ -30,15 +30,34 @@ export const useProfileEditorStore = defineStore('profiles', () => {
 
   const rootNodeShapes = computed<NodeShape[]>(() => {
     const hiddenImportedShapeIds = applicationProfile.value.inheritedImportedNodeShapeIds()
+    const explicitlyReferencedShapeIds = new Set<string>()
+    const classReferencedShapeIds = new Set<string>()
+
+    for (const nodeShape of nodeShapes.value) {
+      for (const property of nodeShape.properties) {
+        for (const target of propertyNodeTargets(property)) explicitlyReferencedShapeIds.add(target.value)
+        if (property.cls?.value) {
+          for (const candidate of nodeShapes.value) {
+            if (candidate.targetClass?.value === property.cls.value) {
+              classReferencedShapeIds.add(candidate.nodeId.value)
+            }
+          }
+        }
+      }
+    }
 
     const candidates = nodeShapes.value.filter(nodeShape => {
-      if (hiddenImportedShapeIds.has(nodeShape.nodeId.value)) return false
-
       const isDirectlyLoadedRoot = profiles.value.some(profile =>
         profile.iri === nodeShape.sourceProfileIri && profile.source !== profile.iri,
       )
-      const kind = classifyShape(nodeShape)
-      return isDirectlyLoadedRoot || kind === 'data' || kind === 'reference'
+      const isExplicitlyReferenced = explicitlyReferencedShapeIds.has(nodeShape.nodeId.value)
+      if (isExplicitlyReferenced) {
+        return isDirectlyLoadedRoot && classifyShape(nodeShape) === 'form'
+      }
+      if (hiddenImportedShapeIds.has(nodeShape.nodeId.value)) return false
+      if (!isDirectlyLoadedRoot) return false
+      if (classifyShape(nodeShape) === 'form') return true
+      return !classReferencedShapeIds.has(nodeShape.nodeId.value)
     })
 
     const inheritedByOtherCandidateIds = new Set(
@@ -218,6 +237,15 @@ export const useProfileEditorStore = defineStore('profiles', () => {
           ? normalized.split(/\r?\n|,/).map(entry => entry.trim()).filter(Boolean)
           : []
         break
+      case 'alternativeTargets':
+        property.alternatives = normalized
+          ? normalized
+            .split(/\r?\n|,/)
+            .map(entry => entry.trim())
+            .filter(Boolean)
+            .map(value => ({ node: new NamedNode(value) }))
+          : []
+        break
       default:
         property[field] = normalized as never
         break
@@ -241,19 +269,55 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     const target = targetShapeIri?.trim()
 
     if (target) {
-      property.node = new NamedNode(target)
+      if (property.editorType === 'qualifiedProfile') {
+        property.qualifiedValueShape = { node: new NamedNode(target) }
+        property.node = undefined
+      } else if (property.editorType === 'oneOfProfiles') {
+        property.alternatives = [{ node: new NamedNode(target) }]
+        property.node = undefined
+      } else {
+        property.node = new NamedNode(target)
+        property.qualifiedValueShape = undefined
+        property.qualifiedMinCount = undefined
+        property.qualifiedMaxCount = undefined
+        property.editorType = 'profile'
+      }
       property.datatype = undefined
       property.nodeKind = undefined
       property.cls = undefined
       property.allowedValues = undefined
-      property.editorType = 'profile'
     } else {
       property.node = undefined
-      if (property.editorType === 'profile') {
+      property.alternatives = undefined
+      property.qualifiedValueShape = undefined
+      property.qualifiedMinCount = undefined
+      property.qualifiedMaxCount = undefined
+      if (property.editorType === 'profile' || property.editorType === 'qualifiedProfile' || property.editorType === 'oneOfProfiles') {
         property.datatype = new NamedNode('http://www.w3.org/2001/XMLSchema#string')
         property.editorType = 'datatype'
       }
     }
+    syncSerializedProfiles()
+  }
+
+  function setPropertyAlternativeTargets(shapeIri: string, propertyNodeId: string, targetShapeIris: string[]): void {
+    const context = findEditablePropertyContext(shapeIri, propertyNodeId)
+    if (!context) return
+
+    const normalizedTargets = targetShapeIris.map(value => value.trim())
+
+    context.property.alternatives = normalizedTargets.map(value =>
+      value ? { node: new NamedNode(value) } : {},
+    )
+    context.property.node = undefined
+    context.property.datatype = undefined
+    context.property.nodeKind = undefined
+    context.property.cls = undefined
+    context.property.allowedValues = undefined
+    context.property.qualifiedValueShape = undefined
+    context.property.qualifiedMinCount = undefined
+    context.property.qualifiedMaxCount = undefined
+    context.property.editorType = 'oneOfProfiles'
     syncSerializedProfiles()
   }
 
@@ -265,6 +329,13 @@ export const useProfileEditorStore = defineStore('profiles', () => {
 
     const property = context.shape.properties.find(candidate => candidate.nodeId.value === propertyNodeId)
     if (!property) return
+    if (property.editorType === 'oneOfProfiles' && targetShapeIri?.trim()) {
+      const existing = property.alternatives?.map(alternative => alternative.node?.value).filter((value): value is string => Boolean(value)) ?? []
+      if (!existing.includes(targetShapeIri.trim())) {
+        setPropertyAlternativeTargets(shapeIri, property.nodeId.value, [...existing, targetShapeIri.trim()])
+      }
+      return
+    }
     setPropertyNodeTarget(shapeIri, property.nodeId.value, targetShapeIri)
   }
 
@@ -278,14 +349,24 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     property.nodeKind = undefined
     property.cls = undefined
     property.allowedValues = undefined
+    property.alternatives = undefined
+    property.qualifiedValueShape = undefined
+    property.qualifiedMinCount = undefined
+    property.qualifiedMaxCount = undefined
     property.editorType = type
 
     if (type === 'datatype') {
       property.datatype = new NamedNode('http://www.w3.org/2001/XMLSchema#string')
     } else if (type === 'nodeKind') {
       property.nodeKind = new NamedNode('http://www.w3.org/ns/shacl#IRI')
+    } else if (type === 'class') {
+      property.cls = undefined
     } else if (type === 'profile') {
       property.node = undefined
+    } else if (type === 'qualifiedProfile') {
+      property.qualifiedValueShape = {}
+    } else if (type === 'oneOfProfiles') {
+      property.alternatives = []
     } else if (type === 'list') {
       property.allowedValues = []
     }
@@ -304,6 +385,30 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     return true
   }
 
+  function removePropertyTarget(shapeIri: string, propertyNodeId: string, targetShapeIri: string): void {
+    const context = findEditablePropertyContext(shapeIri, propertyNodeId)
+    if (!context) return
+
+    const property = context.property
+    if (property.editorType === 'oneOfProfiles') {
+      const remaining = property.alternatives
+        ?.map(alternative => alternative.node?.value)
+        .filter((value): value is string => Boolean(value) && value !== targetShapeIri) ?? []
+
+      if (remaining.length === 0) {
+        property.alternatives = []
+      } else {
+        property.alternatives = remaining.map(value => ({ node: new NamedNode(value) }))
+      }
+      syncSerializedProfiles()
+      return
+    }
+
+    if (property.editorType === 'qualifiedProfile' || property.editorType === 'profile') {
+      setPropertyNodeTarget(shapeIri, propertyNodeId, null)
+    }
+  }
+
   function listProfileReferences(shapeIri: string): string[] {
     const references = new Set<string>()
 
@@ -314,6 +419,12 @@ export const useProfileEditorStore = defineStore('profiles', () => {
 
       for (const property of shape.properties) {
         if (property.node?.value === shapeIri) {
+          references.add(`${shape.label ?? shape.nodeId.value} / ${property.name ?? property.path?.value ?? property.nodeId.value}`)
+        }
+        if (property.qualifiedValueShape?.node?.value === shapeIri) {
+          references.add(`${shape.label ?? shape.nodeId.value} / ${property.name ?? property.path?.value ?? property.nodeId.value}`)
+        }
+        if (property.alternatives?.some(alternative => alternative.node?.value === shapeIri)) {
           references.add(`${shape.label ?? shape.nodeId.value} / ${property.name ?? property.path?.value ?? property.nodeId.value}`)
         }
       }
@@ -395,8 +506,10 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     updatePropertyField,
     setShapeInheritance,
     setPropertyNodeTarget,
+    setPropertyAlternativeTargets,
     connectPropertyToShape,
     setPropertyType,
+    removePropertyTarget,
     listProfileReferences,
     addTurtleFiles,
     addProfileFromTurtle,
@@ -430,6 +543,7 @@ type EditablePropertyField =
   | 'order'
   | 'defaultValue'
   | 'allowedValues'
+  | 'alternativeTargets'
   | 'message'
   | 'severity'
   | 'equals'
@@ -448,4 +562,4 @@ function normalizeString(value: string | null): string | undefined {
   return trimmed ? trimmed : undefined
 }
 
-export type PropertyEditorType = 'datatype' | 'nodeKind' | 'profile' | 'list'
+export type PropertyEditorType = 'datatype' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'list'

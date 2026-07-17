@@ -1,0 +1,1053 @@
+@prefix dash: <http://datashapes.org/dash#> .
+@prefix dbo: <http://dbpedia.org/ontology/> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix m4i: <http://w3id.org/nfdi4ing/metadata4ing#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix quantitykind: <http://qudt.org/vocab/quantitykind/> .
+@prefix qudt: <http://qudt.org/schema/qudt/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix schema: <http://schema.org/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix unit: <http://qudt.org/vocab/unit/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix aps: <https://w3id.org/nfdi4ing/profiles/> .
+
+<https://w3id.org/nfdi4ing/profiles/0b36ec88-affd-4b8b-b7f9-5f4af1efdad1/> dcterms:created "2025-08-04"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Processing step in which a sample is first heated and then cooled"@en, "Arbeitsschritt, bei dem eine Probe zuerst erhitzt und dann gekuehlt wird"@de ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Example Sample Preparation"@en, "m4i Beispiel Probenvorbereitung"@de ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/e2029090-2cad-4ae3-8bce-a945909620fd/>, <https://w3id.org/nfdi4ing/profiles/a88f0d0a-3ed1-42db-9614-d6df6491357b/>, <https://w3id.org/nfdi4ing/profiles/7d380ae8-f46c-4698-8b44-22619872e0f4/>, <https://w3id.org/nfdi4ing/profiles/9257ff44-5c00-4773-bab8-d702c9a93d13/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/7d380ae8-f46c-4698-8b44-22619872e0f4/> ;
+	sh:property [
+		sh:name "Step 1"@en, "Schritt 1"@de ;
+		sh:path <http://purl.obolibrary.org/obo/BFO_0000051> ;
+		sh:qualifiedValueShape [
+			dcterms:title "Step 1"@en, "Schritt 1"@de ;
+			rdf:type sh:NodeShape ;
+			sh:node <https://w3id.org/nfdi4ing/profiles/e2029090-2cad-4ae3-8bce-a945909620fd/> ;
+			sh:property [
+				sh:name "Label"@en, "Bezeichnung"@de ;
+				sh:path rdfs:label ;
+				sh:hasValue "Step 1" ;
+			] ;
+		] ;
+		sh:order 1 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	], [
+		sh:name "Unvorbereitete Probe"@de, "Unprepared Sample"@en ;
+		sh:path <http://purl.obolibrary.org/obo/RO_0002233> ;
+		sh:qualifiedValueShape [
+			dcterms:title "Unvorbereitete Probe"@de, "Unprepared Sample"@en ;
+			rdf:type sh:NodeShape ;
+			sh:node <https://w3id.org/nfdi4ing/profiles/9257ff44-5c00-4773-bab8-d702c9a93d13/> ;
+			sh:property [
+				sh:name "Label"@en, "Bezeichung"@de ;
+				sh:path rdfs:label ;
+				sh:hasValue "Unprepared sample" ;
+			] ;
+		] ;
+		sh:order 3 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	], [
+		sh:name "Step 2"@en, "Schritt 2"@de ;
+		sh:path <http://purl.obolibrary.org/obo/BFO_0000051> ;
+		sh:qualifiedValueShape [
+			dcterms:title "Step 2"@en, "Schritt 2"@de ;
+			rdf:type sh:NodeShape ;
+			sh:node <https://w3id.org/nfdi4ing/profiles/a88f0d0a-3ed1-42db-9614-d6df6491357b/> ;
+			sh:property [
+				sh:name "Label"@en, "Bezeichnung"@de ;
+				sh:path rdfs:label ;
+				sh:hasValue "Step 2" ;
+			] ;
+		] ;
+		sh:order 2 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	], [
+		sh:name "Vorbereitete Probe"@de, "Prepared Sample"@en ;
+		sh:path <http://purl.obolibrary.org/obo/RO_0002234> ;
+		sh:qualifiedValueShape [
+			dcterms:title "Vorbereitete Probe"@de, "Prepared Sample"@en ;
+			rdf:type sh:NodeShape ;
+			sh:node <https://w3id.org/nfdi4ing/profiles/9257ff44-5c00-4773-bab8-d702c9a93d13/> ;
+			sh:property [
+				sh:name "Label"@en, "Bezeichung"@de ;
+				sh:path rdfs:label ;
+				sh:hasValue "Prepared sample" ;
+			] ;
+		] ;
+		sh:order 4 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	] .
+
+<https://w3id.org/nfdi4ing/profiles/e2029090-2cad-4ae3-8bce-a945909620fd/> dcterms:created "2025-07-07"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "A processing step where a sample is heated."@en, "Ein Arbeitsschritt, bei dem eine Probe erhitzt wird."@de ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Heating Process"@en, "m4i Erhitzungsprozess"@de ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/7d380ae8-f46c-4698-8b44-22619872e0f4/>, <https://w3id.org/nfdi4ing/profiles/9257ff44-5c00-4773-bab8-d702c9a93d13/>, <https://w3id.org/nfdi4ing/profiles/517c3f72-c8eb-4743-87bd-6f4c4f5f484c/>, <https://w3id.org/nfdi4ing/profiles/c383ab31-35e7-4a5d-9aa3-3183e5e8dd15/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/7d380ae8-f46c-4698-8b44-22619872e0f4/> ;
+	sh:property [
+		sh:name "Input"@de, "Input"@en ;
+		sh:path <http://purl.obolibrary.org/obo/RO_0002233> ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/9257ff44-5c00-4773-bab8-d702c9a93d13/> ;
+		sh:order 3 ;
+	], [
+		sh:name "Output"@en, "Output"@de ;
+		sh:path <http://purl.obolibrary.org/obo/RO_0002234> ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/9257ff44-5c00-4773-bab8-d702c9a93d13/> ;
+		sh:order 4 ;
+	], [
+		sh:name "Sandbad-Konfiguration"@de, "Sand Bath Configuration"@en ;
+		sh:path m4i:usesConfiguration ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/517c3f72-c8eb-4743-87bd-6f4c4f5f484c/> ;
+		sh:order 1 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	], [
+		sh:name "Heizkonfiguration"@de, "Heating Configuration"@en ;
+		sh:path m4i:usesConfiguration ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/c383ab31-35e7-4a5d-9aa3-3183e5e8dd15/> ;
+		sh:order 2 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	] .
+
+<https://w3id.org/nfdi4ing/profiles/a88f0d0a-3ed1-42db-9614-d6df6491357b/> dcterms:created "2025-08-04"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Ein Arbeitsschritt, bei dem eine Probe gekühlt wird"@de, "A processing step where a sample is cooled."@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Kühlprozess"@de, "m4i Cooling Process"@en ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/7d380ae8-f46c-4698-8b44-22619872e0f4/>, <https://w3id.org/nfdi4ing/profiles/9257ff44-5c00-4773-bab8-d702c9a93d13/>, <https://w3id.org/nfdi4ing/profiles/0284ef5b-ec86-45f3-98c9-947a02271c7f/>, <https://w3id.org/nfdi4ing/profiles/18e02f0e-dfbf-41ae-b5e8-9ab9f638cc00/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/7d380ae8-f46c-4698-8b44-22619872e0f4/> ;
+	sh:property [
+		sh:name "Water Bath Configuration"@en, "Wasserbad-Konfiguration"@de ;
+		sh:path m4i:usesConfiguration ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/18e02f0e-dfbf-41ae-b5e8-9ab9f638cc00/> ;
+		sh:order 1 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	], [
+		sh:name "Kühlkonfiguration"@de, "Cooling Configuration"@en ;
+		sh:path m4i:usesConfiguration ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/0284ef5b-ec86-45f3-98c9-947a02271c7f/> ;
+		sh:order 2 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	], [
+		sh:name "Input"@de, "Input"@en ;
+		sh:path <http://purl.obolibrary.org/obo/RO_0002233> ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/9257ff44-5c00-4773-bab8-d702c9a93d13/> ;
+		sh:order 3 ;
+	], [
+		sh:name "Output"@en, "Output"@de ;
+		sh:path <http://purl.obolibrary.org/obo/RO_0002234> ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/9257ff44-5c00-4773-bab8-d702c9a93d13/> ;
+		sh:order 4 ;
+	] .
+
+<https://w3id.org/nfdi4ing/profiles/7d380ae8-f46c-4698-8b44-22619872e0f4/> dcterms:created "2025-02-05"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Arbeitsschritt innerhalb eines wissenschaftlichen Prozesses"@de, "Specific action undertaken during research"@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Arbeitsschritt"@de, "m4i Processing Step"@en ;
+	a sh:NodeShape ;
+	sh:closed false ;
+	sh:property [
+		sh:name "Beschreibung"@de, "Description"@en ;
+		sh:path dcterms:description ;
+		sh:order 1 ;
+		sh:datatype xsd:string ;
+		sh:maxCount 1 ;
+	], [
+		sh:name "has participant"@en, "hat Teilnehmer"@de ;
+		sh:path <http://purl.obolibrary.org/obo/BFO_0000057> ;
+		sh:order 2 ;
+		sh:class prov:Agent ;
+	], [
+		sh:name "has start time"@en, "hat Startzeit"@de ;
+		sh:path schema:startTime ;
+		sh:order 3 ;
+		sh:datatype xsd:dateTime ;
+	], [
+		sh:name "hat Endzeit"@de, "has end time"@en ;
+		sh:path schema:endTime ;
+		sh:order 4 ;
+		sh:datatype xsd:dateTime ;
+	], [
+		sh:name "Label"@en, "Bezeichnung"@de ;
+		sh:path rdfs:label ;
+		sh:order 0 ;
+		sh:datatype xsd:string ;
+		sh:maxCount 1 ;
+		sh:minCount 1 ;
+	], [
+		sh:name "immediately precedes"@en, "ist unmittelbare Voraussetzung für Schritt"@de ;
+		sh:path <http://purl.obolibrary.org/obo/RO_0002090> ;
+		sh:order 17 ;
+		sh:maxCount 1 ;
+		sh:class m4i:ProcessingStep ;
+	], [
+		sh:name "has part"@en, "hat Teil"@de ;
+		sh:path <http://purl.obolibrary.org/obo/BFO_0000051> ;
+		sh:order 13 ;
+		sh:class m4i:ProcessingStep ;
+	], [
+		sh:name "starts with"@en, "beginnt mit"@de ;
+		sh:path <http://purl.obolibrary.org/obo/RO_0002224> ;
+		sh:order 14 ;
+		sh:maxCount 1 ;
+		sh:class m4i:ProcessingStep ;
+	], [
+		sh:name "ends with"@en, "endet mit"@de ;
+		sh:path <http://purl.obolibrary.org/obo/RO_0002230> ;
+		sh:order 15 ;
+		sh:maxCount 1 ;
+		sh:class m4i:ProcessingStep ;
+	], [
+		sh:name "ist Voraussetzung für Schritt"@de, "precedes"@en ;
+		sh:path <http://purl.obolibrary.org/obo/BFO_0000063> ;
+		sh:order 16 ;
+		sh:class m4i:ProcessingStep ;
+	], [
+		sh:name "untersucht Eigenschaft"@de, "investigates property"@en ;
+		sh:path m4i:investigatesProperty ;
+		sh:order 9 ;
+		sh:class <http://www.molmod.info/semantics/pims-ii.ttl#Property> ;
+	], [
+		sh:name "has parameter"@en, "hat Parameter"@de ;
+		sh:path m4i:hasParameter ;
+		sh:order 10 ;
+		sh:class <http://www.molmod.info/semantics/pims-ii.ttl#Variable> ;
+	], [
+		sh:name "hat Input"@de, "has input"@en ;
+		sh:path <http://purl.obolibrary.org/obo/RO_0002233> ;
+		sh:order 11 ;
+		sh:nodeKind sh:BlankNodeOrIRI ;
+	], [
+		sh:name "hat Output"@de, "has output"@en ;
+		sh:path <http://purl.obolibrary.org/obo/RO_0002234> ;
+		sh:order 12 ;
+		sh:nodeKind sh:BlankNodeOrIRI ;
+	], [
+		sh:name "has employed tool"@en, "hat eingesetztes Werkzeug"@de ;
+		sh:path m4i:hasEmployedTool ;
+		sh:order 5 ;
+		sh:class m4i:Tool ;
+	], [
+		sh:name "realisiert Methode"@de, "realizes method"@en ;
+		sh:path m4i:realizesMethod ;
+		sh:order 6 ;
+		sh:class m4i:Method ;
+	], [
+		sh:name "uses configuration"@en, "benutzt Konfiguration"@de ;
+		sh:path m4i:usesConfiguration ;
+		sh:order 7 ;
+		sh:class m4i:Configuration ;
+	], [
+		sh:name "untersucht"@de, "investigates"@en ;
+		sh:path m4i:investigates ;
+		sh:order 8 ;
+	] ;
+	sh:targetClass m4i:ProcessingStep .
+
+<https://w3id.org/nfdi4ing/profiles/9257ff44-5c00-4773-bab8-d702c9a93d13/> dcterms:created "2025-07-07"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Physische Probe"@de, "Physical sample"@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Sample"@en, "m4i Probe"@de ;
+	a rdfs:Class, sh:NodeShape ;
+	sh:closed false ;
+	sh:property [
+		sh:name "Label"@en, "Bezeichnung"@de ;
+		sh:path rdfs:label ;
+		sh:order 1 ;
+		sh:datatype xsd:string ;
+		sh:maxCount 1 ;
+		sh:minCount 1 ;
+		dash:singleLine true ;
+	], [
+		sh:name "Beschreibung"@de, "Description"@en ;
+		sh:path dcterms:description ;
+		sh:order 2 ;
+		sh:datatype xsd:string ;
+		sh:maxCount 1 ;
+		dash:singleLine false ;
+	], [
+		sh:name "sample ID"@en, "Proben ID"@de ;
+		sh:path schema:identifier ;
+		sh:order 3 ;
+		sh:datatype xsd:string ;
+		sh:maxCount 1 ;
+		sh:minCount 1 ;
+	], [
+		sh:name "Date Created"@en, "Erstellungsdatum"@de ;
+		sh:path dcterms:created ;
+		sh:order 4 ;
+		sh:datatype xsd:dateTime ;
+		sh:maxCount 1 ;
+	] .
+
+<https://w3id.org/nfdi4ing/profiles/517c3f72-c8eb-4743-87bd-6f4c4f5f484c/> dcterms:created "2026-01-27"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Konfiguration für ein Sandbad mit Temperaturparameter."@de, "Configuration for a sand bath with temperature parameter."@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Sandbad-Konfiguration"@de, "m4i Sand Bath Configuration"@en ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/c70d766b-9fe4-470b-a198-a7858ddf8815/>, <https://w3id.org/nfdi4ing/profiles/21ed873c-44cd-4260-b94e-609202fc89c4/>, <https://w3id.org/nfdi4ing/profiles/67315174-d67c-4bd3-8b61-975ea8e9904a/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/67315174-d67c-4bd3-8b61-975ea8e9904a/> ;
+	sh:property [
+		sh:name "Runtime Parameters (Sand Bath)"@en, "Laufzeitparameter (Sandbad)"@de ;
+		sh:path m4i:hasAssignedParameterSet ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/c70d766b-9fe4-470b-a198-a7858ddf8815/> ;
+		sh:order 2 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	], [
+		sh:name "Sandbad"@de, "Sand Bath"@en ;
+		sh:path m4i:configures ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/21ed873c-44cd-4260-b94e-609202fc89c4/> ;
+		sh:order 1 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	] .
+
+<https://w3id.org/nfdi4ing/profiles/c383ab31-35e7-4a5d-9aa3-3183e5e8dd15/> dcterms:created "2026-02-02"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Konfiguration für einen Heizvorgang mit Zieltemperatur und Dauer."@de, "Configuration for a heating process with target temperature and duration."@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Heizkonfiguration"@de, "m4i Heating Configuration"@en ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/67315174-d67c-4bd3-8b61-975ea8e9904a/>, <https://w3id.org/nfdi4ing/profiles/79f90fbf-654a-4231-8e9d-536888ae0334/>, <https://w3id.org/nfdi4ing/profiles/0f600aa1-8774-477d-811c-f495e3043ced/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/67315174-d67c-4bd3-8b61-975ea8e9904a/> ;
+	sh:property [
+		sh:name "Heating Method"@en, "Heizmethode"@de ;
+		sh:path m4i:configures ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/79f90fbf-654a-4231-8e9d-536888ae0334/> ;
+		sh:order 1 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	], [
+		sh:name "Runtime Parameter (Heating)"@en, "Laufzeitparameter (Erhitzen)"@de ;
+		sh:path m4i:hasAssignedParameterSet ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/0f600aa1-8774-477d-811c-f495e3043ced/> ;
+		sh:order 2 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	] .
+
+<https://w3id.org/nfdi4ing/profiles/0284ef5b-ec86-45f3-98c9-947a02271c7f/> dcterms:created "2026-01-27"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Konfiguration für einen Kühlvorgang mit Zieltemperatur und Dauer."@de, "Configuration for a cooling process with target temperature and duration."@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Kühlkonfiguration"@de, "m4i Cooling Configuration"@en ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/67315174-d67c-4bd3-8b61-975ea8e9904a/>, <https://w3id.org/nfdi4ing/profiles/7cd65746-4d95-488b-9f74-8faab9986b66/>, <https://w3id.org/nfdi4ing/profiles/74bddc92-5164-4ac5-a12c-25ea8ad885ee/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/67315174-d67c-4bd3-8b61-975ea8e9904a/> ;
+	sh:property [
+		sh:name "Runtime Parameters (Cooling)"@en, "Laufzeitparameter (Kühlen)"@de ;
+		sh:path m4i:hasAssignedParameterSet ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/74bddc92-5164-4ac5-a12c-25ea8ad885ee/> ;
+		sh:order 2 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	], [
+		sh:name "Cooling Method"@en, "Kühlmethode"@de ;
+		sh:path m4i:configures ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/7cd65746-4d95-488b-9f74-8faab9986b66/> ;
+		sh:order 1 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	] .
+
+<https://w3id.org/nfdi4ing/profiles/18e02f0e-dfbf-41ae-b5e8-9ab9f638cc00/> dcterms:created "2026-01-27"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Configuration for a water bath with temperature and volume parameters."@en, "Konfiguration für ein Wasserbad mit Temperatur- und Volumenparametern."@de ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Water Bath Configuration"@en, "m4i Wasserbad-Konfiguration"@de ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/67315174-d67c-4bd3-8b61-975ea8e9904a/>, <https://w3id.org/nfdi4ing/profiles/989aec4b-c1b8-4ded-ab73-62422ab04d9b/>, <https://w3id.org/nfdi4ing/profiles/99838e9c-927d-4976-bcfb-a842a7f08d7d/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/67315174-d67c-4bd3-8b61-975ea8e9904a/> ;
+	sh:property [
+		sh:name "Wasserbad"@de, "Water Bath"@en ;
+		sh:path m4i:configures ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/989aec4b-c1b8-4ded-ab73-62422ab04d9b/> ;
+		sh:order 1 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	], [
+		sh:name "Runtime Parameters (Water Bath)"@en, "Laufzeitparameter (Wasserbad)"@de ;
+		sh:path m4i:hasAssignedParameterSet ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/99838e9c-927d-4976-bcfb-a842a7f08d7d/> ;
+		sh:order 2 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	] .
+
+<https://w3id.org/nfdi4ing/profiles/c70d766b-9fe4-470b-a198-a7858ddf8815/> dcterms:created "2026-01-27"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Variablenmenge für die Laufzeitparameter eines Sandbades."@de, "Variable set for the runtime parameters of a sand bath."@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Runtime Parameters (Sand Bath)"@en, "m4i Laufzeitparameter (Sandbad)"@de ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/ab14d37c-cdf7-4f3d-aa58-b3baa450be15/>, <https://w3id.org/nfdi4ing/profiles/cbff1db0-8764-4617-b221-0752ca640258/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/ab14d37c-cdf7-4f3d-aa58-b3baa450be15/> ;
+	sh:property [
+		sh:name "Temperature (Sand Bath)"@en, "Temperatur (Sandbad)"@de ;
+		sh:path <http://purl.obolibrary.org/obo/BFO_0000051> ;
+		sh:qualifiedValueShape [
+			dcterms:title "Temperature (Sand Bath)"@en, "Temperatur (Sandbad)"@de ;
+			rdf:type sh:NodeShape ;
+			sh:node <https://w3id.org/nfdi4ing/profiles/cbff1db0-8764-4617-b221-0752ca640258/> ;
+			sh:property [
+				sh:name "Label"@en, "Bezeichnung"@de ;
+				sh:path rdfs:label ;
+				sh:hasValue "Sand bath temperature" ;
+			] ;
+		] ;
+		sh:order 1 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	] ;
+	prov:wasDerivedFrom <https://w3id.org/nfdi4ing/profiles/99838e9c-927d-4976-bcfb-a842a7f08d7d/> .
+
+<https://w3id.org/nfdi4ing/profiles/21ed873c-44cd-4260-b94e-609202fc89c4/> dcterms:created "2025-06-18"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "A sand bath used for heating objects."@en, "Ein Sandbad zur Erwärmung von Objekten."@de ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Sandbad"@de, "m4i Sand Bath"@en ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/3a1c5d98-1db7-45bb-91a4-80b403c1f4db/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/3a1c5d98-1db7-45bb-91a4-80b403c1f4db/> .
+
+<https://w3id.org/nfdi4ing/profiles/67315174-d67c-4bd3-8b61-975ea8e9904a/> dcterms:created "2026-01-27"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Parameter settings used within a processing step to set up a method or tool."@en, "Parametereinstellungen, die in einem Verarbeitungsschritt verwendet werden, um eine Methode oder ein Werkzeug einzurichten."@de ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Konfiguration"@de, "m4i Configuration"@en ;
+	a sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/ab14d37c-cdf7-4f3d-aa58-b3baa450be15/>, <https://w3id.org/nfdi4ing/profiles/93b01712-3268-4413-9903-3037e96f1a29/>, <https://w3id.org/nfdi4ing/profiles/34c941c1-bf9e-425f-9be6-9a2c29c32dae/> ;
+	sh:closed false ;
+	sh:property [
+		dcterms:title "konfiguriert Werkzeug"@de, "configures tool"@en ;
+		sh:name "konfiguriert Werkzeug"@de, "configures tool"@en ;
+		sh:path m4i:configures ;
+		sh:qualifiedValueShape [
+			rdf:type sh:NodeShape ;
+			sh:node <https://w3id.org/nfdi4ing/profiles/93b01712-3268-4413-9903-3037e96f1a29/> ;
+			sh:class m4i:Tool ;
+		] ;
+		sh:order 4 ;
+		sh:qualifiedMaxCount 1 ;
+	], [
+		sh:name "Label"@en, "Bezeichnung"@de ;
+		sh:path rdfs:label ;
+		sh:order 1 ;
+		sh:datatype xsd:string ;
+		sh:maxCount 1 ;
+		sh:minCount 1 ;
+		dash:singleLine true ;
+	], [
+		sh:name "hat zugewiesenen Parametersatz"@de, "has assigned parameter set"@en ;
+		sh:path m4i:hasAssignedParameterSet ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/ab14d37c-cdf7-4f3d-aa58-b3baa450be15/> ;
+		sh:order 5 ;
+		sh:qualifiedMaxCount 1 ;
+	], [
+		dcterms:title "configures method"@en, "konfiguriert Methode"@de ;
+		sh:name "configures method"@en, "konfiguriert Methode"@de ;
+		sh:path m4i:configures ;
+		sh:qualifiedValueShape [
+			rdf:type sh:NodeShape ;
+			sh:node <https://w3id.org/nfdi4ing/profiles/34c941c1-bf9e-425f-9be6-9a2c29c32dae/> ;
+			sh:class m4i:Method ;
+		] ;
+		sh:order 3 ;
+		sh:qualifiedMaxCount 1 ;
+	], [
+		sh:name "Beschreibung"@de, "Description"@en ;
+		sh:path dcterms:description ;
+		sh:order 2 ;
+		sh:datatype xsd:string ;
+		sh:maxCount 1 ;
+		dash:singleLine false ;
+	] ;
+	sh:targetClass m4i:Configuration .
+
+<https://w3id.org/nfdi4ing/profiles/79f90fbf-654a-4231-8e9d-536888ae0334/> dcterms:created "2025-06-18"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "An m4i Method used to heat an object."@en, "Eine m4i Method, mit der ein Objekt erwärmt wird."@de ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Heating"@en, "m4i Erhitzen"@de ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/34c941c1-bf9e-425f-9be6-9a2c29c32dae/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/34c941c1-bf9e-425f-9be6-9a2c29c32dae/> .
+
+<https://w3id.org/nfdi4ing/profiles/0f600aa1-8774-477d-811c-f495e3043ced/> dcterms:created "2026-01-27"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Variable set for the runtime parameters of a heating process."@en, "Variablenmenge für die Laufzeitparameter eines Heizvorgangs."@de ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Runtime Parameters (Heating)"@en, "m4i Laufzeitparameter (Erhitzen)"@de ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/ab14d37c-cdf7-4f3d-aa58-b3baa450be15/>, <https://w3id.org/nfdi4ing/profiles/cbff1db0-8764-4617-b221-0752ca640258/>, <https://w3id.org/nfdi4ing/profiles/d48f7be4-22d3-470a-b225-43f279a0bdb6/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/ab14d37c-cdf7-4f3d-aa58-b3baa450be15/> ;
+	sh:property [
+		sh:name "Zieltemperatur (Erhitzen)"@de, "Target Temperature (Heating)"@en ;
+		sh:path <http://purl.obolibrary.org/obo/BFO_0000051> ;
+		sh:qualifiedValueShape [
+			dcterms:title "Zieltemperatur (Erhitzen)"@de, "Target Temperature (Heating)"@en ;
+			rdf:type sh:NodeShape ;
+			sh:node <https://w3id.org/nfdi4ing/profiles/cbff1db0-8764-4617-b221-0752ca640258/> ;
+			sh:property [
+				sh:name "Label"@en, "Bezeichnung"@de ;
+				sh:path rdfs:label ;
+				sh:hasValue "Target heating temperature" ;
+			] ;
+		] ;
+		sh:order 1 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	], [
+		sh:name "Heating Duration"@en, "Heizdauer"@de ;
+		sh:path <http://purl.obolibrary.org/obo/BFO_0000051> ;
+		sh:qualifiedValueShape [
+			dcterms:title "Heating Duration"@en, "Heizdauer"@de ;
+			rdf:type sh:NodeShape ;
+			sh:node <https://w3id.org/nfdi4ing/profiles/d48f7be4-22d3-470a-b225-43f279a0bdb6/> ;
+			sh:property [
+				sh:name "Bezeichung"@de, "Label"@de ;
+				sh:path rdfs:label ;
+				sh:hasValue "Heating duration" ;
+			] ;
+		] ;
+		sh:order 2 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	] .
+
+<https://w3id.org/nfdi4ing/profiles/7cd65746-4d95-488b-9f74-8faab9986b66/> dcterms:created "2025-08-04"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Eine m4i Methode, mit der ein Objekt gekühlt wird"@de, "A m4i Method used to cool an object"@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Kühlen"@de, "m4i Cooling"@en ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/cbff1db0-8764-4617-b221-0752ca640258/>, <https://w3id.org/nfdi4ing/profiles/34c941c1-bf9e-425f-9be6-9a2c29c32dae/>, <https://w3id.org/nfdi4ing/profiles/d48f7be4-22d3-470a-b225-43f279a0bdb6/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/34c941c1-bf9e-425f-9be6-9a2c29c32dae/> .
+
+<https://w3id.org/nfdi4ing/profiles/74bddc92-5164-4ac5-a12c-25ea8ad885ee/> dcterms:created "2026-02-09"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Variable set for the runtime parameters of a cooling process."@en, "Variablenmenge für die Laufzeitparameter eines Kühlvorgangs."@de ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Assigned Cooling Parameter"@en, "m4i Laufzeitparameter (Kühlen)"@de ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/ab14d37c-cdf7-4f3d-aa58-b3baa450be15/>, <https://w3id.org/nfdi4ing/profiles/cbff1db0-8764-4617-b221-0752ca640258/>, <https://w3id.org/nfdi4ing/profiles/d48f7be4-22d3-470a-b225-43f279a0bdb6/>, _:b17_b26783, _:b17_b26785 ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/ab14d37c-cdf7-4f3d-aa58-b3baa450be15/> ;
+	sh:property [
+		sh:name "has target cooling temperature"@en, "hat Zieltemperatur (Kühlen)"@de ;
+		sh:path <http://purl.obolibrary.org/obo/BFO_0000051> ;
+		sh:qualifiedValueShape _:b17_b26785 ;
+		sh:order 1 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	], [
+		sh:name "has cooling duration"@en, "hat Kühldauer"@de ;
+		sh:path <http://purl.obolibrary.org/obo/BFO_0000051> ;
+		sh:qualifiedValueShape _:b17_b26783 ;
+		sh:order 2 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	] .
+
+<https://w3id.org/nfdi4ing/profiles/989aec4b-c1b8-4ded-ab73-62422ab04d9b/> dcterms:created "2025-07-07"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Ein Wasserbad zum Kühlen und Erhitzen."@de, "A water bath for cooling and heating."@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Wasserbad"@de, "m4i Water Bath"@en ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/3a1c5d98-1db7-45bb-91a4-80b403c1f4db/>, <https://w3id.org/nfdi4ing/profiles/53c2f9c6-1ac8-460d-b8e2-76adebfa0c0e/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/3a1c5d98-1db7-45bb-91a4-80b403c1f4db/> ;
+	sh:property [
+		sh:name "Fester Parametersatz (Wasserbad)"@de, "Fixed Parameter Set (Water Bath)"@en ;
+		sh:path m4i:hasFixedParameterSet ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/53c2f9c6-1ac8-460d-b8e2-76adebfa0c0e/> ;
+		sh:order 1 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	] .
+
+<https://w3id.org/nfdi4ing/profiles/99838e9c-927d-4976-bcfb-a842a7f08d7d/> dcterms:created "2026-01-27"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Variablenmenge für die Laufzeitparameter eines Wasserbades."@de, "Variable set for the runtime parameters of a water bath."@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Runtime Parameters (Water Bath)"@en, "m4i Laufzeitparameter (Wasserbad)"@de ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/ab14d37c-cdf7-4f3d-aa58-b3baa450be15/>, <https://w3id.org/nfdi4ing/profiles/cbff1db0-8764-4617-b221-0752ca640258/>, <https://w3id.org/nfdi4ing/profiles/2470d48b-22cd-4733-8c70-69e1d6c4d1f0/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/ab14d37c-cdf7-4f3d-aa58-b3baa450be15/> ;
+	sh:property [
+		sh:name "Füllvolumen (Wasserbad)"@de, "Fill Volume (Water Bath)"@en ;
+		sh:path <http://purl.obolibrary.org/obo/BFO_0000051> ;
+		sh:qualifiedValueShape [
+			dcterms:title "Füllvolumen (Wasserbad)"@de, "Fill Volume (Water Bath)"@en ;
+			rdf:type sh:NodeShape ;
+			sh:node <https://w3id.org/nfdi4ing/profiles/2470d48b-22cd-4733-8c70-69e1d6c4d1f0/> ;
+			sh:property [
+				sh:name "Label"@en, "Bezeichnung"@de ;
+				sh:path rdfs:label ;
+				sh:hasValue "Water bath fill volume" ;
+			] ;
+		] ;
+		sh:order 2 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	], [
+		sh:name "Temperature (Water Bath)"@en, "Temperatur (Wasserbad)"@de ;
+		sh:path <http://purl.obolibrary.org/obo/BFO_0000051> ;
+		sh:qualifiedValueShape [
+			dcterms:title "hat Wasserbadtemperatur"@de, "has water bath temperature"@en ;
+			rdf:type sh:NodeShape ;
+			sh:node <https://w3id.org/nfdi4ing/profiles/cbff1db0-8764-4617-b221-0752ca640258/> ;
+			sh:property [
+				sh:name "Label"@en, "Bezeichnung"@de ;
+				sh:path rdfs:label ;
+				sh:hasValue "Water bath temperature" ;
+			] ;
+		] ;
+		sh:order 1 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	] .
+
+<https://w3id.org/nfdi4ing/profiles/ab14d37c-cdf7-4f3d-aa58-b3baa450be15/> dcterms:created "2025-12-16"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Eine Menge zusammengehörender Variablen, die vom gleichen oder von unterschiedlichen Typen (numerisch, textbasiert oder boolsch) sein können."@de, "A set of variables belonging together, which can be of same or different types (numerical, text or boolean)."@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Variablenmenge"@de, "m4i Variable Set"@en ;
+	a sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/70d2267e-369f-4aed-876d-82de8e9192db/>, <https://w3id.org/nfdi4ing/profiles/122ec100-43a2-4d4c-a7a4-9bbddf214615/>, <https://w3id.org/nfdi4ing/profiles/80dace1f-1cb6-41fd-b415-c0d27755b74d/> ;
+	sh:closed false ;
+	sh:property [
+		sh:name "has part"@en, "hat Teil"@de ;
+		sh:path <http://purl.obolibrary.org/obo/BFO_0000051> ;
+		sh:order 1 ;
+		sh:minCount 1 ;
+		sh:or (
+			[
+				sh:node <https://w3id.org/nfdi4ing/profiles/70d2267e-369f-4aed-876d-82de8e9192db/> ;
+			]
+			[
+				sh:node <https://w3id.org/nfdi4ing/profiles/122ec100-43a2-4d4c-a7a4-9bbddf214615/> ;
+			]
+			[
+				sh:node <https://w3id.org/nfdi4ing/profiles/80dace1f-1cb6-41fd-b415-c0d27755b74d/> ;
+			]
+		) ;
+	] ;
+	sh:targetClass m4i:VariableSet .
+
+<https://w3id.org/nfdi4ing/profiles/cbff1db0-8764-4617-b221-0752ca640258/> dcterms:created "2025-06-18"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "A numerical variable representing a temperature"@en, "Eine numerische Variable, die eine Temperatur repräsentiert"@de ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Temperature"@en, "m4i Temperatur"@de ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/70d2267e-369f-4aed-876d-82de8e9192db/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/70d2267e-369f-4aed-876d-82de8e9192db/> ;
+	sh:property [
+		sh:name "Größenart"@de, "Quantity Kind"@en ;
+		sh:path m4i:hasKindOfQuantity ;
+		sh:order 1 ;
+		sh:hasValue quantitykind:Temperature ;
+	], [
+		sh:name "Unit"@en, "Einheit"@de ;
+		sh:path m4i:hasUnit ;
+		sh:order 2 ;
+		sh:in (
+			unit:K
+			unit:DEG_C
+		) ;
+	] .
+
+<https://w3id.org/nfdi4ing/profiles/3a1c5d98-1db7-45bb-91a4-80b403c1f4db/> dcterms:created "2025-06-18"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "An m4i:Tool that has a physical form. Examples are a sensor, a spectrometer, a pump, a water bath, etc."@en, "Ein m4i:Tool, das eine physische Form besitzt. Beispiele sind ein Sensor, ein Spetrometer, eine Pumpe, ein Wasserbad, usw."@de ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Hardware"@de, "m4i Hardware"@en ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/93b01712-3268-4413-9903-3037e96f1a29/>, <https://w3id.org/nfdi4ing/profiles/e18a558c-03a2-4a89-9cfb-656aad6f6644/1767883664018/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/93b01712-3268-4413-9903-3037e96f1a29/> ;
+	sh:property [
+		sh:node <https://w3id.org/nfdi4ing/profiles/e18a558c-03a2-4a89-9cfb-656aad6f6644/1767883664018/> ;
+		sh:name "Owner"@en, "Eigentümer"@de ;
+		sh:path dbo:owner ;
+		sh:order 1 ;
+	], [
+		sh:name "Hersteller"@de, "Manufacturer"@en ;
+		sh:path schema:manufacturer ;
+		sh:order 2 ;
+		sh:datatype xsd:string ;
+	], [
+		sh:name "Seriennummer"@de, "Serial Number"@en ;
+		sh:path schema:serialNumber ;
+		sh:order 3 ;
+		sh:datatype xsd:string ;
+	] .
+
+<https://w3id.org/nfdi4ing/profiles/93b01712-3268-4413-9903-3037e96f1a29/> dcterms:created "2025-06-18"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Object that helps an agent perform an action (e.g., John wrote a book with a pen), i.e., an object of the relation schema:instrument or m4i:hasTool"@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Werkzeug"@de, "m4i Tool"@en ;
+	a sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/ab14d37c-cdf7-4f3d-aa58-b3baa450be15/>, <https://w3id.org/nfdi4ing/profiles/34c941c1-bf9e-425f-9be6-9a2c29c32dae/> ;
+	sh:closed false ;
+	sh:property [
+		sh:name "hat festen Parametersatz"@de, "has fixed parameter set"@en ;
+		sh:path m4i:hasFixedParameterSet ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/ab14d37c-cdf7-4f3d-aa58-b3baa450be15/> ;
+		sh:order 3 ;
+		sh:qualifiedMaxCount 1 ;
+	], [
+		sh:name "implements"@en, "implementiert"@de ;
+		sh:path m4i:implementsMethod ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/34c941c1-bf9e-425f-9be6-9a2c29c32dae/> ;
+		sh:order 4 ;
+	], [
+		sh:name "Label"@en, "Bezeichnung"@de ;
+		sh:path rdfs:label ;
+		sh:order 1 ;
+		sh:datatype xsd:string ;
+		sh:maxCount 1 ;
+		sh:minCount 1 ;
+	], [
+		sh:name "Beschreibung"@de, "Description"@en ;
+		sh:path dcterms:description ;
+		sh:order 2 ;
+		sh:datatype xsd:string ;
+		sh:maxCount 1 ;
+		dash:singleLine false ;
+	] ;
+	sh:targetClass m4i:Tool .
+
+<https://w3id.org/nfdi4ing/profiles/34c941c1-bf9e-425f-9be6-9a2c29c32dae/> dcterms:created "2024-08-06"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Abstrakte Beschreibung einer Methode zur Analyse, Erzeugung und Umwandlung von Daten und materiellen Objekten wie z. B. \"Fourier-Transform-Infrarotspektroskopie\" oder \"Molekulardynamiksimulation\". Beachten Sie, dass zwar Werte für relevante Parameter angegeben werden sollten, sich m4i:Method jedoch nicht auf die tatsächliche Ausführung des beschriebenen Prozesses bezieht (verwenden Sie dafür m4i:ProcessingStep), sondern eher eine Beschreibung des zugrunde liegenden Prinzips darstellt."@de, "Abstract description of a method for analysis, generation and transformation of data and material objects like, e.g., \"Fourier Transform Infrared Spectroscopy\" or \"Molecular Dynamics Simulation\". Note that while values for relevant parameters should be provided, m4i:Method does not refer to the actual execution of the process that is described (use m4i:ProcessingStep for that), but rather a description of the underlying principle."@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Methode "@de, "m4i Method"@en ;
+	a sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/ab14d37c-cdf7-4f3d-aa58-b3baa450be15/> ;
+	sh:closed false ;
+	sh:property [
+		sh:name "Label"@en, "Bezeichnung"@de ;
+		sh:path rdfs:label ;
+		sh:order 1 ;
+		sh:datatype xsd:string ;
+		sh:maxCount 1 ;
+		sh:minCount 1 ;
+		dash:singleLine true ;
+	], [
+		sh:name "Beschreibung"@de, "Description"@en ;
+		sh:path dcterms:description ;
+		sh:order 2 ;
+		sh:datatype xsd:string ;
+		sh:maxCount 1 ;
+		dash:singleLine false ;
+	], [
+		sh:name "hat festen Parametersatz"@de, "has fixed parameter set"@en ;
+		sh:path m4i:hasFixedParameterSet ;
+		sh:qualifiedValueShape <https://w3id.org/nfdi4ing/profiles/ab14d37c-cdf7-4f3d-aa58-b3baa450be15/> ;
+		sh:order 3 ;
+		sh:qualifiedMaxCount 1 ;
+	] ;
+	sh:targetClass m4i:Method .
+
+<https://w3id.org/nfdi4ing/profiles/d48f7be4-22d3-470a-b225-43f279a0bdb6/> dcterms:created "2025-06-18"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Numerical variable representing a time."@en, "Numerische Variable, die eine Zeit repräsentiert."@de ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Time"@en, "m4i Zeit"@de ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/70d2267e-369f-4aed-876d-82de8e9192db/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/70d2267e-369f-4aed-876d-82de8e9192db/> ;
+	sh:property [
+		sh:name "Größenart"@de, "Quantity Kind"@en ;
+		sh:path m4i:hasKindOfQuantity ;
+		sh:order 1 ;
+		sh:hasValue quantitykind:Time ;
+	], [
+		sh:name "Unit"@en, "Einheit"@de ;
+		sh:path m4i:hasUnit ;
+		sh:order 2 ;
+		sh:in (
+			unit:HR
+			unit:SEC
+			unit:MilliSEC
+			unit:MicroSEC
+			unit:NanoSEC
+		) ;
+	] .
+
+_:b17_b26783 dcterms:title "hat Kühldauer"@en, "has cooling temperature"@de ;
+	a sh:NodeShape ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/d48f7be4-22d3-470a-b225-43f279a0bdb6/> ;
+	sh:property [
+		sh:name "Label"@en, "Name"@de ;
+		sh:path rdfs:label ;
+		sh:hasValue "Cooling duration" ;
+	] .
+
+_:b17_b26785 dcterms:title "hat Zieltemperatur"@en, "has target cooling temperature"@en ;
+	a sh:NodeShape ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/cbff1db0-8764-4617-b221-0752ca640258/> ;
+	sh:property [
+		sh:name "Label"@en, "Name"@de ;
+		sh:path rdfs:label ;
+		sh:hasValue "Target cooling temperature" ;
+	] .
+
+<https://w3id.org/nfdi4ing/profiles/53c2f9c6-1ac8-460d-b8e2-76adebfa0c0e/> dcterms:created "2026-01-27"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Variablenmenge für die festen Parameter eines Wasserbades."@de, "Variable set for the fixed parameters of a water bath."@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Fixed Parameter Set (Water Bath)"@en, "m4i Fester Parametersatz (Wasserbad)"@de ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/ab14d37c-cdf7-4f3d-aa58-b3baa450be15/>, <https://w3id.org/nfdi4ing/profiles/2470d48b-22cd-4733-8c70-69e1d6c4d1f0/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/ab14d37c-cdf7-4f3d-aa58-b3baa450be15/> ;
+	sh:property [
+		sh:name "Maximum Volume (Water Bath)"@en, "Maximalvolumen (Wasserbad)"@de ;
+		sh:path <http://purl.obolibrary.org/obo/BFO_0000051> ;
+		sh:qualifiedValueShape [
+			dcterms:title "Maximum Volume (Water Bath)"@en, "Maximalvolumen (Wasserbad)"@de ;
+			rdf:type sh:NodeShape ;
+			sh:node <https://w3id.org/nfdi4ing/profiles/2470d48b-22cd-4733-8c70-69e1d6c4d1f0/> ;
+		] ;
+		sh:order 1 ;
+		sh:qualifiedMinCount 1 ;
+		sh:qualifiedMaxCount 1 ;
+	] .
+
+<https://w3id.org/nfdi4ing/profiles/2470d48b-22cd-4733-8c70-69e1d6c4d1f0/> dcterms:created "2025-06-23"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Numerical variable representing a volume"@en, "Numerische Variable, die ein Volumen repräsentiert"@de ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Volume"@en, "m4i Volumen"@de ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/70d2267e-369f-4aed-876d-82de8e9192db/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/70d2267e-369f-4aed-876d-82de8e9192db/> ;
+	sh:property [
+		sh:name "Größenart"@de, "Quantity Kind"@en ;
+		sh:path m4i:hasKindOfQuantity ;
+		sh:order 1 ;
+		sh:hasValue quantitykind:Volume ;
+	], [
+		sh:name "Unit"@en, "Einheit"@de ;
+		sh:path m4i:hasUnit ;
+		sh:order 2 ;
+		sh:in (
+			unit:M3
+			unit:L
+			unit:MilliL
+			unit:MicroL
+			unit:NanoL
+		) ;
+	] .
+
+<https://w3id.org/nfdi4ing/profiles/70d2267e-369f-4aed-876d-82de8e9192db/> dcterms:created "2024-08-22"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Eine Variable, die einen Double oder Integer als Wert erwartet"@de, "A variable that expects a double or integer as value"@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Numerische Variable"@de, "m4i Numerical Variable"@en ;
+	a sh:NodeShape ;
+	owl:imports <http://qudt.org/vocab/quantitykind>, <https://qudt.org/vocab/unit/>, <https://w3id.org/nfdi4ing/profiles/d7d86748-b7ec-448f-9e45-cb1a1fd26b7e/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/d7d86748-b7ec-448f-9e45-cb1a1fd26b7e/> ;
+	sh:property [
+		sh:name "Größenart"@de, "Quantity Kind"@en ;
+		sh:path m4i:hasKindOfQuantity ;
+		sh:order 1 ;
+		sh:maxCount 1 ;
+		sh:class qudt:QuantityKind ;
+		sh:minCount 1 ;
+	], [
+		sh:name "Numerical Value"@en, "Numerischer Wert"@de ;
+		sh:path m4i:hasNumericalValue ;
+		sh:order 2 ;
+		sh:maxCount 1 ;
+		sh:minCount 1 ;
+		sh:xone (
+			[
+				sh:datatype xsd:integer ;
+				rdfs:label "Ganzzahl"@de, "Integer"@en ;
+			]
+			[
+				sh:datatype xsd:double ;
+				rdfs:label "Floating point"@en, "Fließkommazahl"@de ;
+			]
+		) ;
+	], [
+		sh:name "Unit"@en, "Einheit"@de ;
+		sh:path m4i:hasUnit ;
+		sh:order 3 ;
+		sh:maxCount 1 ;
+		sh:class qudt:Unit ;
+		sh:minCount 1 ;
+	] ;
+	sh:targetClass m4i:NumericalVariable .
+
+<https://w3id.org/nfdi4ing/profiles/122ec100-43a2-4d4c-a7a4-9bbddf214615/> dcterms:created "2025-12-12"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "A binary variable that expects as a value either true or false."@en, "Eine binäre Variable, die als Wert entweder wahr oder falsch erwartet."@de ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Boolesche Variable"@de, "m4i Boolean Variable"@en ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/d7d86748-b7ec-448f-9e45-cb1a1fd26b7e/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/d7d86748-b7ec-448f-9e45-cb1a1fd26b7e/> ;
+	sh:property [
+		sh:name "has boolean value"@en, "hat Booleschen Wert"@de ;
+		sh:path m4i:hasBooleanValue ;
+		sh:order 1 ;
+		sh:datatype xsd:boolean ;
+		sh:maxCount 1 ;
+		sh:minCount 1 ;
+		sh:description "A boolean value that can be true (expressed by 'true' or '1') or false (expressed by 'false' or '0')."@en, "Ein Boolescher Wert, der wahr (ausgedruckt durch 'true' oder '1') oder falsch (ausgedrückt durch 'false' oder '0') sein kann."@de ;
+	] ;
+	sh:targetClass m4i:BooleanVariable .
+
+<https://w3id.org/nfdi4ing/profiles/80dace1f-1cb6-41fd-b415-c0d27755b74d/> dcterms:created "2025-06-05"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "A variable that expects a string of characters as a value"@en, "Eine Variable, die eine Zeichenkette als Wert erwartet"@de ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Text Variable"@en, "m4i Text Variable"@de ;
+	a rdfs:Class, sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/d7d86748-b7ec-448f-9e45-cb1a1fd26b7e/> ;
+	sh:closed false ;
+	sh:node <https://w3id.org/nfdi4ing/profiles/d7d86748-b7ec-448f-9e45-cb1a1fd26b7e/> ;
+	sh:property [
+		sh:name "Textueller Wert"@de, "String Value"@en ;
+		sh:path m4i:hasStringValue ;
+		sh:order 1 ;
+		sh:datatype xsd:string ;
+		sh:maxCount 1 ;
+		sh:minCount 1 ;
+	] ;
+	sh:targetClass m4i:TextVariable .
+
+<https://w3id.org/nfdi4ing/profiles/e18a558c-03a2-4a89-9cfb-656aad6f6644/1767883664018/> dcterms:created "2025-10-08"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "Ein menschliches Wesen."@de, "A human being."@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Person"@de, "m4i Person"@en ;
+	a sh:NodeShape ;
+	owl:imports <https://w3id.org/nfdi4ing/profiles/b836ad06-e1d0-4287-a182-66de74e98eee/> ;
+	sh:closed false ;
+	sh:property [
+		sh:name "Vorname"@de, "First Name"@en ;
+		sh:path foaf:firstName ;
+		sh:order 0 ;
+		sh:datatype xsd:string ;
+		sh:minCount 1 ;
+	], [
+		sh:name "Nachname"@de, "Last Name"@en ;
+		sh:path foaf:lastName ;
+		sh:order 1 ;
+		sh:datatype xsd:string ;
+		sh:minCount 1 ;
+	], [
+		sh:name "ORCID-ID"@de, "ORCID ID"@en ;
+		sh:path m4i:orcidId ;
+		sh:order 2 ;
+		sh:datatype xsd:string ;
+		sh:maxCount 1 ;
+	], [
+		sh:node <https://w3id.org/nfdi4ing/profiles/b836ad06-e1d0-4287-a182-66de74e98eee/> ;
+		sh:name "Affiliation"@en, "Zugehörigkeit"@de ;
+		sh:path schema:affiliation ;
+		sh:order 3 ;
+	] ;
+	sh:targetClass prov:Person ;
+	prov:wasRevisionOf <https://w3id.org/nfdi4ing/profiles/e18a558c-03a2-4a89-9cfb-656aad6f6644/> .
+
+<https://w3id.org/nfdi4ing/profiles/d7d86748-b7ec-448f-9e45-cb1a1fd26b7e/> dcterms:created "2025-05-31"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "An element, feature, or factor that is liable to vary or change."@en, "Veränderliche Größe, der ein oder mehrere Werte zugeordnet werden können."@de ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Variable"@de, "m4i Variable"@en ;
+	a sh:NodeShape ;
+	sh:closed false ;
+	sh:property [
+		sh:name "Label"@en, "Bezeichnung"@de ;
+		sh:path rdfs:label ;
+		sh:order 1 ;
+		sh:datatype xsd:string ;
+		sh:maxCount 1 ;
+		sh:minCount 1 ;
+		dash:singleLine true ;
+	], [
+		sh:name "Beschreibung"@de, "description"@en ;
+		sh:path schema:description ;
+		sh:order 2 ;
+		sh:datatype xsd:string ;
+		sh:maxCount 1 ;
+		sh:minCount 0 ;
+		dash:singleLine false ;
+	] ;
+	sh:targetClass m4i:Variable .
+
+<https://w3id.org/nfdi4ing/profiles/b836ad06-e1d0-4287-a182-66de74e98eee/> dcterms:created "2025-10-08"^^xsd:date ;
+	dcterms:creator "Metadata4Ing" ;
+	dcterms:description "a social or legal institution such as a company, society, etc."@en ;
+	dcterms:license <http://spdx.org/licenses/CC0-1.0> ;
+	dcterms:title "m4i Organization"@en, "m4i Organisation"@de ;
+	a sh:NodeShape ;
+	sh:closed false ;
+	sh:property [
+		sh:name "ROR ID"@en, "ROR-ID"@de ;
+		sh:path m4i:hasRorId ;
+		sh:order 2 ;
+		sh:datatype xsd:string ;
+		sh:maxCount 1 ;
+	], [
+		sh:name "Name"@de, "Name"@en ;
+		sh:path rdfs:label ;
+		sh:order 1 ;
+		sh:datatype xsd:string ;
+		sh:maxCount 1 ;
+		sh:minCount 1 ;
+	] ;
+	sh:targetClass prov:Organization .
+
+prov:Person rdfs:subClassOf prov:Agent .
+
+prov:Organization rdfs:subClassOf prov:Agent .
+

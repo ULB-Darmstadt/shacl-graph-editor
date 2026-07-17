@@ -4,8 +4,10 @@ import { applyDefaultEditorEdgeStyle, propertyRelationshipLabel, type EditorEdge
 import { EDITOR_EDGE_STYLES } from '@/presentation/features/editor/editorGraphTheme'
 import {
   buildEditorShapeNodeId,
+  buildEditorQualifiedProxyNodeId,
   buildInheritedPropertyGroups,
   buildOwnProperties,
+  collectReachableShapeIris,
   collectVisibleShapeNodeDescriptors,
   inheritedOriginShapesForRoot,
   inheritedPropertyPrefixCount,
@@ -40,12 +42,14 @@ export function buildEditorShapeNodes(
       ownProperties: buildOwnProperties(descriptor.shape, allShapes),
       interactive: true,
       onPreview: () => openShapePreview(descriptor.shape),
-      onAddField: addField ? () => addField(descriptor.shape.nodeId.value) : undefined,
+      onAddField: addField && descriptor.nodeId === buildEditorShapeNodeId(descriptor.shape.nodeId.value)
+        ? () => addField(descriptor.shape.nodeId.value)
+        : undefined,
       onSelectShape: selectShape,
       onSelectProperty: selectProperty,
-      selected: descriptor.shape.nodeId.value === selectedShapeIri,
+      selected: descriptor.representedShapeIri === selectedShapeIri,
       selectedShapeIri: selectedShapeIri ?? null,
-      selectedPropertyKey: descriptor.shape.nodeId.value === selectedShapeIri ? selectedPropertyKey ?? null : null,
+      selectedPropertyKey: descriptor.representedShapeIri === selectedShapeIri ? selectedPropertyKey ?? null : null,
     } satisfies ShapeEditorNodeData,
   }))
 }
@@ -66,14 +70,18 @@ function buildShapeReferenceEdges(
   onRemoveReferenceEdge?: (shapeIri: string, propertyNodeId: string, targetShapeIri: string) => void,
 ): Edge[] {
   const edges: Edge[] = []
+  const reachableShapeIris = collectReachableShapeIris(rootShapes, allShapes)
+  const reachableShapes = reachableShapeIris
+    .map(shapeIri => allShapes.find(shape => shape.nodeId.value === shapeIri))
+    .filter((shape): shape is NodeShape => shape !== undefined)
 
-  for (const shape of rootShapes) {
+  for (const shape of reachableShapes) {
     for (const property of shape.properties) {
       const targetNodes = propertyNodeTargets(property)
       if (targetNodes.length === 0) continue
-      const source = buildEditorShapeNodeId(shape.nodeId.value)
+      const source = findVisibleShapeNodeId(shape.nodeId.value, visibleNodeIds, allShapes)
       for (const targetNode of targetNodes) {
-        const target = findVisibleShapeNodeId(targetNode.value, visibleNodeIds)
+        const target = findVisibleShapeNodeId(targetNode.value, visibleNodeIds, allShapes)
         if (!source || !target) continue
         edges.push({
           id: `ref:${shape.nodeId.value}::${property.nodeId.value}->${targetNode.value}`,
@@ -123,7 +131,7 @@ export function shouldAutoLayoutEditorGraph(existingNodes: Node[], nextNodes: No
   return nextNodes.some(node => !existingIds.has(node.id))
 }
 
-function findVisibleShapeNodeId(shapeIri: string, visibleNodeIds?: Set<string>): string | null {
+function findVisibleShapeNodeId(shapeIri: string, visibleNodeIds: Set<string> | undefined, allShapes: NodeShape[]): string | null {
   if (!visibleNodeIds || visibleNodeIds.size === 0) return buildEditorShapeNodeId(shapeIri)
 
   const preferredNodeId = buildEditorShapeNodeId(shapeIri)
@@ -134,12 +142,36 @@ function findVisibleShapeNodeId(shapeIri: string, visibleNodeIds?: Set<string>):
     if (target?.representedShapeIri === shapeIri) return nodeId
   }
 
+  const visibleSpecializations = [...visibleNodeIds].filter(nodeId => {
+    const target = parseEditorShapeNodeTarget(nodeId)
+    if (!target?.representedShapeIri) return false
+    return shapeInheritsFrom(target.representedShapeIri, shapeIri, allShapes)
+  })
+
+  if (visibleSpecializations.length === 1) return visibleSpecializations[0]
+
   return null
+}
+
+function shapeInheritsFrom(shapeIri: string, ancestorIri: string, allShapes: NodeShape[], visited = new Set<string>()): boolean {
+  if (shapeIri === ancestorIri) return true
+  if (visited.has(shapeIri)) return false
+
+  const shape = allShapes.find(candidate => candidate.nodeId.value === shapeIri)
+  if (!shape) return false
+
+  const nextVisited = new Set(visited)
+  nextVisited.add(shapeIri)
+
+  return (shape.inheritedShapeIris ?? []).some(inheritedIri =>
+    inheritedIri === ancestorIri || shapeInheritsFrom(inheritedIri, ancestorIri, allShapes, nextVisited),
+  )
 }
 
 export {
   applyDefaultEditorEdgeStyle,
   buildEditorShapeNodeId,
+  buildEditorQualifiedProxyNodeId,
   parseEditorShapeNodeTarget,
 }
 export type { ShapeEditorNodeData }

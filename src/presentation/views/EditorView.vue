@@ -22,6 +22,7 @@ import Button from 'primevue/button'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import { PROFILE_LICENSE_OPTIONS, fetchSubjectHeadingOptions, type SelectOption } from '@/application/profiles/profileEditorCatalogs'
+import { propertyNodeTargets } from '@/domain/profiles'
 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -31,7 +32,7 @@ import '@vue-flow/minimap/dist/style.css'
 const profileStore = useProfileEditorStore()
 const toast = useToast()
 const confirm = useConfirm()
-const { screenToFlowCoordinate } = useVueFlow()
+const { screenToFlowCoordinate, fitView } = useVueFlow()
 const { nodeShapes, profiles, isResolvingImports, rootNodeShapes } = storeToRefs(profileStore)
 
 const requestedNodePositions = ref<Record<string, XYPosition>>({})
@@ -90,7 +91,7 @@ const {
   resetUiState: resetEditorUiState,
 })
 
-const { nodes, edges, nodeTypes, edgeTypes } = useEditorGraph({
+const { nodes, edges, nodeTypes, edgeTypes, viewportRefreshTick } = useEditorGraph({
   allShapes: nodeShapes,
   canvasShapes: rootNodeShapes,
   openShapePreview,
@@ -200,7 +201,7 @@ function handleCanvasUploadProfiles(): void {
   triggerSchemaUpload()
 }
 
-function requestRemoveReferenceEdge(shapeIri: string, propertyNodeId: string, _targetShapeIri: string): void {
+function requestRemoveReferenceEdge(shapeIri: string, propertyNodeId: string, targetShapeIri: string): void {
   confirm.require({
     header: 'Remove connection',
     message: 'Remove this linked profile connection from the field?',
@@ -209,7 +210,7 @@ function requestRemoveReferenceEdge(shapeIri: string, propertyNodeId: string, _t
     rejectLabel: 'Cancel',
     acceptClass: 'p-button-danger',
     accept: () => {
-      profileStore.setPropertyNodeTarget(shapeIri, propertyNodeId, null)
+      profileStore.removePropertyTarget(shapeIri, propertyNodeId, targetShapeIri)
     },
   })
 }
@@ -364,7 +365,7 @@ function resolveConnectedPlacement(
   anchorOffsets: Map<string, number>,
 ): XYPosition | null {
   const incomingSources = allShapes.filter(candidate =>
-    candidate.properties.some(property => property.node?.value === shape.nodeId.value),
+    candidate.properties.some(property => propertyNodeTargets(property).some(target => target.value === shape.nodeId.value)),
   )
 
   for (const sourceShape of incomingSources) {
@@ -396,19 +397,19 @@ function resolveConnectedPlacement(
   }
 
   for (const property of shape.properties) {
-    const targetIri = property.node?.value
-    if (!targetIri) continue
-    const targetPosition = knownPositions.get(targetIri)
-    if (!targetPosition) continue
-    return resolveAnchoredPlacement(
-      shape,
-      allShapes,
-      targetPosition,
-      `left:${targetIri}`,
-      anchorUsage,
-      anchorOffsets,
-      -IMPORT_HORIZONTAL_OFFSET,
-    )
+    for (const target of propertyNodeTargets(property)) {
+      const targetPosition = knownPositions.get(target.value)
+      if (!targetPosition) continue
+      return resolveAnchoredPlacement(
+        shape,
+        allShapes,
+        targetPosition,
+        `left:${target.value}`,
+        anchorUsage,
+        anchorOffsets,
+        -IMPORT_HORIZONTAL_OFFSET,
+      )
+    }
   }
 
   return null
@@ -435,6 +436,19 @@ function resolveAnchoredPlacement(
     y: anchorPosition.y + nextOffset,
   }
 }
+
+watch(viewportRefreshTick, (tick) => {
+  if (tick <= 0) return
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      void fitView({
+        padding: 0.18,
+        duration: 250,
+      })
+    })
+  })
+})
 
 onMounted(() => {
   window.addEventListener('pointerdown', handleGlobalPointerDown)
@@ -542,6 +556,7 @@ void fetchSubjectHeadingOptions().then(options => {
           :update-property-field="profileStore.updatePropertyField"
           :set-shape-inheritance="profileStore.setShapeInheritance"
           :set-property-node-target="profileStore.setPropertyNodeTarget"
+          :set-property-alternative-targets="profileStore.setPropertyAlternativeTargets"
           :set-property-type="profileStore.setPropertyType"
           :delete-shape="deleteSelectedShape"
           :delete-property="deleteSelectedProperty"

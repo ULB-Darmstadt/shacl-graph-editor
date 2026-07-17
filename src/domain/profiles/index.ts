@@ -9,6 +9,7 @@ export {
 export type { ShapeKind } from '@/domain/profiles/classification'
 export { classifyShape } from '@/domain/profiles/classification'
 export {
+  inferPropertyEditorType,
   localName,
   propertyConstraintSummary,
   propertyDatatypeTargets,

@@ -7,7 +7,7 @@ export interface PropertyShape extends PropertyConstraintCarrier {
   description?: string
   path?: NamedNode
   order?: number
-  editorType?: 'datatype' | 'nodeKind' | 'profile' | 'list'
+  editorType?: 'datatype' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'list'
   allowedValues?: string[]
   inherited?: boolean
   inheritedFromShapeIri?: string

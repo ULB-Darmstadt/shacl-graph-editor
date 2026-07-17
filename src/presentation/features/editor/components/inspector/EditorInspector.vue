@@ -11,6 +11,7 @@ import {
   type SelectOption,
 } from '@/application/profiles/profileEditorCatalogs'
 import {
+  inferPropertyEditorType,
   propertyConstraintSummary,
   propertyDatatypeTargets,
   propertyNodeTargets,
@@ -49,6 +50,7 @@ type EditablePropertyField =
   | 'order'
   | 'defaultValue'
   | 'allowedValues'
+  | 'alternativeTargets'
   | 'message'
   | 'severity'
   | 'equals'
@@ -59,6 +61,8 @@ type EditablePropertyField =
   | 'minExclusive'
   | 'maxInclusive'
   | 'maxExclusive'
+  | 'qualifiedMinCount'
+  | 'qualifiedMaxCount'
 
 const props = defineProps<{
   shape: NodeShape | null
@@ -69,6 +73,7 @@ const props = defineProps<{
   updatePropertyField: (shapeIri: string, propertyNodeId: string, field: EditablePropertyField, value: string | null) => void
   setShapeInheritance: (shapeIri: string, inheritedShapeIri: string | null) => void
   setPropertyNodeTarget: (shapeIri: string, propertyNodeId: string, targetShapeIri: string | null) => void
+  setPropertyAlternativeTargets: (shapeIri: string, propertyNodeId: string, targetShapeIris: string[]) => void
   setPropertyType: (shapeIri: string, propertyNodeId: string, type: PropertyEditorType) => void
   deleteShape: (shapeIri: string) => { ok: boolean; reason?: string }
   deleteProperty: (shapeIri: string, propertyNodeId: string) => boolean
@@ -90,7 +95,12 @@ const propertyNodeTarget = computed(() => props.property ? propertyNodeTargets(p
 const propertyRelations = computed(() => props.property ? propertyRelationshipKinds(props.property) : [])
 const propertyConstraintText = computed(() => props.property ? propertyConstraintSummary(props.property) ?? null : null)
 const propertyAllowedValuesText = computed(() => props.property?.allowedValues?.join('\n') ?? null)
-const propertyTypeValue = computed<PropertyEditorType>(() => props.property?.editorType ?? 'datatype')
+const propertyAlternativeTargets = computed(() =>
+  props.property?.alternatives?.map(alternative => alternative.node?.value ?? '') ?? [],
+)
+const propertyTypeValue = computed<PropertyEditorType>(() =>
+  props.property ? inferPropertyEditorType(props.property) as PropertyEditorType : 'datatype',
+)
 const inheritanceOptions = computed(() =>
   props.allShapes
     .filter(shape => shape.nodeId.value !== props.shape?.nodeId.value)
@@ -135,7 +145,9 @@ const missingCreator = computed(() => !props.property && !props.shape?.creator?.
 const missingCreated = computed(() => !props.property && !props.shape?.created?.trim())
 const missingLicense = computed(() => !props.property && !props.shape?.license?.trim())
 const missingPropertyTerm = computed(() => Boolean(props.property) && !props.property?.path?.value?.trim())
-const missingProfileTarget = computed(() => propertyTypeValue.value === 'profile' && !propertyNodeTarget.value)
+const missingProfileTarget = computed(() =>
+  (propertyTypeValue.value === 'profile' || propertyTypeValue.value === 'qualifiedProfile') && !propertyNodeTarget.value,
+)
 
 onMounted(async () => {
   try {
@@ -163,6 +175,28 @@ function onInheritanceChange(value: string): void {
 function onNodeTargetChange(value: string): void {
   if (!props.shape || !props.property) return
   props.setPropertyNodeTarget(props.shape.nodeId.value, props.property.nodeId.value, value || null)
+}
+
+function onAlternativeTargetChange(index: number, value: string): void {
+  if (!props.shape || !props.property) return
+  const next = [...propertyAlternativeTargets.value]
+  next[index] = value
+  props.setPropertyAlternativeTargets(props.shape.nodeId.value, props.property.nodeId.value, next)
+}
+
+function addAlternativeTarget(): void {
+  if (!props.shape || !props.property) return
+  props.setPropertyAlternativeTargets(
+    props.shape.nodeId.value,
+    props.property.nodeId.value,
+    [...propertyAlternativeTargets.value, ''],
+  )
+}
+
+function removeAlternativeTarget(index: number): void {
+  if (!props.shape || !props.property) return
+  const next = propertyAlternativeTargets.value.filter((_, currentIndex) => currentIndex !== index)
+  props.setPropertyAlternativeTargets(props.shape.nodeId.value, props.property.nodeId.value, next)
 }
 
 function onPropertyTypeChange(value: string): void {
@@ -313,13 +347,25 @@ function requestDeleteProperty(): void {
               @update:value="updateProperty('nodeKind', $event)"
             />
             <InspectorEditableField
-              v-else-if="propertyTypeValue === 'profile'"
+              v-else-if="propertyTypeValue === 'class'"
+              label="Class"
+              :value="property.cls?.value ?? null"
+              placeholder="https://...class"
+              helper-text="Serialized as sh:class without creating a graph link."
+              @update:value="updateProperty('cls', $event)"
+            />
+            <InspectorEditableField
+              v-else-if="propertyTypeValue === 'profile' || propertyTypeValue === 'qualifiedProfile'"
               label="Node Target"
               :value="propertyNodeTarget"
               placeholder=""
               :options="propertyNodeOptions"
               :invalid="missingProfileTarget"
-              :helper-text="missingProfileTarget ? 'Select a target profile to create the sh:node connection.' : null"
+              :helper-text="missingProfileTarget
+                ? (propertyTypeValue === 'qualifiedProfile'
+                  ? 'Select a target profile to create the sh:qualifiedValueShape connection.'
+                  : 'Select a target profile to create the sh:node connection.')
+                : null"
               @update:value="onNodeTargetChange"
             />
             <InspectorEditableField
@@ -331,12 +377,50 @@ function requestDeleteProperty(): void {
               helper-text="Serialized as sh:in."
               @update:value="updateProperty('allowedValues', $event)"
             />
+            <div v-else-if="propertyTypeValue === 'oneOfProfiles'" class="alternative-targets">
+              <span class="editable-field__label ui-sidepanel-field-label">Alternative Profile Targets</span>
+              <span class="alternative-targets__helper">Serialized as `sh:or` with one profile dropdown per alternative.</span>
+              <div v-for="(targetValue, index) in propertyAlternativeTargets" :key="`${property.nodeId.value}:alt:${index}`" class="alternative-target-row">
+                <InspectorEditableField
+                  :label="`Profile Option ${index + 1}`"
+                  :value="targetValue || null"
+                  placeholder=""
+                  :options="propertyNodeOptions"
+                  @update:value="onAlternativeTargetChange(index, $event)"
+                />
+                <button type="button" class="alternative-target-remove" title="Remove profile option" @click="removeAlternativeTarget(index)">
+                  <i class="pi pi-times" />
+                </button>
+              </div>
+              <button type="button" class="alternative-target-add" @click="addAlternativeTarget">
+                <i class="pi pi-plus" />
+                <span>Add profile option</span>
+              </button>
+            </div>
           </section>
 
           <section class="inspector-section">
             <h3 class="inspector-section-title ui-sidepanel-section-title">Form Behavior</h3>
             <InspectorEditableField label="Minimum Required Entries" :value="property.minCount?.toString() ?? null" placeholder="1" type="number" @update:value="updateProperty('minCount', $event)" />
             <InspectorEditableField label="Maximum Possible Entries" :value="property.maxCount?.toString() ?? null" placeholder="*" type="number" @update:value="updateProperty('maxCount', $event)" />
+            <InspectorEditableField
+              v-if="propertyTypeValue === 'qualifiedProfile'"
+              label="Minimum Matching Profiles"
+              :value="property.qualifiedMinCount?.toString() ?? null"
+              placeholder="1"
+              type="number"
+              helper-text="Serialized as sh:qualifiedMinCount."
+              @update:value="updateProperty('qualifiedMinCount', $event)"
+            />
+            <InspectorEditableField
+              v-if="propertyTypeValue === 'qualifiedProfile'"
+              label="Maximum Matching Profiles"
+              :value="property.qualifiedMaxCount?.toString() ?? null"
+              placeholder="*"
+              type="number"
+              helper-text="Serialized as sh:qualifiedMaxCount."
+              @update:value="updateProperty('qualifiedMaxCount', $event)"
+            />
             <InspectorEditableField label="Position On Metadata Form" :value="property.order?.toString() ?? null" placeholder="0" type="number" @update:value="updateProperty('order', $event)" />
           </section>
         </template>
@@ -572,6 +656,51 @@ function requestDeleteProperty(): void {
 
 .inspector-section-title {
   margin: 0;
+}
+
+.alternative-targets {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.alternative-targets__helper {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.alternative-target-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.alternative-target-remove,
+.alternative-target-add {
+  min-height: 42px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.alternative-target-remove {
+  width: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.alternative-target-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  align-self: start;
 }
 
 .toggle-field {

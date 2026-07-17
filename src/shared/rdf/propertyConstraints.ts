@@ -1,6 +1,8 @@
 import { NamedNode as RdfNamedNode, type BlankNode, type Collection, type Literal, type NamedNode, type Store } from 'rdflib'
 import {
+  DCT_TITLE,
   DASH_DEFAULT_VALUE,
+  RDF_TYPE,
   RDFS_LABEL,
   SH_AND,
   SH_CLASS,
@@ -24,10 +26,12 @@ import {
   SH_NOT,
   SH_OR,
   SH_PATTERN,
+  SH_PROPERTY,
   SH_QUALIFIED_MAX_COUNT,
   SH_QUALIFIED_MIN_COUNT,
   SH_QUALIFIED_VALUE_SHAPE,
   SH_SEVERITY,
+  SH_NODE_SHAPE,
   SH_XONE,
 } from './rdfConstants'
 
@@ -263,6 +267,18 @@ export function propertyRelationshipKinds(property: PropertyConstraintCarrier): 
   return kinds
 }
 
+export function inferPropertyEditorType(property: PropertyConstraintCarrier): 'datatype' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'list' {
+  if (property.node) return 'profile'
+  if (property.qualifiedValueShape || property.qualifiedMinCount !== undefined || property.qualifiedMaxCount !== undefined) {
+    return 'qualifiedProfile'
+  }
+  if (property.alternatives?.length) return 'oneOfProfiles'
+  if (property.allowedValues !== undefined) return 'list'
+  if (property.nodeKind) return 'nodeKind'
+  if (property.cls) return 'class'
+  return 'datatype'
+}
+
 export function propertyHasDirectValueSemantics(property: PropertyConstraintCarrier): boolean {
   if (propertyNodeTargets(property).length === 0) return true
   if (propertyHasDirectConstraint(property)) return true
@@ -337,21 +353,81 @@ function isConstraintContainer(term: Literal | NamedNode | BlankNode | Collectio
 
 function extractConstraint(nodeId: NamedNode | BlankNode, store: Store): PropertyConstraint {
   const constraint: PropertyConstraint = {}
+  const isNamedNodeShapeReference = nodeId.termType === 'NamedNode' && (
+    store.match(nodeId, RDF_TYPE, SH_NODE_SHAPE, null).length > 0
+    || store.match(nodeId, SH_PROPERTY, null, null).length > 0
+  )
+  const preferredLabel = createPreferredLiteralTracker()
+  const preferredDescription = createPreferredLiteralTracker()
 
   store.match(nodeId, null, null, null).forEach(t => {
     const predicate = t.predicate.value
     const obj = t.object as Literal | NamedNode | BlankNode | Collection
+    if (isNamedNodeShapeReference && predicate === SH_NODE.value) return
     if (applyConstraintPredicate(constraint, predicate, obj, store)) return
-    if (predicate === SH_NAME.value && obj.termType === 'Literal') constraint.label = obj.value
-    else if (predicate === RDFS_LABEL.value && obj.termType === 'Literal' && !constraint.label) constraint.label = obj.value
-    else if (predicate === SH_DESCRIPTION.value && obj.termType === 'Literal') constraint.description = obj.value
+    if (predicate === DCT_TITLE.value && obj.termType === 'Literal') preferredLabel.consider(obj)
+    else if (predicate === SH_NAME.value && obj.termType === 'Literal') preferredLabel.consider(obj)
+    else if (predicate === RDFS_LABEL.value && obj.termType === 'Literal') preferredLabel.consider(obj)
+    else if (predicate === SH_DESCRIPTION.value && obj.termType === 'Literal') preferredDescription.consider(obj)
   })
+
+  constraint.label = preferredLabel.value
+  constraint.description = preferredDescription.value
+
+  if (isNamedNodeShapeReference && !constraint.node) {
+    constraint.node = nodeId
+  }
+
+  // Imported profiles often appear only as named references in the current store.
+  // If no explicit value semantics were discovered, treat a named constraint node
+  // as a profile target so qualified/node links survive cross-file parsing.
+  if (
+    nodeId.termType === 'NamedNode'
+    && !constraint.node
+    && !constraint.datatype
+    && !constraint.cls
+    && !constraint.nodeKind
+    && !constraint.pattern
+  ) {
+    constraint.node = nodeId
+  }
 
   if (!constraint.label && nodeId.termType === 'NamedNode') {
     constraint.label = localName(nodeId.value)
   }
 
   return constraint
+}
+
+function createPreferredLiteralTracker(): {
+  value: string | undefined
+  consider: (literal: Literal) => void
+} {
+  let bestScore = -1
+  let bestValue: string | undefined
+
+  return {
+    get value() {
+      return bestValue
+    },
+    consider(literal: Literal) {
+      const score = languagePreferenceScore(literal)
+      if (score > bestScore) {
+        bestScore = score
+        bestValue = literal.value
+      }
+    },
+  }
+}
+
+function languagePreferenceScore(literal: Literal): number {
+  const language = literal.lang?.toLowerCase() ?? ''
+  if (language === 'en') return 3
+  if (language.startsWith('en-')) return 3
+  if (language === 'de') return 2
+  if (language.startsWith('de-')) return 2
+  if (!language) return 1
+  return 0
 }
 
 function propertyHasDirectConstraint(property: PropertyConstraintCarrier): boolean {
