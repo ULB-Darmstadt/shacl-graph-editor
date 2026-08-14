@@ -19,6 +19,7 @@ import { PREFIX_APS } from '@/shared/rdf/rdfConstants'
 export const useProfileEditorStore = defineStore('profiles', () => {
   const applicationProfile = shallowRef<ApplicationProfile>(new ApplicationProfile())
   const isResolvingImports = ref(false)
+  const fitViewRequestTick = ref(0)
   const lastResolveErrors = ref<Array<{
     iri: string
     error: string
@@ -110,6 +111,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     }
     await resolveAllImports()
     syncSerializedProfiles()
+    fitViewRequestTick.value += 1
   }
 
   async function addProfileFromTurtle(
@@ -121,6 +123,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     applicationProfile.value.upsert(profile)
     await resolveAllImports()
     syncSerializedProfiles()
+    fitViewRequestTick.value += 1
   }
 
   async function resolveAllImports(): Promise<void> {
@@ -143,6 +146,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     applicationProfile.value.upsert({ ...profile, iri })
     await resolveAllImports()
     syncSerializedProfiles()
+    fitViewRequestTick.value += 1
   }
 
   function reset(): void {
@@ -499,6 +503,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     rootNodeShapes,
     hasProfiles,
     isResolvingImports,
+    fitViewRequestTick,
     lastResolveErrors,
     lastResolveErrorsSummary,
     removeProfile,

@@ -33,11 +33,15 @@ const profileStore = useProfileEditorStore()
 const toast = useToast()
 const confirm = useConfirm()
 const { screenToFlowCoordinate, fitView } = useVueFlow()
-const { nodeShapes, profiles, isResolvingImports, rootNodeShapes } = storeToRefs(profileStore)
+const { nodeShapes, profiles, isResolvingImports, rootNodeShapes, fitViewRequestTick } = storeToRefs(profileStore)
 
 const requestedNodePositions = ref<Record<string, XYPosition>>({})
 const pendingPlacementAnchor = ref<XYPosition | null>(null)
 const pendingPlacementOffset = ref(0)
+const pendingProfilePlacement = ref(false)
+const placementPreviewClientPosition = ref<{ x: number; y: number } | null>(null)
+const placementPreviewFlowPosition = ref<XYPosition | null>(null)
+const lastGraphPointerClientPosition = ref<{ x: number; y: number } | null>(null)
 let pendingPlacementResetTimer: number | null = null
 
 const {
@@ -91,9 +95,10 @@ const {
   resetUiState: resetEditorUiState,
 })
 
-const { nodes, edges, nodeTypes, edgeTypes, viewportRefreshTick } = useEditorGraph({
+const { nodes, edges, nodeTypes, edgeTypes } = useEditorGraph({
   allShapes: nodeShapes,
   canvasShapes: rootNodeShapes,
+  relayoutRequestTick: fitViewRequestTick,
   openShapePreview,
   addField: createProperty,
   removeReferenceEdge: requestRemoveReferenceEdge,
@@ -119,12 +124,27 @@ const defaultSubject = ref(localStorage.getItem('editor.defaultSubject') ?? '')
 const IMPORT_SIBLING_GAP = 36
 const IMPORT_HORIZONTAL_OFFSET = 460
 
+const isPlacementHintVisible = computed(() => pendingProfilePlacement.value && placementPreviewClientPosition.value !== null)
+const placementHintStyle = computed(() => {
+  if (!placementPreviewClientPosition.value || !graphShellRef.value) return null
+  const rect = graphShellRef.value.getBoundingClientRect()
+  return {
+    left: `${placementPreviewClientPosition.value.x - rect.left + 18}px`,
+    top: `${placementPreviewClientPosition.value.y - rect.top + 18}px`,
+  }
+})
+
 function createProfile(): void {
   const iri = profileStore.createProfile()
   applyProfileDefaults(iri)
   queueShapePlacement(iri, 0)
   const shape = profileStore.applicationProfile.findNodeShape(iri)
   if (shape) selectShape(shape)
+}
+
+function createProfileAt(position: XYPosition): void {
+  pendingPlacementAnchor.value = position
+  createProfile()
 }
 
 function createProperty(shapeIri: string): void {
@@ -151,6 +171,7 @@ function deleteSelectedProperty(shapeIri: string, propertyNodeId: string): boole
 }
 
 function openCanvasMenu(event: MouseEvent): void {
+  cancelPendingProfilePlacement()
   resetPendingPlacement()
   pendingPlacementAnchor.value = screenToFlowCoordinate({
     x: event.clientX,
@@ -177,6 +198,7 @@ function handleGlobalPointerDown(event: PointerEvent): void {
 }
 
 function handlePaneClick(): void {
+  if (pendingProfilePlacement.value) return
   clearSelection()
   closeCanvasMenu()
 }
@@ -187,8 +209,13 @@ function handleShellContextMenu(event: MouseEvent): void {
 }
 
 function handleCanvasNewProfile(): void {
+  const shouldPlaceImmediately = pendingPlacementAnchor.value !== null
   closeCanvasMenu()
-  createProfile()
+  if (shouldPlaceImmediately) {
+    createProfileAt(pendingPlacementAnchor.value as XYPosition)
+    return
+  }
+  beginPendingProfilePlacement()
 }
 
 function handleCanvasExistingProfile(): void {
@@ -220,15 +247,18 @@ function openBottomAddMenu(): void {
   if (!shell) return
 
   const rect = shell.getBoundingClientRect()
-  const screenX = rect.left + (rect.width / 2)
-  const screenY = rect.top + (rect.height / 2)
+  const pointer = lastGraphPointerClientPosition.value ?? {
+    x: rect.left + (rect.width / 2),
+    y: rect.top + (rect.height / 2),
+  }
   resetPendingPlacement()
-  pendingPlacementAnchor.value = screenToFlowCoordinate({ x: screenX, y: screenY })
+  pendingPlacementAnchor.value = null
   canvasMenu.value = {
     x: rect.left + (rect.width / 2) - 110,
     y: rect.bottom - 150,
     open: true,
   }
+  updatePlacementPreview(pointer.x, pointer.y)
 }
 
 function applyProfileDefaults(shapeIri: string): void {
@@ -260,6 +290,59 @@ function queueShapePlacementAt(shapeIri: string, position: XYPosition): void {
     ...requestedNodePositions.value,
     [`shape:${shapeIri}`]: position,
   }
+}
+
+function beginPendingProfilePlacement(): void {
+  const shell = graphShellRef.value
+  if (!shell) return
+
+  pendingProfilePlacement.value = true
+  closeCanvasMenu()
+
+  const rect = shell.getBoundingClientRect()
+  const pointer = lastGraphPointerClientPosition.value ?? {
+    x: rect.left + (rect.width / 2),
+    y: rect.top + (rect.height / 2),
+  }
+  updatePlacementPreview(pointer.x, pointer.y)
+}
+
+function cancelPendingProfilePlacement(): void {
+  pendingProfilePlacement.value = false
+  placementPreviewClientPosition.value = null
+  placementPreviewFlowPosition.value = null
+}
+
+function updatePlacementPreview(clientX: number, clientY: number): void {
+  lastGraphPointerClientPosition.value = { x: clientX, y: clientY }
+  if (!pendingProfilePlacement.value) return
+
+  placementPreviewClientPosition.value = { x: clientX, y: clientY }
+  placementPreviewFlowPosition.value = screenToFlowCoordinate({ x: clientX, y: clientY })
+}
+
+function handleGraphPointerMove(event: PointerEvent): void {
+  updatePlacementPreview(event.clientX, event.clientY)
+}
+
+function handleGraphShellClick(event: MouseEvent): void {
+  if (!pendingProfilePlacement.value || event.button !== 0) return
+
+  const target = event.target as Node | null
+  if (!target) return
+  if (canvasMenuRef.value?.contains(target)) return
+  if (canvasActionBarRef.value?.contains(target)) return
+
+  event.preventDefault()
+  event.stopPropagation()
+
+  const placement = placementPreviewFlowPosition.value ?? screenToFlowCoordinate({
+    x: event.clientX,
+    y: event.clientY,
+  })
+
+  cancelPendingProfilePlacement()
+  createProfileAt(placement)
 }
 
 function resetPendingPlacement(): void {
@@ -357,6 +440,29 @@ watch(
   },
 )
 
+watch(nodes, nextNodes => {
+  const nextPositions: Record<string, XYPosition> = {}
+
+  for (const node of nextNodes) {
+    nextPositions[node.id] = {
+      x: node.position.x,
+      y: node.position.y,
+    }
+  }
+
+  const currentEntries = Object.entries(requestedNodePositions.value)
+  const nextEntries = Object.entries(nextPositions)
+  const unchanged = currentEntries.length === nextEntries.length
+    && nextEntries.every(([nodeId, position]) => {
+      const current = requestedNodePositions.value[nodeId]
+      return current?.x === position.x && current?.y === position.y
+    })
+
+  if (!unchanged) {
+    requestedNodePositions.value = nextPositions
+  }
+}, { deep: true })
+
 function resolveConnectedPlacement(
   shape: (typeof rootNodeShapes.value)[number],
   allShapes: (typeof rootNodeShapes.value),
@@ -437,7 +543,7 @@ function resolveAnchoredPlacement(
   }
 }
 
-watch(viewportRefreshTick, (tick) => {
+watch(fitViewRequestTick, (tick) => {
   if (tick <= 0) return
 
   requestAnimationFrame(() => {
@@ -452,12 +558,20 @@ watch(viewportRefreshTick, (tick) => {
 
 onMounted(() => {
   window.addEventListener('pointerdown', handleGlobalPointerDown)
+  window.addEventListener('keydown', handleGlobalKeyDown)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('pointerdown', handleGlobalPointerDown)
+  window.removeEventListener('keydown', handleGlobalKeyDown)
+  cancelPendingProfilePlacement()
   resetPendingPlacement()
 })
+
+function handleGlobalKeyDown(event: KeyboardEvent): void {
+  if (event.key !== 'Escape' || !pendingProfilePlacement.value) return
+  cancelPendingProfilePlacement()
+}
 
 void fetchSubjectHeadingOptions().then(options => {
   subjectHeadingOptions.value = options
@@ -473,7 +587,14 @@ void fetchSubjectHeadingOptions().then(options => {
     <input ref="schemaInputRef" type="file" accept=".ttl,.shacl,text/turtle" multiple style="display:none" @change="onSchemaFiles" />
 
     <div class="editor-workspace">
-      <div ref="graphShellRef" class="editor-graph-shell" @contextmenu="handleShellContextMenu">
+      <div
+        ref="graphShellRef"
+        class="editor-graph-shell"
+        :class="{ 'is-placement-active': pendingProfilePlacement }"
+        @contextmenu="handleShellContextMenu"
+        @pointermove="handleGraphPointerMove"
+        @click.capture="handleGraphShellClick"
+      >
         <div v-if="isResolvingImports" class="graph-status">
           <i class="pi pi-spin pi-spinner" /> Resolving imports...
         </div>
@@ -502,9 +623,19 @@ void fetchSubjectHeadingOptions().then(options => {
           </VueFlow>
 
           <div class="canvas-hint">
-            Use Add Profile below or right-click empty canvas.
+            {{ pendingProfilePlacement ? 'Move the profile and click to place it. Press Escape to cancel.' : 'Use Add Profile below or right-click empty canvas.' }}
           </div>
         </template>
+
+        <div
+          v-if="isPlacementHintVisible && placementHintStyle"
+          class="placement-hint-float"
+          :style="placementHintStyle"
+          aria-hidden="true"
+        >
+          <span class="placement-hint-float__plus">+</span>
+          <span>Click to add</span>
+        </div>
 
         <div
           v-if="canvasMenu.open"
@@ -638,6 +769,10 @@ void fetchSubjectHeadingOptions().then(options => {
   user-select: none;
 }
 
+.editor-graph-shell.is-placement-active {
+  cursor: copy;
+}
+
 .graph-status {
   position: absolute;
   top: 14px;
@@ -734,6 +869,37 @@ void fetchSubjectHeadingOptions().then(options => {
   font-size: 0.8rem;
   box-shadow: var(--shadow-sm);
   pointer-events: none;
+}
+
+.placement-hint-float {
+  position: absolute;
+  z-index: 7;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(90, 62, 155, 0.35);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--color-text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(4px);
+}
+
+.placement-hint-float__plus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 0.95rem;
+  line-height: 1;
 }
 
 .settings-form {

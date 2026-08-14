@@ -113,22 +113,48 @@ export function preserveEditorNodePositions(
   nextNodes: Node[],
   positionForNewNode: (node: Node, index: number) => Node['position'],
 ): Node[] {
-  const existingPositions = new Map<string, Node['position']>()
+  const existingNodesById = new Map<string, Node & { dimensions?: { width?: number; height?: number } }>()
+  const existingNodesByShapeIri = new Map<string, Node & { dimensions?: { width?: number; height?: number } }>()
   for (const node of existingNodes) {
-    existingPositions.set(node.id, node.position)
+    const typedNode = node as Node & { dimensions?: { width?: number; height?: number } }
+    existingNodesById.set(node.id, typedNode)
+
+    const representedShapeIri = representedShapeIriFromNode(node)
+    if (representedShapeIri && !existingNodesByShapeIri.has(representedShapeIri)) {
+      existingNodesByShapeIri.set(representedShapeIri, typedNode)
+    }
   }
 
-  return nextNodes.map((node, index) => ({
-    ...node,
-    position: existingPositions.get(node.id) ?? positionForNewNode(node, index),
-  }))
+  return nextNodes.map((node, index) => {
+    const existingNode = existingNodesById.get(node.id)
+      ?? (representedShapeIriFromNode(node)
+        ? existingNodesByShapeIri.get(representedShapeIriFromNode(node) as string)
+        : undefined)
+
+    return {
+      ...node,
+      ...(existingNode?.dimensions ? { dimensions: existingNode.dimensions } : {}),
+      position: existingNode?.position ?? positionForNewNode(node, index),
+    }
+  })
 }
 
 export function shouldAutoLayoutEditorGraph(existingNodes: Node[], nextNodes: Node[]): boolean {
   if (existingNodes.length === 0) return nextNodes.length > 0
 
   const existingIds = new Set(existingNodes.map(node => node.id))
-  return nextNodes.some(node => !existingIds.has(node.id))
+  const existingShapeIris = new Set(existingNodes.map(representedShapeIriFromNode).filter((value): value is string => Boolean(value)))
+
+  return nextNodes.some(node => {
+    if (existingIds.has(node.id)) return false
+    const representedShapeIri = representedShapeIriFromNode(node)
+    return !representedShapeIri || !existingShapeIris.has(representedShapeIri)
+  })
+}
+
+function representedShapeIriFromNode(node: Node): string | null {
+  const data = node.data as { representedShapeIri?: unknown } | undefined
+  return typeof data?.representedShapeIri === 'string' ? data.representedShapeIri : null
 }
 
 function findVisibleShapeNodeId(shapeIri: string, visibleNodeIds: Set<string> | undefined, allShapes: NodeShape[]): string | null {
@@ -173,5 +199,6 @@ export {
   buildEditorShapeNodeId,
   buildEditorQualifiedProxyNodeId,
   parseEditorShapeNodeTarget,
+  representedShapeIriFromNode,
 }
 export type { ShapeEditorNodeData }

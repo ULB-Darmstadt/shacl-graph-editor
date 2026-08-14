@@ -5,6 +5,7 @@ import {
   buildEditorShapeNodes,
   buildEditorStructuralEdges,
   preserveEditorNodePositions,
+  representedShapeIriFromNode,
   shouldAutoLayoutEditorGraph,
 } from '@/presentation/features/editor/editorGraphBuilders'
 import {
@@ -18,6 +19,7 @@ import { resolveRenderedNodeOverlaps } from '@/presentation/features/editor/layo
 interface UseEditorGraphOptions {
   allShapes: Ref<NodeShape[]>
   canvasShapes: Ref<NodeShape[]>
+  relayoutRequestTick?: Ref<number>
   openShapePreview: (shape: NodeShape) => void | Promise<void>
   addField?: (shapeIri: string) => void
   removeReferenceEdge?: (shapeIri: string, propertyNodeId: string, targetShapeIri: string) => void
@@ -31,10 +33,7 @@ interface UseEditorGraphOptions {
 export function useEditorGraph(options: UseEditorGraphOptions) {
   const nodes = ref<Node[]>([])
   const edges = ref<Edge[]>([])
-  const viewportRefreshTick = ref(0)
   let pendingRenderedLayoutPass = 0
-  let pendingFullRelayoutPass = 0
-  let lastFullRelayoutSignature = ''
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nodeTypes: any = editorNodeTypes
@@ -66,6 +65,23 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
     }
   }
 
+  function updateSelectionState(): void {
+    const selectedShapeIri = options.selectedShapeIri?.value ?? null
+    const selectedPropertyKey = options.selectedPropertyKey?.value ?? null
+
+    for (const node of nodes.value as Array<Node & { data?: Record<string, unknown> }>) {
+      if (!node.data) continue
+
+      const representedShapeIri = typeof node.data.representedShapeIri === 'string'
+        ? node.data.representedShapeIri
+        : null
+
+      node.data.selected = representedShapeIri === selectedShapeIri
+      node.data.selectedShapeIri = selectedShapeIri
+      node.data.selectedPropertyKey = representedShapeIri === selectedShapeIri ? selectedPropertyKey : null
+    }
+  }
+
   function scheduleRenderedLayoutPass(): void {
     pendingRenderedLayoutPass += 1
     const passId = pendingRenderedLayoutPass
@@ -80,36 +96,6 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
         requestAnimationFrame(() => {
           if (passId !== pendingRenderedLayoutPass) return
           applyRenderedLayoutPass(passId)
-        })
-      })
-    })
-  }
-
-  function graphStructureSignature(nextNodes: Node[], nextEdges: Edge[]): string {
-    return [
-      nextNodes.map(node => node.id).sort().join('|'),
-      nextEdges.map(edge => `${edge.source}->${edge.target}:${edge.sourceHandle ?? ''}`).sort().join('|'),
-    ].join('::')
-  }
-
-  function scheduleFullRelayout(nextNodes: Node[], nextEdges: Edge[]): void {
-    const signature = graphStructureSignature(nextNodes, nextEdges)
-    if (signature === lastFullRelayoutSignature) return
-
-    lastFullRelayoutSignature = signature
-    pendingFullRelayoutPass += 1
-    const passId = pendingFullRelayoutPass
-
-    void nextTick(() => {
-      if (passId !== pendingFullRelayoutPass) return
-
-      requestAnimationFrame(() => {
-        if (passId !== pendingFullRelayoutPass) return
-
-        requestAnimationFrame(() => {
-          if (passId !== pendingFullRelayoutPass) return
-          rebuildGraph(true)
-          viewportRefreshTick.value += 1
         })
       })
     })
@@ -139,22 +125,30 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
     const existingNodes = nodes.value as Node[]
     const existingIds = new Set(existingNodes.map(node => node.id))
     const newNodes = shapeNodes.filter(node => !existingIds.has(node.id))
+    const existingShapeIris = new Set(existingNodes.map(representedShapeIriFromNode).filter((value): value is string => Boolean(value)))
+    const hasNewRepresentedShapes = shapeNodes.some(node => {
+      const representedShapeIri = representedShapeIriFromNode(node)
+      return !representedShapeIri || !existingShapeIris.has(representedShapeIri)
+    })
     const allNewNodesHaveRequestedPositions = newNodes.length > 0 && newNodes.every(node => Boolean(options.requestedNodePositions?.value[node.id]))
     const shouldRunAutoLayout = (shouldAutoLayoutEditorGraph(existingNodes, shapeNodes) || forceAutoLayout) && !allNewNodesHaveRequestedPositions
+    const shouldRunRenderedLayoutPass = forceAutoLayout || (hasNewRepresentedShapes && !allNewNodesHaveRequestedPositions)
 
     nodes.value = shouldRunAutoLayout
       ? autoLayoutNodes(shapeNodes, nextEdges)
       : preserveEditorNodePositions(existingNodes, shapeNodes, positionForNewNode)
     edges.value = nextEdges
-    scheduleRenderedLayoutPass()
-
-    if (!forceAutoLayout && shouldRunAutoLayout) {
-      scheduleFullRelayout(shapeNodes, nextEdges)
+    if (shouldRunRenderedLayoutPass) {
+      scheduleRenderedLayoutPass()
     }
   }
 
   watch([options.canvasShapes, options.allShapes], () => rebuildGraph(), { immediate: true })
-  watch([options.selectedShapeIri ?? ref(null), options.selectedPropertyKey ?? ref(null)], () => rebuildGraph())
+  watch(options.relayoutRequestTick ?? ref(0), tick => {
+    if (tick <= 0) return
+    rebuildGraph(true)
+  })
+  watch([options.selectedShapeIri ?? ref(null), options.selectedPropertyKey ?? ref(null)], updateSelectionState)
   watch(() => {
     const requestedPositions = (options.requestedNodePositions?.value ?? {}) as Record<string, { x: number; y: number }>
     return Object.entries(requestedPositions)
@@ -179,6 +173,5 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
     edges,
     nodeTypes,
     edgeTypes,
-    viewportRefreshTick,
   }
 }
