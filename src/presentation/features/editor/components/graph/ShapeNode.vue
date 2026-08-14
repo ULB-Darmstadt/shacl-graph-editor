@@ -53,8 +53,8 @@ function selectProperty(property: PropertyShape): void {
   props.data.onSelectProperty?.(props.data.shape, property)
 }
 
-function addField(): void {
-  props.data.onAddField?.()
+function addField(shapeIri: string): void {
+  props.data.onAddField?.(shapeIri)
 }
 
 function selectInheritedShape(shapeIri: string): void {
@@ -149,11 +149,12 @@ function hasTermIri(property: PropertyShape): boolean {
   >
     <header>
       <Handle
-        v-if="isInteractive()"
         id="shape-header"
         type="target"
         :position="Position.Left"
+        :connectable="isInteractive()"
         class="handle handle-shape-target"
+        :class="{ 'handle-readonly': !isInteractive() }"
       />
       <i class="pi pi-bookmark" />
       <span class="label">{{ label() }}</span>
@@ -177,8 +178,10 @@ function hasTermIri(property: PropertyShape): boolean {
         :style="{ paddingLeft: `${12 + (section.depth * 18)}px` }"
         @click.stop="selectInheritedShape(section.shapeIri)"
       >
-        <i class="pi pi-sitemap section-icon" />
-        <span>{{ section.title }} (Inherited)</span>
+        <span class="inherited-section-label__content">
+          <i class="pi pi-sitemap section-icon" />
+          <span>{{ section.title }} (Inherited)</span>
+        </span>
       </div>
 
       <ul class="properties">
@@ -201,15 +204,27 @@ function hasTermIri(property: PropertyShape): boolean {
           </template>
 
           <Handle
-            v-if="isInteractive() && hasRelationshipHandle(property)"
+            v-if="hasRelationshipHandle(property)"
             :id="`ref:${property.nodeId.value}`"
             type="source"
             :position="Position.Right"
+            :connectable="isInteractive()"
             class="handle handle-ref-source handle-active"
+            :class="{ 'handle-readonly': !isInteractive() }"
           />
-          <span v-else class="handle-indicator handle-disabled" aria-hidden="true" />
         </li>
       </ul>
+
+      <button
+        v-if="data.onAddField && isSelectedInheritedProfile(section.shapeIri)"
+        type="button"
+        class="add-field-row add-field-row--inherited"
+        :style="{ paddingLeft: `${12 + (section.depth * 18)}px` }"
+        @click.stop="addField(section.shapeIri)"
+      >
+        <i class="pi pi-plus add-field-row__icon" />
+        <span class="prop-name">Add Field</span>
+      </button>
     </template>
 
     <div v-if="inheritedProperties().length > 0 && ownProperties().length > 0" class="section-label">
@@ -237,13 +252,14 @@ function hasTermIri(property: PropertyShape): boolean {
         </template>
 
         <Handle
-          v-if="isInteractive() && hasRelationshipHandle(property)"
+          v-if="hasRelationshipHandle(property)"
           :id="`ref:${property.nodeId.value}`"
           type="source"
           :position="Position.Right"
+          :connectable="isInteractive()"
           class="handle handle-ref-source handle-active"
+          :class="{ 'handle-readonly': !isInteractive() }"
         />
-        <span v-else class="handle-indicator handle-disabled" aria-hidden="true" />
       </li>
     </ul>
 
@@ -251,7 +267,7 @@ function hasTermIri(property: PropertyShape): boolean {
       v-if="data.onAddField"
       type="button"
       class="add-field-row"
-      @click.stop="addField"
+      @click.stop="addField(data.representedShapeIri)"
     >
       <i class="pi pi-plus add-field-row__icon" />
       <span class="prop-name">Add Field</span>
@@ -343,7 +359,24 @@ header {
 }
 
 .inherited-section-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   cursor: pointer;
+}
+
+.inherited-section-label__content {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.add-field-row--inherited {
+  width: 100%;
+  border-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 .inherited-section-button:hover {
@@ -458,6 +491,11 @@ header {
 
 .handle-disabled {
   opacity: 0.9;
+}
+
+.handle-readonly {
+  cursor: default;
+  opacity: 0.75;
 }
 
 .add-field-row {

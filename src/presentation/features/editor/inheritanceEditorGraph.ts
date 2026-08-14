@@ -11,7 +11,7 @@ export interface ShapeEditorNodeData {
   ownProperties?: PropertyShape[]
   interactive?: boolean
   onPreview?: () => void | Promise<void>
-  onAddField?: () => void
+  onAddField?: (shapeIri: string) => void
   onSelectShape?: (shape: NodeShape) => void
   onSelectProperty?: (shape: NodeShape, property: PropertyShape) => void
   selected?: boolean

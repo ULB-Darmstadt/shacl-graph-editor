@@ -21,6 +21,7 @@ interface UseEditorGraphOptions {
   canvasShapes: Ref<NodeShape[]>
   relayoutRequestTick?: Ref<number>
   clearRequestedNodePositions?: () => void
+  readOnlyMode?: Ref<boolean>
   openShapePreview: (shape: NodeShape) => void | Promise<void>
   addField?: (shapeIri: string) => void
   removeReferenceEdge?: (shapeIri: string, propertyNodeId: string, targetShapeIri: string) => void
@@ -108,6 +109,7 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
       options.allShapes.value,
       new Set(),
       options.openShapePreview,
+      !(options.readOnlyMode?.value ?? false),
       options.addField,
       options.selectShape,
       options.selectProperty,
@@ -150,6 +152,7 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
     options.clearRequestedNodePositions?.()
     rebuildGraph(true)
   })
+  watch(options.readOnlyMode ?? ref(false), () => rebuildGraph())
   watch([options.selectedShapeIri ?? ref(null), options.selectedPropertyKey ?? ref(null)], updateSelectionState)
   watch(() => {
     const requestedPositions = (options.requestedNodePositions?.value ?? {}) as Record<string, { x: number; y: number }>

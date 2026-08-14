@@ -70,6 +70,7 @@ const props = defineProps<{
   shape: NodeShape | null
   property: PropertyShape | null
   profile: ShaclProfile | null
+  readOnly: boolean
   allShapes: NodeShape[]
   updateShapeField: (shapeIri: string, field: EditableShapeField, value: string | null) => void
   updatePropertyField: (shapeIri: string, propertyNodeId: string, field: EditablePropertyField, value: string | null) => void
@@ -256,7 +257,7 @@ function onPropertyMaxValueChange(value: string): void {
 }
 
 function requestDeleteProfile(): void {
-  if (!props.shape || props.property) return
+  if (!props.shape || props.property || props.readOnly) return
   confirm.require({
     header: 'Delete profile',
     message: 'Delete this profile from the editor?',
@@ -272,7 +273,7 @@ function requestDeleteProfile(): void {
 }
 
 function requestDeleteProperty(): void {
-  if (!props.shape || !props.property) return
+  if (!props.shape || !props.property || props.readOnly) return
   confirm.require({
     header: 'Delete field',
     message: 'Delete this field from the profile?',
@@ -297,6 +298,7 @@ function requestDeleteProperty(): void {
           <button
             type="button"
             class="delete-icon"
+            :disabled="readOnly"
             :title="property ? 'Delete field' : 'Delete profile'"
             @click="property ? requestDeleteProperty() : requestDeleteProfile()"
           >
@@ -313,7 +315,8 @@ function requestDeleteProperty(): void {
         <button type="button" class="inspector-tab ui-sidepanel-tab" :class="{ active: activeTab === 'advanced' }" @click="activeTab = 'advanced'">Advanced</button>
       </div>
 
-      <div v-if="isPropertyInspector ? activeTab === 'basic' : true" class="inspector-section-stack">
+      <fieldset v-if="isPropertyInspector ? activeTab === 'basic' : true" class="inspector-fieldset" :disabled="readOnly">
+      <div class="inspector-section-stack">
         <template v-if="property">
           <section class="inspector-section">
             <h3 class="inspector-section-title ui-sidepanel-section-title">Basic Information</h3>
@@ -323,6 +326,7 @@ function requestDeleteProperty(): void {
               :value="property.path?.value ?? null"
               :options="PROPERTY_TERM_OPTIONS"
               placeholder="https://..."
+              :disabled="readOnly"
               :invalid="missingPropertyTerm"
               :helper-text="missingPropertyTerm ? 'A Term IRI is required for this field.' : 'Type your own IRI or choose a suggested term while typing.'"
               @update:value="updateProperty('path', $event)"
@@ -395,7 +399,7 @@ function requestDeleteProperty(): void {
                   :options="propertyNodeOptions"
                   @update:value="onAlternativeTargetChange(index, $event)"
                 />
-                <button v-if="targetValue" type="button" class="alternative-target-remove" title="Remove profile option" @click="removeAlternativeTarget(index)">
+                <button v-if="targetValue" type="button" class="alternative-target-remove" :disabled="readOnly" title="Remove profile option" @click="removeAlternativeTarget(index)">
                   <i class="pi pi-times" />
                 </button>
               </div>
@@ -487,15 +491,17 @@ function requestDeleteProperty(): void {
           <section class="inspector-section inspector-section--compact">
             <label class="toggle-field">
               <span class="editable-field__label ui-sidepanel-field-label">Closed Shape</span>
-              <button type="button" class="toggle-field__button" :class="{ 'is-on': closedToggle }" @click="closedToggle = !closedToggle">
+              <button type="button" class="toggle-field__button" :disabled="readOnly" :class="{ 'is-on': closedToggle }" @click="closedToggle = !closedToggle">
                 <span class="toggle-field__thumb" />
               </button>
             </label>
           </section>
         </template>
       </div>
+      </fieldset>
 
-      <div v-if="isPropertyInspector && activeTab === 'advanced'" class="inspector-section-stack">
+      <fieldset v-if="isPropertyInspector && activeTab === 'advanced'" class="inspector-fieldset" :disabled="readOnly">
+      <div class="inspector-section-stack">
         <template v-if="property">
           <section class="inspector-section">
             <h3 class="inspector-section-title ui-sidepanel-section-title">Value Constraints</h3>
@@ -540,6 +546,7 @@ function requestDeleteProperty(): void {
           </section>
         </template>
       </div>
+      </fieldset>
     </template>
 
     <div v-else class="inspector-empty-state">
@@ -600,6 +607,23 @@ function requestDeleteProperty(): void {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+}
+
+.toggle-field__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.delete-icon:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.inspector-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
 }
 
 .inspector-subtitle {

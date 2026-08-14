@@ -20,6 +20,7 @@ export function buildEditorShapeNodes(
   allShapes: NodeShape[],
   expandedShapeNodeIds: Set<string>,
   openShapePreview: (shape: NodeShape) => void | Promise<void>,
+  interactive: boolean,
   addField?: (shapeIri: string) => void,
   selectShape?: (shape: NodeShape) => void,
   selectProperty?: (shape: NodeShape, property: PropertyShape) => void,
@@ -40,10 +41,10 @@ export function buildEditorShapeNodes(
       inheritedPropertyCount: inheritedPropertyPrefixCount(descriptor.shape, allShapes),
       inheritedGroups: buildInheritedPropertyGroups(descriptor.shape, allShapes),
       ownProperties: buildOwnProperties(descriptor.shape, allShapes),
-      interactive: true,
+      interactive,
       onPreview: () => openShapePreview(descriptor.shape),
-      onAddField: addField
-        ? () => addField(descriptor.representedShapeIri)
+      onAddField: interactive && addField
+        ? (shapeIri: string) => addField(shapeIri)
         : undefined,
       onSelectShape: selectShape,
       onSelectProperty: selectProperty,

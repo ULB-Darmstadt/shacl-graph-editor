@@ -37,6 +37,7 @@ const { screenToFlowCoordinate, fitView } = useVueFlow()
 const { nodeShapes, profiles, isResolvingImports, rootNodeShapes, fitViewRequestTick } = storeToRefs(profileStore)
 
 const requestedNodePositions = ref<Record<string, XYPosition>>({})
+const readOnlyMode = ref(false)
 const pendingPlacementAnchor = ref<XYPosition | null>(null)
 const pendingPlacementOffset = ref(0)
 const pendingProfilePlacement = ref(false)
@@ -110,6 +111,7 @@ const { nodes, edges, nodeTypes, edgeTypes } = useEditorGraph({
   clearRequestedNodePositions: () => {
     requestedNodePositions.value = {}
   },
+  readOnlyMode,
   openShapePreview,
   addField: createProperty,
   removeReferenceEdge: requestRemoveReferenceEdge,
@@ -122,6 +124,8 @@ const { nodes, edges, nodeTypes, edgeTypes } = useEditorGraph({
 
 const hasNothing = computed(() => profiles.value.length === 0)
 const hasInspectorSelection = computed(() => selectedShape.value !== null)
+const modeToggleLabel = computed(() => readOnlyMode.value ? 'View Mode' : 'Edit Mode')
+const modeToggleIcon = computed(() => readOnlyMode.value ? 'pi pi-eye' : 'pi pi-pencil')
 const canvasMenu = ref<{ x: number; y: number; open: boolean }>({ x: 0, y: 0, open: false })
 const relationChoiceDialogOpen = ref(false)
 const pendingConnection = ref<{
@@ -261,11 +265,13 @@ function handlePaneClick(): void {
 }
 
 function handleShellContextMenu(event: MouseEvent): void {
+  if (readOnlyMode.value) return
   event.preventDefault()
   openCanvasMenu(event)
 }
 
 function handleCanvasNewProfile(): void {
+  if (readOnlyMode.value) return
   const shouldPlaceImmediately = pendingPlacementAnchor.value !== null
   closeCanvasMenu()
   if (shouldPlaceImmediately) {
@@ -276,11 +282,13 @@ function handleCanvasNewProfile(): void {
 }
 
 function handleCanvasExistingProfile(): void {
+  if (readOnlyMode.value) return
   closeCanvasMenu()
   openImportDialog('aims-profile-catalog')
 }
 
 function handleCanvasUploadProfiles(): void {
+  if (readOnlyMode.value) return
   closeCanvasMenu()
   triggerSchemaUpload()
 }
@@ -300,6 +308,7 @@ function requestRemoveReferenceEdge(shapeIri: string, propertyNodeId: string, ta
 }
 
 function openBottomAddMenu(): void {
+  if (readOnlyMode.value) return
   closeCanvasMenu()
   resetPendingPlacement()
   pendingPlacementAnchor.value = null
@@ -423,6 +432,7 @@ function schedulePendingPlacementReset(): void {
 }
 
 function handleConnect(connection: Connection): void {
+  if (readOnlyMode.value) return
   const source = connection.source ? parseEditorShapeNodeTarget(connection.source) : null
   const target = connection.target ? parseEditorShapeNodeTarget(connection.target) : null
   if (!source?.representedShapeIri || !target?.representedShapeIri) return
@@ -720,6 +730,8 @@ void fetchSubjectHeadingOptions().then(options => {
             :node-types="nodeTypes"
             :edge-types="edgeTypes"
             :default-edge-options="{ animated: false, type: 'default' }"
+            :min-zoom="0.05"
+            :max-zoom="2"
             fit-view-on-init
             @connect="handleConnect"
             @pane-click="handlePaneClick"
@@ -770,21 +782,25 @@ void fetchSubjectHeadingOptions().then(options => {
       </button>
 
       <div ref="canvasActionBarRef" class="canvas-action-bar">
-        <button type="button" class="action-tile action-tile--primary" @click="openBottomAddMenu">
+        <button type="button" class="action-tile action-tile--primary" :disabled="readOnlyMode" @click="openBottomAddMenu">
           <i class="pi pi-plus-circle action-tile__icon" />
           <span class="action-tile__label">Add new profile</span>
         </button>
-        <button type="button" class="action-tile" @click="handleCanvasExistingProfile">
+        <button type="button" class="action-tile" :disabled="readOnlyMode" @click="handleCanvasExistingProfile">
           <i class="pi pi-book action-tile__icon" />
           <span class="action-tile__label">Load existing profiles</span>
         </button>
-        <button type="button" class="action-tile" @click="handleCanvasUploadProfiles">
+        <button type="button" class="action-tile" :disabled="readOnlyMode" @click="handleCanvasUploadProfiles">
           <i class="pi pi-upload action-tile__icon" />
           <span class="action-tile__label">Upload profiles</span>
         </button>
         <button type="button" class="action-tile" @click="confirmResetAll">
           <i class="pi pi-refresh action-tile__icon" />
           <span class="action-tile__label">Reset Editor</span>
+        </button>
+        <button type="button" class="action-tile action-tile--mode" @click="readOnlyMode = !readOnlyMode">
+          <i :class="modeToggleIcon" class="action-tile__icon" />
+          <span class="action-tile__label">{{ modeToggleLabel }}</span>
         </button>
         <button type="button" class="action-tile" :disabled="profiles.length === 0" @click="exportProfiles">
           <i class="pi pi-download action-tile__icon" />
@@ -797,6 +813,7 @@ void fetchSubjectHeadingOptions().then(options => {
           :shape="selectedShape"
           :property="selectedProperty"
           :profile="selectedProfile"
+          :read-only="readOnlyMode"
           :all-shapes="nodeShapes"
           :update-shape-field="profileStore.updateShapeField"
           :update-property-field="profileStore.updatePropertyField"
