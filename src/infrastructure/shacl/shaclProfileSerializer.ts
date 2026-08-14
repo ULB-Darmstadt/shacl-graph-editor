@@ -81,8 +81,14 @@ function serializeNodeShape(shape: NodeShape): string {
   pushLiteralStatement(statements, 'dcterms:description', shape.description)
   pushLiteralStatement(statements, 'dcterms:creator', shape.creator)
   pushLiteralStatement(statements, 'dcterms:created', shape.created, 'xsd:date')
-  pushLiteralStatement(statements, 'dcterms:license', shape.license)
-  pushLiteralStatement(statements, 'dcterms:subject', shape.subject)
+  if (shape.license?.trim()) {
+    if (isLikelyIri(shape.license)) statements.push(`dcterms:license ${term(shape.license)}`)
+    else pushLiteralStatement(statements, 'dcterms:license', shape.license)
+  }
+  if (shape.subject?.trim()) {
+    if (isLikelyIri(shape.subject)) statements.push(`dcterms:subject ${term(shape.subject)}`)
+    else pushLiteralStatement(statements, 'dcterms:subject', shape.subject)
+  }
   if (shape.closed !== undefined) statements.push(`sh:closed ${shape.closed ? 'true' : 'false'}`)
   if (shape.targetClass?.value) statements.push(`sh:targetClass ${term(shape.targetClass.value)}`)
   for (const inheritedIri of shape.inheritedShapeIris ?? []) {

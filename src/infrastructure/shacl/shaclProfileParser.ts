@@ -190,10 +190,10 @@ function extractNodeShape(nodeId: NamedNode, store: Store): NodeShape {
       if (object.termType === 'Literal') shape.created = object.value
     } else if (predicate === DCT_LICENSE.value) {
       if (object.termType === 'Literal') shape.license = object.value
-      else if (object.termType === 'NamedNode') shape.license = localName(object.value)
+      else if (object.termType === 'NamedNode') shape.license = object.value
     } else if (predicate === DCT_SUBJECT.value) {
       if (object.termType === 'Literal') shape.subject = object.value
-      else if (object.termType === 'NamedNode') shape.subject = localName(object.value)
+      else if (object.termType === 'NamedNode') shape.subject = object.value
     } else if (predicate === SH_CLOSED.value) {
       if (object.termType === 'Literal') shape.closed = object.value === 'true'
     } else if (predicate === SH_TARGET_CLASS.value) {

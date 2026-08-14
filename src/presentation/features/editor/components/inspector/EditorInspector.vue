@@ -2,10 +2,12 @@
 import { computed, onMounted, ref } from 'vue'
 import { useConfirm } from 'primevue/useconfirm'
 import {
+  buildProfileLicenseOptions,
   fetchSubjectHeadingOptions,
   PROFILE_LICENSE_OPTIONS,
   PROPERTY_TERM_OPTIONS,
   PROPERTY_TYPE_OPTIONS,
+  resolveImportedSubjectLabel,
   SHACL_DATATYPE_OPTIONS,
   SHACL_NODE_KIND_OPTIONS,
   type SelectOption,
@@ -109,6 +111,7 @@ const inheritanceOptions = computed(() =>
 const propertyNodeOptions = computed(() =>
   props.allShapes.map(shape => ({ label: shape.label ?? shape.nodeId.value, value: shape.nodeId.value })),
 )
+const shapeLicenseOptions = computed(() => buildProfileLicenseOptions(props.shape?.license ?? null))
 const closedToggle = computed({
   get: () => Boolean(props.shape?.closed),
   set: value => {
@@ -135,7 +138,10 @@ const subjectOptionsForShape = computed(() => {
   const options = [...subjectHeadingOptions.value]
   const currentSubject = props.shape?.subject?.trim()
   if (currentSubject && !options.some(option => option.value === currentSubject)) {
-    options.unshift({ label: currentSubject, value: currentSubject })
+    options.unshift({
+      label: resolveImportedSubjectLabel(currentSubject) ?? currentSubject,
+      value: currentSubject,
+    })
   }
   return options
 })
@@ -467,7 +473,7 @@ function requestDeleteProperty(): void {
               label="License"
               :value="shape.license ?? null"
               placeholder=""
-              :options="PROFILE_LICENSE_OPTIONS"
+              :options="shapeLicenseOptions"
               :invalid="missingLicense"
               :helper-text="missingLicense ? 'License is required.' : null"
               @update:value="updateShape('license', $event)"
