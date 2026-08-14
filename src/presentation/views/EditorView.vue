@@ -38,6 +38,7 @@ const { nodeShapes, profiles, isResolvingImports, rootNodeShapes, fitViewRequest
 
 const requestedNodePositions = ref<Record<string, XYPosition>>({})
 const readOnlyMode = ref(false)
+const draftPropertyNodeId = ref<string | null>(null)
 const pendingPlacementAnchor = ref<XYPosition | null>(null)
 const pendingPlacementOffset = ref(0)
 const pendingProfilePlacement = ref(false)
@@ -83,6 +84,7 @@ function resetEditorUiState(): void {
   cancelPendingProfilePlacement()
   resetPendingPlacement()
   requestedNodePositions.value = {}
+  draftPropertyNodeId.value = null
 }
 
 const {
@@ -215,7 +217,10 @@ function createProperty(shapeIri: string): void {
   const propertyNodeId = profileStore.createProperty(shapeIri)
   const shape = profileStore.applicationProfile.findNodeShape(shapeIri)
   const property = shape?.properties.find(candidate => candidate.nodeId.value === propertyNodeId)
-  if (shape && property) selectProperty(shape, property)
+  if (shape && property) {
+    draftPropertyNodeId.value = property.nodeId.value
+    selectProperty(shape, property)
+  }
 }
 
 function deleteSelectedShape(shapeIri: string): { ok: boolean; reason?: string } {
@@ -227,11 +232,20 @@ function deleteSelectedShape(shapeIri: string): { ok: boolean; reason?: string }
 function deleteSelectedProperty(shapeIri: string, propertyNodeId: string): boolean {
   const deleted = profileStore.removeProperty(shapeIri, propertyNodeId)
   if (deleted) {
+    if (draftPropertyNodeId.value === propertyNodeId) {
+      draftPropertyNodeId.value = null
+    }
     const shape = profileStore.applicationProfile.findNodeShape(shapeIri)
     if (shape) selectShape(shape)
     else clearSelection()
   }
   return deleted
+}
+
+function commitDraftProperty(propertyNodeId: string): void {
+  if (draftPropertyNodeId.value === propertyNodeId) {
+    draftPropertyNodeId.value = null
+  }
 }
 
 function openCanvasMenu(event: MouseEvent): void {
@@ -814,7 +828,10 @@ void fetchSubjectHeadingOptions().then(options => {
           :property="selectedProperty"
           :profile="selectedProfile"
           :read-only="readOnlyMode"
+          :draft-property-node-id="draftPropertyNodeId"
           :all-shapes="nodeShapes"
+          :create-property="createProperty"
+          :commit-draft-property="commitDraftProperty"
           :update-shape-field="profileStore.updateShapeField"
           :update-property-field="profileStore.updatePropertyField"
           :set-shape-inheritance="profileStore.setShapeInheritance"

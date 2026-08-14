@@ -71,7 +71,10 @@ const props = defineProps<{
   property: PropertyShape | null
   profile: ShaclProfile | null
   readOnly: boolean
+  draftPropertyNodeId: string | null
   allShapes: NodeShape[]
+  createProperty: (shapeIri: string) => void
+  commitDraftProperty: (propertyNodeId: string) => void
   updateShapeField: (shapeIri: string, field: EditableShapeField, value: string | null) => void
   updatePropertyField: (shapeIri: string, propertyNodeId: string, field: EditablePropertyField, value: string | null) => void
   setShapeInheritance: (shapeIri: string, inheritedShapeIri: string | null) => void
@@ -161,6 +164,7 @@ const missingPropertyTerm = computed(() => Boolean(props.property) && !props.pro
 const missingProfileTarget = computed(() =>
   (propertyTypeValue.value === 'profile' || propertyTypeValue.value === 'qualifiedProfile') && !propertyNodeTarget.value,
 )
+const isDraftProperty = computed(() => Boolean(props.property && props.property.nodeId.value === props.draftPropertyNodeId))
 
 onMounted(async () => {
   try {
@@ -210,6 +214,22 @@ function removeAlternativeTarget(index: number): void {
 function onPropertyTypeChange(value: string): void {
   if (!props.shape || !props.property) return
   props.setPropertyType(props.shape.nodeId.value, props.property.nodeId.value, value as PropertyEditorType)
+}
+
+function onDraftFieldNameBlur(): void {
+  if (!props.shape || !props.property || !isDraftProperty.value) return
+  if (props.property.name?.trim()) {
+    props.commitDraftProperty(props.property.nodeId.value)
+    return
+  }
+  props.deleteProperty(props.shape.nodeId.value, props.property.nodeId.value)
+}
+
+function onDraftFieldNameSubmit(): void {
+  if (!props.shape || !props.property || !isDraftProperty.value || props.readOnly) return
+  if (!props.property.name?.trim()) return
+  props.commitDraftProperty(props.property.nodeId.value)
+  props.createProperty(props.shape.nodeId.value)
 }
 
 function onPropertyMinModeChange(mode: 'inclusive' | 'exclusive'): void {
@@ -335,8 +355,11 @@ function requestDeleteProperty(): void {
               label="Field Name"
               :value="property.name ?? null"
               placeholder="Unnamed field"
+              :disabled="readOnly"
               :auto-focus="!property.name?.trim()"
               @update:value="updateProperty('name', $event)"
+              @blur="onDraftFieldNameBlur"
+              @submit="onDraftFieldNameSubmit"
             />
             <InspectorEditableField label="Description" :value="property.description" placeholder="Description" multiline @update:value="updateProperty('description', $event)" />
             <InspectorEditableField label="Property Type" :value="propertyTypeValue" placeholder="" :options="PROPERTY_TYPE_OPTIONS" @update:value="onPropertyTypeChange" />

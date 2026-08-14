@@ -16,10 +16,20 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: 'update:value', value: string): void
+  (event: 'blur'): void
+  (event: 'submit'): void
 }>()
 
 function onInput(event: Event): void {
   emit('update:value', (event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value)
+}
+
+function onBlur(): void {
+  emit('blur')
+}
+
+function onSubmit(): void {
+  emit('submit')
 }
 
 const inputRef = ref<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null>(null)
@@ -57,6 +67,7 @@ watch(() => props.autoFocus, enabled => {
       :disabled="disabled"
       rows="3"
       @input="onInput"
+      @blur="onBlur"
     />
 
     <select
@@ -67,6 +78,7 @@ watch(() => props.autoFocus, enabled => {
       :value="value ?? ''"
       :disabled="disabled"
       @change="onInput"
+      @blur="onBlur"
     >
       <option value="" hidden>{{ placeholder ?? '' }}</option>
       <option v-for="option in options" :key="option.value" :value="option.value" :disabled="option.disabled">
@@ -84,6 +96,8 @@ watch(() => props.autoFocus, enabled => {
       :value="value ?? ''"
       :disabled="disabled"
       @input="onInput"
+      @blur="onBlur"
+      @keydown.enter="onSubmit"
     />
 
     <span v-if="helperText" class="editable-field__helper" :class="{ 'is-invalid': invalid }">{{ helperText }}</span>
