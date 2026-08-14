@@ -100,6 +100,10 @@ const propertyAllowedValuesText = computed(() => props.property?.allowedValues?.
 const propertyAlternativeTargets = computed(() =>
   props.property?.alternatives?.map(alternative => alternative.node?.value ?? '') ?? [],
 )
+const propertyAlternativeTargetInputs = computed(() => {
+  const targets = propertyAlternativeTargets.value.filter(Boolean)
+  return [...targets, '']
+})
 const propertyTypeValue = computed<PropertyEditorType>(() =>
   props.property ? (props.property.editorType ?? inferPropertyEditorType(props.property)) as PropertyEditorType : 'datatype',
 )
@@ -187,17 +191,12 @@ function onNodeTargetChange(value: string): void {
 
 function onAlternativeTargetChange(index: number, value: string): void {
   if (!props.shape || !props.property) return
-  const next = [...propertyAlternativeTargets.value]
+  const next = [...propertyAlternativeTargetInputs.value]
   next[index] = value
-  props.setPropertyAlternativeTargets(props.shape.nodeId.value, props.property.nodeId.value, next)
-}
-
-function addAlternativeTarget(): void {
-  if (!props.shape || !props.property) return
   props.setPropertyAlternativeTargets(
     props.shape.nodeId.value,
     props.property.nodeId.value,
-    [...propertyAlternativeTargets.value, ''],
+    next.filter(Boolean),
   )
 }
 
@@ -388,7 +387,7 @@ function requestDeleteProperty(): void {
             <div v-else-if="propertyTypeValue === 'oneOfProfiles'" class="alternative-targets">
               <span class="editable-field__label ui-sidepanel-field-label">Alternative Profile Targets</span>
               <span class="alternative-targets__helper">Serialized as `sh:or` with one profile dropdown per alternative.</span>
-              <div v-for="(targetValue, index) in propertyAlternativeTargets" :key="`${property.nodeId.value}:alt:${index}`" class="alternative-target-row">
+              <div v-for="(targetValue, index) in propertyAlternativeTargetInputs" :key="`${property.nodeId.value}:alt:${index}`" class="alternative-target-row">
                 <InspectorEditableField
                   :label="`Profile Option ${index + 1}`"
                   :value="targetValue || null"
@@ -396,14 +395,10 @@ function requestDeleteProperty(): void {
                   :options="propertyNodeOptions"
                   @update:value="onAlternativeTargetChange(index, $event)"
                 />
-                <button type="button" class="alternative-target-remove" title="Remove profile option" @click="removeAlternativeTarget(index)">
+                <button v-if="targetValue" type="button" class="alternative-target-remove" title="Remove profile option" @click="removeAlternativeTarget(index)">
                   <i class="pi pi-times" />
                 </button>
               </div>
-              <button type="button" class="alternative-target-add" @click="addAlternativeTarget">
-                <i class="pi pi-plus" />
-                <span>Add profile option</span>
-              </button>
             </div>
           </section>
 
