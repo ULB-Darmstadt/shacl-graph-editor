@@ -23,6 +23,7 @@ import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import { PROFILE_LICENSE_OPTIONS, fetchSubjectHeadingOptions, type SelectOption } from '@/application/profiles/profileEditorCatalogs'
 import { propertyNodeTargets } from '@/domain/profiles'
+import type { PropertyEditorType } from '@/application/profiles/profileEditorStore'
 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -74,6 +75,13 @@ const {
 function resetEditorUiState(): void {
   closeImportDialog()
   shapePreviewOpen.value = false
+  relationChoiceDialogOpen.value = false
+  pendingConnection.value = null
+  canvasMenu.value.open = false
+  clearSelection()
+  cancelPendingProfilePlacement()
+  resetPendingPlacement()
+  requestedNodePositions.value = {}
 }
 
 const {
@@ -112,6 +120,12 @@ const { nodes, edges, nodeTypes, edgeTypes } = useEditorGraph({
 const hasNothing = computed(() => profiles.value.length === 0)
 const hasInspectorSelection = computed(() => selectedShape.value !== null)
 const canvasMenu = ref<{ x: number; y: number; open: boolean }>({ x: 0, y: 0, open: false })
+const relationChoiceDialogOpen = ref(false)
+const pendingConnection = ref<{
+  sourceShapeIri: string
+  sourceHandle: string
+  targetShapeIri: string
+} | null>(null)
 const graphShellRef = ref<HTMLElement | null>(null)
 const canvasMenuRef = ref<HTMLElement | null>(null)
 const canvasActionBarRef = ref<HTMLElement | null>(null)
@@ -123,6 +137,49 @@ const defaultLicense = ref(localStorage.getItem('editor.defaultLicense') ?? '')
 const defaultSubject = ref(localStorage.getItem('editor.defaultSubject') ?? '')
 const IMPORT_SIBLING_GAP = 36
 const IMPORT_HORIZONTAL_OFFSET = 460
+
+const CONNECTABLE_RELATION_OPTIONS: Array<{
+  type: PropertyEditorType
+  title: string
+  shaclType: string
+  description: string
+}> = [
+  {
+    type: 'profile',
+    title: 'Satisfies Profile',
+    shaclType: 'sh:node',
+    description: 'The field must match exactly this target profile.',
+  },
+  {
+    type: 'qualifiedProfile',
+    title: 'Satisfies Profile (m-n times)',
+    shaclType: 'sh:qualifiedValueShape',
+    description: 'The field matches this target profile with qualified min/max counts.',
+  },
+  {
+    type: 'oneOfProfiles',
+    title: 'Satisfies One Of Profiles',
+    shaclType: 'sh:or',
+    description: 'The field may satisfy one of several target profiles.',
+  },
+]
+
+const pendingConnectionSourcePropertyLabel = computed(() => {
+  const sourceHandle = pendingConnection.value?.sourceHandle
+  const sourceShapeIri = pendingConnection.value?.sourceShapeIri
+  if (!sourceHandle?.startsWith('ref:') || !sourceShapeIri) return null
+  const propertyNodeId = sourceHandle.slice('ref:'.length)
+  const shape = nodeShapes.value.find(candidate => candidate.nodeId.value === sourceShapeIri)
+  const property = shape?.properties.find(candidate => candidate.nodeId.value === propertyNodeId)
+  return property?.name ?? property?.path?.value ?? 'selected field'
+})
+
+const pendingConnectionTargetLabel = computed(() => {
+  const targetShapeIri = pendingConnection.value?.targetShapeIri
+  if (!targetShapeIri) return null
+  const targetShape = nodeShapes.value.find(candidate => candidate.nodeId.value === targetShapeIri)
+  return targetShape?.label ?? targetShapeIri
+})
 
 const isPlacementHintVisible = computed(() => pendingProfilePlacement.value && placementPreviewClientPosition.value !== null)
 const placementHintStyle = computed(() => {
@@ -136,8 +193,8 @@ const placementHintStyle = computed(() => {
 
 function createProfile(): void {
   const iri = profileStore.createProfile()
-  applyProfileDefaults(iri)
   queueShapePlacement(iri, 0)
+  applyProfileDefaults(iri)
   const shape = profileStore.applicationProfile.findNodeShape(iri)
   if (shape) selectShape(shape)
 }
@@ -173,10 +230,7 @@ function deleteSelectedProperty(shapeIri: string, propertyNodeId: string): boole
 function openCanvasMenu(event: MouseEvent): void {
   cancelPendingProfilePlacement()
   resetPendingPlacement()
-  pendingPlacementAnchor.value = screenToFlowCoordinate({
-    x: event.clientX,
-    y: event.clientY,
-  })
+  pendingPlacementAnchor.value = resolvePlacementPosition(event.clientX, event.clientY)
   canvasMenu.value = {
     x: event.clientX,
     y: event.clientY,
@@ -318,7 +372,7 @@ function updatePlacementPreview(clientX: number, clientY: number): void {
   if (!pendingProfilePlacement.value) return
 
   placementPreviewClientPosition.value = { x: clientX, y: clientY }
-  placementPreviewFlowPosition.value = screenToFlowCoordinate({ x: clientX, y: clientY })
+  placementPreviewFlowPosition.value = resolvePlacementPosition(clientX, clientY)
 }
 
 function handleGraphPointerMove(event: PointerEvent): void {
@@ -336,13 +390,29 @@ function handleGraphShellClick(event: MouseEvent): void {
   event.preventDefault()
   event.stopPropagation()
 
-  const placement = placementPreviewFlowPosition.value ?? screenToFlowCoordinate({
-    x: event.clientX,
-    y: event.clientY,
-  })
+  const placement = placementPreviewFlowPosition.value ?? resolvePlacementPosition(
+    event.clientX,
+    event.clientY,
+  )
 
   cancelPendingProfilePlacement()
   createProfileAt(placement)
+}
+
+function resolvePlacementPosition(clientX: number, clientY: number): XYPosition {
+  if (!hasNothing.value) {
+    return screenToFlowCoordinate({ x: clientX, y: clientY })
+  }
+
+  const shellRect = graphShellRef.value?.getBoundingClientRect()
+  if (!shellRect) {
+    return { x: clientX, y: clientY }
+  }
+
+  return {
+    x: clientX - shellRect.left,
+    y: clientY - shellRect.top,
+  }
 }
 
 function resetPendingPlacement(): void {
@@ -365,12 +435,58 @@ function handleConnect(connection: Connection): void {
   const source = connection.source ? parseEditorShapeNodeTarget(connection.source) : null
   const target = connection.target ? parseEditorShapeNodeTarget(connection.target) : null
   if (!source?.representedShapeIri || !target?.representedShapeIri) return
+  if (!connection.sourceHandle) return
+  if (source.representedShapeIri === target.representedShapeIri) return
 
+  const propertyNodeId = connection.sourceHandle.startsWith('ref:')
+    ? connection.sourceHandle.slice('ref:'.length)
+    : null
+  const sourceShape = nodeShapes.value.find(shape => shape.nodeId.value === source.representedShapeIri)
+  const sourceProperty = propertyNodeId
+    ? sourceShape?.properties.find(property => property.nodeId.value === propertyNodeId)
+    : null
+
+  if (sourceProperty?.editorType === 'oneOfProfiles') {
+    profileStore.connectPropertyToShape(
+      source.representedShapeIri,
+      connection.sourceHandle,
+      target.representedShapeIri,
+    )
+    return
+  }
+
+  pendingConnection.value = {
+    sourceShapeIri: source.representedShapeIri,
+    sourceHandle: connection.sourceHandle,
+    targetShapeIri: target.representedShapeIri,
+  }
+  relationChoiceDialogOpen.value = true
+}
+
+function closeRelationChoiceDialog(): void {
+  relationChoiceDialogOpen.value = false
+  pendingConnection.value = null
+}
+
+function applyConnectionRelation(type: PropertyEditorType): void {
+  const connection = pendingConnection.value
+  if (!connection) return
+
+  const propertyNodeId = connection.sourceHandle.startsWith('ref:')
+    ? connection.sourceHandle.slice('ref:'.length)
+    : null
+  if (!propertyNodeId) {
+    closeRelationChoiceDialog()
+    return
+  }
+
+  profileStore.setPropertyType(connection.sourceShapeIri, propertyNodeId, type)
   profileStore.connectPropertyToShape(
-    source.representedShapeIri,
+    connection.sourceShapeIri,
     connection.sourceHandle,
-    target.representedShapeIri,
+    connection.targetShapeIri,
   )
+  closeRelationChoiceDialog()
 }
 
 watch(
@@ -711,6 +827,36 @@ void fetchSubjectHeadingOptions().then(options => {
     />
 
     <Dialog
+      :visible="relationChoiceDialogOpen"
+      modal
+      header="Choose relation type"
+      :style="{ width: 'min(760px, 96vw)' }"
+      @update:visible="relationChoiceDialogOpen = $event"
+      @hide="closeRelationChoiceDialog"
+    >
+      <div class="relation-choice">
+        <p class="relation-choice__intro">
+          Choose how
+          <strong>{{ pendingConnectionSourcePropertyLabel ?? 'this field' }}</strong>
+          should point to
+          <strong>{{ pendingConnectionTargetLabel ?? 'this profile' }}</strong>.
+        </p>
+        <div class="relation-choice__grid">
+          <button
+            v-for="option in CONNECTABLE_RELATION_OPTIONS"
+            :key="option.type"
+            type="button"
+            class="relation-tile"
+            @click="applyConnectionRelation(option.type)"
+          >
+            <strong class="relation-tile__title">{{ option.title }} ({{ option.shaclType }})</strong>
+            <span class="relation-tile__description">{{ option.description }}</span>
+          </button>
+        </div>
+      </div>
+    </Dialog>
+
+    <Dialog
       :visible="settingsOpen"
       modal
       header="Editor Settings"
@@ -928,6 +1074,55 @@ void fetchSubjectHeadingOptions().then(options => {
   display: flex;
   justify-content: flex-end;
   padding-top: var(--space-2);
+}
+
+.relation-choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.relation-choice__intro {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.relation-choice__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3);
+}
+
+.relation-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 148px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, var(--color-surface) 0%, var(--color-surface-1) 100%);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.relation-tile:hover {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.relation-tile__title {
+  color: var(--color-text);
+  line-height: 1.35;
+}
+
+.relation-tile__description {
+  color: var(--color-text-muted);
+  line-height: 1.5;
 }
 
 .canvas-menu {

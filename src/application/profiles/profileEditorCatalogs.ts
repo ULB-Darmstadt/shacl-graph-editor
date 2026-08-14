@@ -3,6 +3,7 @@ import { licenses as AIMS_LICENSES, subjects as AIMS_SUBJECTS } from '@/applicat
 export interface SelectOption {
   label: string
   value: string
+  disabled?: boolean
 }
 
 export interface SubjectHeadingNode {
@@ -58,13 +59,13 @@ export function buildProfileLicenseOptions(currentLicense: string | null | undef
 }
 
 export const PROPERTY_TYPE_OPTIONS: SelectOption[] = [
-  { label: 'Datatype', value: 'datatype' },
-  { label: 'Node Kind', value: 'nodeKind' },
-  { label: 'Class', value: 'class' },
-  { label: 'Satisfies Profile', value: 'profile' },
-  { label: 'Satisfies Profile (m-n times)', value: 'qualifiedProfile' },
-  { label: 'Satisfies One Of Profiles', value: 'oneOfProfiles' },
-  { label: 'List', value: 'list' },
+  { label: 'Datatype (sh:datatype)', value: 'datatype' },
+  { label: 'Node Kind (sh:nodeKind)', value: 'nodeKind' },
+  { label: 'Class (sh:class)', value: 'class', disabled: true },
+  { label: 'Satisfies Profile (sh:node)', value: 'profile' },
+  { label: 'Satisfies Profile (m-n times) (sh:qualifiedValueShape)', value: 'qualifiedProfile' },
+  { label: 'Satisfies One Of Profiles (sh:or)', value: 'oneOfProfiles' },
+  { label: 'List (sh:in)', value: 'list' },
 ]
 
 export const SHACL_DATATYPE_OPTIONS: SelectOption[] = [

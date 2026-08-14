@@ -275,6 +275,8 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     const property = context.property
     const target = targetShapeIri?.trim()
 
+    if (target === shapeIri) return
+
     if (target) {
       if (property.editorType === 'qualifiedProfile') {
         property.qualifiedValueShape = { node: new NamedNode(target) }
@@ -311,7 +313,9 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     const context = findEditablePropertyContext(shapeIri, propertyNodeId)
     if (!context) return
 
-    const normalizedTargets = targetShapeIris.map(value => value.trim())
+    const normalizedTargets = targetShapeIris
+      .map(value => value.trim())
+      .filter(value => value !== shapeIri)
 
     context.property.alternatives = normalizedTargets.map(value =>
       value ? { node: new NamedNode(value) } : {},
@@ -330,6 +334,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
 
   function connectPropertyToShape(shapeIri: string, sourceHandle: string | null | undefined, targetShapeIri: string | null): void {
     if (!sourceHandle?.startsWith('ref:')) return
+    if (targetShapeIri?.trim() === shapeIri) return
     const propertyNodeId = sourceHandle.slice('ref:'.length)
     const context = findEditableShapeContext(shapeIri)
     if (!context) return

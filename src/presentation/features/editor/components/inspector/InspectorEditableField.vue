@@ -7,7 +7,7 @@ const props = defineProps<{
   placeholder?: string
   multiline?: boolean
   type?: 'text' | 'number' | 'date'
-  options?: Array<{ label: string; value: string }>
+  options?: Array<{ label: string; value: string; disabled?: boolean }>
   disabled?: boolean
   invalid?: boolean
   helperText?: string | null
@@ -69,7 +69,7 @@ watch(() => props.autoFocus, enabled => {
       @change="onInput"
     >
       <option value="" hidden>{{ placeholder ?? '' }}</option>
-      <option v-for="option in options" :key="option.value" :value="option.value">
+      <option v-for="option in options" :key="option.value" :value="option.value" :disabled="option.disabled">
         {{ option.label }}
       </option>
     </select>

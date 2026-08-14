@@ -101,7 +101,7 @@ const propertyAlternativeTargets = computed(() =>
   props.property?.alternatives?.map(alternative => alternative.node?.value ?? '') ?? [],
 )
 const propertyTypeValue = computed<PropertyEditorType>(() =>
-  props.property ? inferPropertyEditorType(props.property) as PropertyEditorType : 'datatype',
+  props.property ? (props.property.editorType ?? inferPropertyEditorType(props.property)) as PropertyEditorType : 'datatype',
 )
 const inheritanceOptions = computed(() =>
   props.allShapes
@@ -109,7 +109,9 @@ const inheritanceOptions = computed(() =>
     .map(shape => ({ label: shape.label ?? shape.nodeId.value, value: shape.nodeId.value })),
 )
 const propertyNodeOptions = computed(() =>
-  props.allShapes.map(shape => ({ label: shape.label ?? shape.nodeId.value, value: shape.nodeId.value })),
+  props.allShapes
+    .filter(shape => shape.nodeId.value !== props.shape?.nodeId.value)
+    .map(shape => ({ label: shape.label ?? shape.nodeId.value, value: shape.nodeId.value })),
 )
 const shapeLicenseOptions = computed(() => buildProfileLicenseOptions(props.shape?.license ?? null))
 const closedToggle = computed({
