@@ -20,6 +20,7 @@ interface UseEditorGraphOptions {
   allShapes: Ref<NodeShape[]>
   canvasShapes: Ref<NodeShape[]>
   relayoutRequestTick?: Ref<number>
+  clearRequestedNodePositions?: () => void
   openShapePreview: (shape: NodeShape) => void | Promise<void>
   addField?: (shapeIri: string) => void
   removeReferenceEdge?: (shapeIri: string, propertyNodeId: string, targetShapeIri: string) => void
@@ -146,6 +147,7 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
   watch([options.canvasShapes, options.allShapes], () => rebuildGraph(), { immediate: true })
   watch(options.relayoutRequestTick ?? ref(0), tick => {
     if (tick <= 0) return
+    options.clearRequestedNodePositions?.()
     rebuildGraph(true)
   })
   watch([options.selectedShapeIri ?? ref(null), options.selectedPropertyKey ?? ref(null)], updateSelectionState)

@@ -107,6 +107,9 @@ const { nodes, edges, nodeTypes, edgeTypes } = useEditorGraph({
   allShapes: nodeShapes,
   canvasShapes: rootNodeShapes,
   relayoutRequestTick: fitViewRequestTick,
+  clearRequestedNodePositions: () => {
+    requestedNodePositions.value = {}
+  },
   openShapePreview,
   addField: createProperty,
   removeReferenceEdge: requestRemoveReferenceEdge,
