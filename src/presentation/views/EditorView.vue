@@ -300,22 +300,10 @@ function requestRemoveReferenceEdge(shapeIri: string, propertyNodeId: string, ta
 }
 
 function openBottomAddMenu(): void {
-  const shell = graphShellRef.value
-  if (!shell) return
-
-  const rect = shell.getBoundingClientRect()
-  const pointer = lastGraphPointerClientPosition.value ?? {
-    x: rect.left + (rect.width / 2),
-    y: rect.top + (rect.height / 2),
-  }
+  closeCanvasMenu()
   resetPendingPlacement()
   pendingPlacementAnchor.value = null
-  canvasMenu.value = {
-    x: rect.left + (rect.width / 2) - 110,
-    y: rect.bottom - 150,
-    open: true,
-  }
-  updatePlacementPreview(pointer.x, pointer.y)
+  beginPendingProfilePlacement()
 }
 
 function applyProfileDefaults(shapeIri: string): void {
@@ -777,22 +765,30 @@ void fetchSubjectHeadingOptions().then(options => {
         </div>
       </div>
 
+      <button type="button" class="settings-fab" title="Settings" aria-label="Settings" @click="settingsOpen = true">
+        <i class="pi pi-cog" />
+      </button>
+
       <div ref="canvasActionBarRef" class="canvas-action-bar">
         <button type="button" class="action-tile action-tile--primary" @click="openBottomAddMenu">
           <i class="pi pi-plus-circle action-tile__icon" />
-          <span class="action-tile__label">Add Profile</span>
+          <span class="action-tile__label">Add new profile</span>
+        </button>
+        <button type="button" class="action-tile" @click="handleCanvasExistingProfile">
+          <i class="pi pi-book action-tile__icon" />
+          <span class="action-tile__label">Load existing profiles</span>
+        </button>
+        <button type="button" class="action-tile" @click="handleCanvasUploadProfiles">
+          <i class="pi pi-upload action-tile__icon" />
+          <span class="action-tile__label">Upload profiles</span>
         </button>
         <button type="button" class="action-tile" @click="confirmResetAll">
           <i class="pi pi-refresh action-tile__icon" />
           <span class="action-tile__label">Reset Editor</span>
         </button>
-        <button type="button" class="action-tile" @click="settingsOpen = true">
-          <i class="pi pi-cog action-tile__icon" />
-          <span class="action-tile__label">Settings</span>
-        </button>
         <button type="button" class="action-tile" :disabled="profiles.length === 0" @click="exportProfiles">
           <i class="pi pi-download action-tile__icon" />
-          <span class="action-tile__label">Export SHACL</span>
+          <span class="action-tile__label">Export Profiles</span>
         </button>
       </div>
 
@@ -852,7 +848,8 @@ void fetchSubjectHeadingOptions().then(options => {
             class="relation-tile"
             @click="applyConnectionRelation(option.type)"
           >
-            <strong class="relation-tile__title">{{ option.title }} ({{ option.shaclType }})</strong>
+            <strong class="relation-tile__title">{{ option.title }}</strong>
+            <span class="relation-tile__code">{{ option.shaclType }}</span>
             <span class="relation-tile__description">{{ option.description }}</span>
           </button>
         </div>
@@ -955,6 +952,31 @@ void fetchSubjectHeadingOptions().then(options => {
   box-shadow: var(--shadow-md);
 }
 
+.settings-fab {
+  position: absolute;
+  left: 18px;
+  bottom: 18px;
+  z-index: 6;
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--color-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.settings-fab:hover {
+  background: var(--color-surface-2);
+  transform: translateY(-1px);
+}
+
 .action-tile {
   min-width: 108px;
   min-height: 88px;
@@ -971,6 +993,30 @@ void fetchSubjectHeadingOptions().then(options => {
   font: inherit;
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.canvas-action-bar .action-tile:nth-child(4) {
+  position: relative;
+  margin-left: 10px;
+  margin-right: 10px;
+}
+
+.canvas-action-bar .action-tile:nth-child(4)::before,
+.canvas-action-bar .action-tile:nth-child(4)::after {
+  content: '';
+  position: absolute;
+  top: -10px;
+  bottom: -10px;
+  width: 1px;
+  background: rgba(15, 23, 42, 0.12);
+}
+
+.canvas-action-bar .action-tile:nth-child(4)::before {
+  left: -10px;
+}
+
+.canvas-action-bar .action-tile:nth-child(4)::after {
+  right: -10px;
 }
 
 .action-tile:hover:not(:disabled) {
@@ -1120,6 +1166,13 @@ void fetchSubjectHeadingOptions().then(options => {
 
 .relation-tile__title {
   color: var(--color-text);
+  line-height: 1.35;
+}
+
+.relation-tile__code {
+  color: var(--color-primary);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
   line-height: 1.35;
 }
 

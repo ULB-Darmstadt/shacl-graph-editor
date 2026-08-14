@@ -42,8 +42,8 @@ export function buildEditorShapeNodes(
       ownProperties: buildOwnProperties(descriptor.shape, allShapes),
       interactive: true,
       onPreview: () => openShapePreview(descriptor.shape),
-      onAddField: addField && descriptor.nodeId === buildEditorShapeNodeId(descriptor.shape.nodeId.value)
-        ? () => addField(descriptor.shape.nodeId.value)
+      onAddField: addField
+        ? () => addField(descriptor.representedShapeIri)
         : undefined,
       onSelectShape: selectShape,
       onSelectProperty: selectProperty,
