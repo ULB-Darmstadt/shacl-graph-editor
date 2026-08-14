@@ -1,44 +1,67 @@
-const AIMS_API = 'https://pg4aims.ulb.tu-darmstadt.de/AIMS/application-profiles'
+const AIMS_API = 'https://aims-backend.tools.coscine.dev/AIMS'
+const AIMS_PROFILE_SEARCH_LANGUAGES = ['EN', 'DE'] as const
 
 export interface AimsProfile {
   base_url: string
   created?: string
   creator?: string
   description?: string
+  definition?: string | null
   mimeType?: string
   name: string
-  state?: string
+  state?: string | number
 }
 
-export async function loadAimsProfiles(): Promise<AimsProfile[]> {
-  const response = await fetch(AIMS_API, {
+function isAimsProfile(entry: unknown): entry is AimsProfile {
+  return typeof entry === 'object'
+    && entry !== null
+    && 'base_url' in entry
+    && typeof entry.base_url === 'string'
+    && 'name' in entry
+    && typeof entry.name === 'string'
+}
+
+async function fetchAimsJson(url: string): Promise<unknown> {
+  const response = await fetch(url, {
     headers: {
       accept: 'application/json',
     },
   })
 
   if (!response.ok) {
-    throw new Error(`AIMS profile search failed: ${response.status}`)
+    throw new Error(`AIMS request failed: ${response.status}`)
   }
 
-  const data = await response.json() as unknown
-  const profiles: AimsProfile[] = Array.isArray(data)
-    ? data.filter((entry): entry is AimsProfile => typeof entry === 'object' && entry !== null && 'base_url' in entry && 'name' in entry)
-    : []
+  return response.json() as Promise<unknown>
+}
 
-  return profiles.sort((left, right) => left.name.localeCompare(right.name))
+export async function loadAimsProfiles(): Promise<AimsProfile[]> {
+  const responses = await Promise.all(AIMS_PROFILE_SEARCH_LANGUAGES.map(async language => {
+    const url = `${AIMS_API}/application-profiles/?query=&language=${language}&includeDefinition=false`
+    return fetchAimsJson(url)
+  }))
+
+  const profilesByBaseUrl = new Map<string, AimsProfile>()
+  for (const response of responses) {
+    if (!Array.isArray(response)) continue
+    for (const entry of response) {
+      if (!isAimsProfile(entry) || profilesByBaseUrl.has(entry.base_url)) continue
+      profilesByBaseUrl.set(entry.base_url, entry)
+    }
+  }
+
+  return Array.from(profilesByBaseUrl.values())
+    .sort((left, right) => left.name.localeCompare(right.name))
 }
 
 export async function fetchAimsProfileTurtle(profile: AimsProfile): Promise<string> {
-  const response = await fetch(profile.base_url, {
-    headers: {
-      accept: 'text/turtle, text/plain;q=0.9, */*;q=0.1',
-    },
-  })
+  const encodedBaseUrl = encodeURIComponent(profile.base_url)
+  const url = `${AIMS_API}/application-profiles/${encodedBaseUrl}?includeDefinition=true`
+  const data = await fetchAimsJson(url)
 
-  if (!response.ok) {
-    throw new Error(`AIMS profile download failed: ${response.status}`)
+  if (!isAimsProfile(data) || typeof data.definition !== 'string' || data.definition.length === 0) {
+    throw new Error('AIMS profile download failed: missing Turtle definition')
   }
 
-  return response.text()
+  return data.definition
 }
