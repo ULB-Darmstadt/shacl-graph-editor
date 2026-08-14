@@ -103,8 +103,10 @@ export const useProfileEditorStore = defineStore('profiles', () => {
 
   async function addTurtleFiles(files: File[]): Promise<void> {
     for (const file of files) {
-      const profile = await importUploadedProfileFile(file)
-      applicationProfile.value.upsert(profile)
+      const importedProfiles = await importUploadedProfileFile(file)
+      for (const profile of importedProfiles) {
+        applicationProfile.value.upsert(profile)
+      }
     }
     await resolveAllImports()
     syncSerializedProfiles()
@@ -136,7 +138,8 @@ export const useProfileEditorStore = defineStore('profiles', () => {
   }
 
   async function uploadFallbackForImport(iri: string, file: File): Promise<void> {
-    const profile = await importUploadedProfileFile(file, iri)
+    const [profile] = await importUploadedProfileFile(file, iri)
+    if (!profile) return
     applicationProfile.value.upsert({ ...profile, iri })
     await resolveAllImports()
     syncSerializedProfiles()

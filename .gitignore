@@ -2,6 +2,7 @@
 node_modules
 /dist
 /docs
+/test
 
 # AI agent instructions and review notes
 AGENTS.md

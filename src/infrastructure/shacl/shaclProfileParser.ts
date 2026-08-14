@@ -30,6 +30,30 @@ export function parseShaclProfile(
   iriHint?: string,
   mediaType?: string,
 ): ShaclProfile {
+  const parsed = parseShaclProfiles(rawTurtle, source, origin, mediaType)
+  if (iriHint) {
+    const hinted = parsed.find(profile => profile.iri === iriHint)
+    if (hinted) {
+      return {
+        ...hinted,
+        source,
+        rawTurtle,
+      }
+    }
+  }
+
+  if (parsed.length > 0) {
+    if (!iriHint) return parsed[0]
+    const first = parsed[0]
+    return {
+      ...first,
+      iri: iriHint,
+      nodeShapes: first.nodeShapes.map(shape => ({ ...shape, sourceProfileIri: iriHint })),
+      source,
+      rawTurtle,
+    }
+  }
+
   const store: Store = graph()
   parse(rawTurtle, store, DEFAULT_BASE_URI, normalizeRdfMediaType(mediaType, rawTurtle))
 
@@ -63,6 +87,59 @@ export function parseShaclProfile(
     imports: Array.from(imports),
     nodeShapes,
   }
+}
+
+export function parseShaclProfiles(
+  rawTurtle: string,
+  source: string,
+  origin: ShaclProfile['origin'],
+  mediaType?: string,
+): ShaclProfile[] {
+  const store: Store = graph()
+  parse(rawTurtle, store, DEFAULT_BASE_URI, normalizeRdfMediaType(mediaType, rawTurtle))
+
+  const nodeShapeSubjects = collectNodeShapeSubjects(store)
+  const nodeShapes = nodeShapeSubjects
+    .map(iri => extractNodeShape(store.sym(iri) as NamedNode, store))
+    .filter(shape => shape.nodeId.termType === 'NamedNode')
+
+  if (nodeShapes.length === 0) return []
+
+  const profiles = nodeShapes.map(shape => {
+    const imports = new Set<string>()
+    store.match(shape.nodeId as NamedNode, OWL_IMPORTS, null, null).forEach(statement => {
+      if (statement.object.termType === 'NamedNode') imports.add(statement.object.value)
+    })
+
+    return {
+      iri: shape.nodeId.value,
+      source,
+      origin,
+      rawTurtle,
+      imports: Array.from(imports),
+      nodeShapes: [{ ...shape, sourceProfileIri: shape.nodeId.value }],
+    } satisfies ShaclProfile
+  })
+
+  const profileIris = new Set(profiles.map(profile => profile.iri))
+  const importedProfileIris = new Set(
+    profiles.flatMap(profile => profile.imports.filter(importIri => profileIris.has(importIri))),
+  )
+
+  return profiles.map(profile => importedProfileIris.has(profile.iri)
+    ? { ...profile, source: profile.iri }
+    : profile)
+}
+
+function collectNodeShapeSubjects(store: Store): string[] {
+  const nodeShapeSubjects = new Set<string>()
+  store.match(null, null, SH_NODE_SHAPE, null).forEach(statement => {
+    if (statement.subject.termType === 'NamedNode') nodeShapeSubjects.add(statement.subject.value)
+  })
+  store.match(null, SH_PROPERTY, null, null).forEach(statement => {
+    if (statement.subject.termType === 'NamedNode') nodeShapeSubjects.add(statement.subject.value)
+  })
+  return Array.from(nodeShapeSubjects)
 }
 
 function normalizeRdfMediaType(mediaType: string | undefined, content: string): string {

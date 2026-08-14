@@ -241,8 +241,15 @@ function serializeConstraintNode(constraint: {
 
 function term(iri: string): string {
   if (isBlankNodeIdentifier(iri)) return blankNodeLabel(iri)
-  if (iri.startsWith(PREFIX_APS)) return `aps:${iri.slice(PREFIX_APS.length)}`
+  if (iri.startsWith(PREFIX_APS)) {
+    const suffix = iri.slice(PREFIX_APS.length)
+    if (canUseApsPrefix(suffix)) return `aps:${suffix}`
+  }
   return `<${iri}>`
+}
+
+function canUseApsPrefix(suffix: string): boolean {
+  return /^[A-Za-z0-9_](?:[A-Za-z0-9._-]*[A-Za-z0-9_-])?$/.test(suffix)
 }
 
 function escapeLiteral(value: string): string {

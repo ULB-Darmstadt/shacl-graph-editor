@@ -1,10 +1,11 @@
 import type { ApplicationProfile, ShaclProfile } from '@/domain/profiles'
 import { resolveProfileImportsRecursive, type ResolveResult } from '@/infrastructure/shacl/profileImportResolver'
-import { parseShaclProfile } from '@/infrastructure/shacl/shaclProfileParser'
+import { parseShaclProfile, parseShaclProfiles } from '@/infrastructure/shacl/shaclProfileParser'
 
-export async function importUploadedProfileFile(file: File, iriHint?: string): Promise<ShaclProfile> {
+export async function importUploadedProfileFile(file: File, iriHint?: string): Promise<ShaclProfile[]> {
   const text = await file.text()
-  return parseShaclProfile(text, file.name, 'uploaded', iriHint)
+  if (iriHint) return [parseShaclProfile(text, file.name, 'uploaded', iriHint)]
+  return parseShaclProfiles(text, file.name, 'uploaded')
 }
 
 export function importProfileFromTurtle(
