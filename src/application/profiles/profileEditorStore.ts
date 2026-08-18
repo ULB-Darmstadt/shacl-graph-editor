@@ -335,7 +335,8 @@ export const useProfileEditorStore = defineStore('profiles', () => {
   function connectPropertyToShape(shapeIri: string, sourceHandle: string | null | undefined, targetShapeIri: string | null): void {
     if (!sourceHandle?.startsWith('ref:')) return
     if (targetShapeIri?.trim() === shapeIri) return
-    const propertyNodeId = sourceHandle.slice('ref:'.length)
+    const propertyNodeId = sourceHandle.slice('ref:'.length).trim()
+    if (!propertyNodeId) return
     const context = findEditableShapeContext(shapeIri)
     if (!context) return
 

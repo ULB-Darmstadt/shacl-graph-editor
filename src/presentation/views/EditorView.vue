@@ -22,7 +22,7 @@ import Button from 'primevue/button'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import { PROFILE_LICENSE_OPTIONS, fetchSubjectHeadingOptions, type SelectOption } from '@/application/profiles/profileEditorCatalogs'
-import { propertyNodeTargets } from '@/domain/profiles'
+import { inferPropertyEditorType, propertyNodeTargets } from '@/domain/profiles'
 import type { PropertyEditorType } from '@/application/profiles/profileEditorStore'
 
 import '@vue-flow/core/dist/style.css'
@@ -79,6 +79,7 @@ function resetEditorUiState(): void {
   shapePreviewOpen.value = false
   relationChoiceDialogOpen.value = false
   pendingConnection.value = null
+  selectedConnection.value = null
   canvasMenu.value.open = false
   clearSelection()
   cancelPendingProfilePlacement()
@@ -130,11 +131,13 @@ const modeToggleLabel = computed(() => readOnlyMode.value ? 'View Mode' : 'Edit 
 const modeToggleIcon = computed(() => readOnlyMode.value ? 'pi pi-eye' : 'pi pi-pencil')
 const canvasMenu = ref<{ x: number; y: number; open: boolean }>({ x: 0, y: 0, open: false })
 const relationChoiceDialogOpen = ref(false)
-const pendingConnection = ref<{
+type EditableConnection = {
   sourceShapeIri: string
   sourceHandle: string
   targetShapeIri: string
-} | null>(null)
+}
+const pendingConnection = ref<EditableConnection | null>(null)
+const selectedConnection = ref<EditableConnection | null>(null)
 const graphShellRef = ref<HTMLElement | null>(null)
 const canvasMenuRef = ref<HTMLElement | null>(null)
 const canvasActionBarRef = ref<HTMLElement | null>(null)
@@ -173,9 +176,10 @@ const CONNECTABLE_RELATION_OPTIONS: Array<{
   },
 ]
 
-const pendingConnectionSourcePropertyLabel = computed(() => {
-  const sourceHandle = pendingConnection.value?.sourceHandle
-  const sourceShapeIri = pendingConnection.value?.sourceShapeIri
+const activeEditableConnection = computed(() => pendingConnection.value ?? selectedConnection.value)
+const activeConnectionSourcePropertyLabel = computed(() => {
+  const sourceHandle = activeEditableConnection.value?.sourceHandle
+  const sourceShapeIri = activeEditableConnection.value?.sourceShapeIri
   if (!sourceHandle?.startsWith('ref:') || !sourceShapeIri) return null
   const propertyNodeId = sourceHandle.slice('ref:'.length)
   const shape = nodeShapes.value.find(candidate => candidate.nodeId.value === sourceShapeIri)
@@ -183,11 +187,17 @@ const pendingConnectionSourcePropertyLabel = computed(() => {
   return property?.name ?? property?.path?.value ?? 'selected field'
 })
 
-const pendingConnectionTargetLabel = computed(() => {
-  const targetShapeIri = pendingConnection.value?.targetShapeIri
+const activeConnectionTargetLabel = computed(() => {
+  const targetShapeIri = activeEditableConnection.value?.targetShapeIri
   if (!targetShapeIri) return null
   const targetShape = nodeShapes.value.find(candidate => candidate.nodeId.value === targetShapeIri)
   return targetShape?.label ?? targetShapeIri
+})
+const selectedConnectionType = computed<PropertyEditorType | null>(() => {
+  const connection = selectedConnection.value
+  if (!connection) return null
+  const property = propertyForConnection(connection)
+  return property ? (property.editorType ?? inferPropertyEditorType(property)) as PropertyEditorType : null
 })
 
 const isPlacementHintVisible = computed(() => pendingProfilePlacement.value && placementPreviewClientPosition.value !== null)
@@ -308,17 +318,12 @@ function handleCanvasUploadProfiles(): void {
 }
 
 function requestRemoveReferenceEdge(shapeIri: string, propertyNodeId: string, targetShapeIri: string): void {
-  confirm.require({
-    header: 'Remove connection',
-    message: 'Remove this linked profile connection from the field?',
-    icon: 'pi pi-exclamation-triangle',
-    acceptLabel: 'Remove',
-    rejectLabel: 'Cancel',
-    acceptClass: 'p-button-danger',
-    accept: () => {
-      profileStore.removePropertyTarget(shapeIri, propertyNodeId, targetShapeIri)
-    },
-  })
+  if (readOnlyMode.value) return
+  selectedConnection.value = {
+    sourceShapeIri: shapeIri,
+    sourceHandle: `ref:${propertyNodeId}`,
+    targetShapeIri,
+  }
 }
 
 function openBottomAddMenu(): void {
@@ -450,21 +455,19 @@ function handleConnect(connection: Connection): void {
   const source = connection.source ? parseEditorShapeNodeTarget(connection.source) : null
   const target = connection.target ? parseEditorShapeNodeTarget(connection.target) : null
   if (!source?.representedShapeIri || !target?.representedShapeIri) return
-  if (!connection.sourceHandle) return
+  const sourceHandle = connection.sourceHandle
+  const propertyNodeId = propertyNodeIdFromReferenceHandle(sourceHandle)
+  if (!propertyNodeId || !sourceHandle) return
   if (source.representedShapeIri === target.representedShapeIri) return
 
-  const propertyNodeId = connection.sourceHandle.startsWith('ref:')
-    ? connection.sourceHandle.slice('ref:'.length)
-    : null
   const sourceShape = nodeShapes.value.find(shape => shape.nodeId.value === source.representedShapeIri)
-  const sourceProperty = propertyNodeId
-    ? sourceShape?.properties.find(property => property.nodeId.value === propertyNodeId)
-    : null
+  const sourceProperty = sourceShape?.properties.find(property => property.nodeId.value === propertyNodeId)
+  if (!sourceProperty) return
 
   if (sourceProperty?.editorType === 'oneOfProfiles') {
     profileStore.connectPropertyToShape(
       source.representedShapeIri,
-      connection.sourceHandle,
+      sourceHandle,
       target.representedShapeIri,
     )
     return
@@ -472,10 +475,16 @@ function handleConnect(connection: Connection): void {
 
   pendingConnection.value = {
     sourceShapeIri: source.representedShapeIri,
-    sourceHandle: connection.sourceHandle,
+    sourceHandle,
     targetShapeIri: target.representedShapeIri,
   }
   relationChoiceDialogOpen.value = true
+}
+
+function propertyNodeIdFromReferenceHandle(sourceHandle: string | null | undefined): string | null {
+  if (!sourceHandle?.startsWith('ref:')) return null
+  const propertyNodeId = sourceHandle.slice('ref:'.length).trim()
+  return propertyNodeId ? propertyNodeId : null
 }
 
 function closeRelationChoiceDialog(): void {
@@ -487,9 +496,7 @@ function applyConnectionRelation(type: PropertyEditorType): void {
   const connection = pendingConnection.value
   if (!connection) return
 
-  const propertyNodeId = connection.sourceHandle.startsWith('ref:')
-    ? connection.sourceHandle.slice('ref:'.length)
-    : null
+  const propertyNodeId = propertyNodeIdFromReferenceHandle(connection.sourceHandle)
   if (!propertyNodeId) {
     closeRelationChoiceDialog()
     return
@@ -502,6 +509,55 @@ function applyConnectionRelation(type: PropertyEditorType): void {
     connection.targetShapeIri,
   )
   closeRelationChoiceDialog()
+}
+
+function closeSelectedConnectionDialog(): void {
+  selectedConnection.value = null
+}
+
+function updateSelectedConnectionDialogVisible(visible: boolean): void {
+  if (!visible) closeSelectedConnectionDialog()
+}
+
+function applySelectedConnectionRelation(type: PropertyEditorType): void {
+  const connection = selectedConnection.value
+  if (!connection) return
+
+  const propertyNodeId = propertyNodeIdFromReferenceHandle(connection.sourceHandle)
+  if (!propertyNodeId) {
+    closeSelectedConnectionDialog()
+    return
+  }
+
+  profileStore.setPropertyType(connection.sourceShapeIri, propertyNodeId, type)
+  profileStore.connectPropertyToShape(
+    connection.sourceShapeIri,
+    connection.sourceHandle,
+    connection.targetShapeIri,
+  )
+  closeSelectedConnectionDialog()
+}
+
+function removeSelectedConnection(): void {
+  const connection = selectedConnection.value
+  if (!connection) return
+
+  const propertyNodeId = propertyNodeIdFromReferenceHandle(connection.sourceHandle)
+  if (!propertyNodeId) {
+    closeSelectedConnectionDialog()
+    return
+  }
+
+  profileStore.removePropertyTarget(connection.sourceShapeIri, propertyNodeId, connection.targetShapeIri)
+  closeSelectedConnectionDialog()
+}
+
+function propertyForConnection(connection: EditableConnection): (typeof nodeShapes.value)[number]['properties'][number] | null {
+  const propertyNodeId = propertyNodeIdFromReferenceHandle(connection.sourceHandle)
+  if (!propertyNodeId) return null
+
+  const shape = nodeShapes.value.find(candidate => candidate.nodeId.value === connection.sourceShapeIri)
+  return shape?.properties.find(property => property.nodeId.value === propertyNodeId) ?? null
 }
 
 watch(
@@ -870,9 +926,9 @@ void fetchSubjectHeadingOptions().then(options => {
       <div class="relation-choice">
         <p class="relation-choice__intro">
           Choose how
-          <strong>{{ pendingConnectionSourcePropertyLabel ?? 'this field' }}</strong>
+          <strong>{{ activeConnectionSourcePropertyLabel ?? 'this field' }}</strong>
           should point to
-          <strong>{{ pendingConnectionTargetLabel ?? 'this profile' }}</strong>.
+          <strong>{{ activeConnectionTargetLabel ?? 'this profile' }}</strong>.
         </p>
         <div class="relation-choice__grid">
           <button
@@ -886,6 +942,42 @@ void fetchSubjectHeadingOptions().then(options => {
             <span class="relation-tile__code">{{ option.shaclType }}</span>
             <span class="relation-tile__description">{{ option.description }}</span>
           </button>
+        </div>
+      </div>
+    </Dialog>
+
+    <Dialog
+      :visible="selectedConnection !== null"
+      modal
+      header="Edit connection"
+      :style="{ width: 'min(760px, 96vw)' }"
+      @update:visible="updateSelectedConnectionDialogVisible"
+      @hide="closeSelectedConnectionDialog"
+    >
+      <div class="relation-choice">
+        <p class="relation-choice__intro">
+          Change how
+          <strong>{{ activeConnectionSourcePropertyLabel ?? 'this field' }}</strong>
+          points to
+          <strong>{{ activeConnectionTargetLabel ?? 'this profile' }}</strong>,
+          or remove the connection.
+        </p>
+        <div class="relation-choice__grid">
+          <button
+            v-for="option in CONNECTABLE_RELATION_OPTIONS"
+            :key="option.type"
+            type="button"
+            class="relation-tile"
+            :class="{ 'is-selected': selectedConnectionType === option.type }"
+            @click="applySelectedConnectionRelation(option.type)"
+          >
+            <strong class="relation-tile__title">{{ option.title }}</strong>
+            <span class="relation-tile__code">{{ option.shaclType }}</span>
+            <span class="relation-tile__description">{{ option.description }}</span>
+          </button>
+        </div>
+        <div class="connection-dialog-actions">
+          <Button label="Remove connection" icon="pi pi-trash" severity="danger" size="small" @click="removeSelectedConnection" />
         </div>
       </div>
     </Dialog>
@@ -1198,6 +1290,11 @@ void fetchSubjectHeadingOptions().then(options => {
   transform: translateY(-1px);
 }
 
+.relation-tile.is-selected {
+  border-color: var(--color-primary);
+  box-shadow: inset 3px 0 0 var(--color-primary), var(--shadow-sm);
+}
+
 .relation-tile__title {
   color: var(--color-text);
   line-height: 1.35;
@@ -1213,6 +1310,13 @@ void fetchSubjectHeadingOptions().then(options => {
 .relation-tile__description {
   color: var(--color-text-muted);
   line-height: 1.5;
+}
+
+.connection-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
 }
 
 .canvas-menu {
