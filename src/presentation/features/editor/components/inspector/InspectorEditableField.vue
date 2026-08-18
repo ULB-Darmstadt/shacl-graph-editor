@@ -10,6 +10,7 @@ const props = defineProps<{
   options?: Array<{ label: string; value: string; disabled?: boolean }>
   disabled?: boolean
   invalid?: boolean
+  warning?: boolean
   helperText?: string | null
   autoFocus?: boolean
 }>()
@@ -61,7 +62,7 @@ watch(() => props.autoFocus, enabled => {
       v-if="multiline"
       ref="inputRef"
       class="editable-field__input ui-sidepanel-field-input"
-      :class="{ 'is-invalid': invalid }"
+      :class="{ 'is-invalid': invalid, 'is-warning': warning && !invalid }"
       :placeholder="placeholder"
       :value="value ?? ''"
       :disabled="disabled"
@@ -74,7 +75,7 @@ watch(() => props.autoFocus, enabled => {
       v-else-if="options"
       ref="inputRef"
       class="editable-field__input ui-sidepanel-field-input"
-      :class="{ 'is-invalid': invalid }"
+      :class="{ 'is-invalid': invalid, 'is-warning': warning && !invalid }"
       :value="value ?? ''"
       :disabled="disabled"
       @change="onInput"
@@ -90,7 +91,7 @@ watch(() => props.autoFocus, enabled => {
       v-else
       ref="inputRef"
       class="editable-field__input ui-sidepanel-field-input"
-      :class="{ 'is-invalid': invalid }"
+      :class="{ 'is-invalid': invalid, 'is-warning': warning && !invalid }"
       :type="type ?? 'text'"
       :placeholder="placeholder"
       :value="value ?? ''"
@@ -100,7 +101,7 @@ watch(() => props.autoFocus, enabled => {
       @keydown.enter="onSubmit"
     />
 
-    <span v-if="helperText" class="editable-field__helper" :class="{ 'is-invalid': invalid }">{{ helperText }}</span>
+    <span v-if="helperText" class="editable-field__helper" :class="{ 'is-invalid': invalid, 'is-warning': warning && !invalid }">{{ helperText }}</span>
   </label>
 </template>
 
@@ -128,6 +129,11 @@ watch(() => props.autoFocus, enabled => {
   box-shadow: 0 0 0 1px rgba(216, 76, 76, 0.14), inset 0 -2px 0 rgba(216, 76, 76, 0.16);
 }
 
+.editable-field__input.is-warning {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.16), inset 0 -2px 0 rgba(245, 158, 11, 0.2);
+}
+
 .editable-field__helper {
   font-size: 0.78rem;
   color: var(--color-text-muted);
@@ -135,6 +141,10 @@ watch(() => props.autoFocus, enabled => {
 
 .editable-field__helper.is-invalid {
   color: #b42323;
+}
+
+.editable-field__helper.is-warning {
+  color: #b45309;
 }
 
 textarea.editable-field__input {

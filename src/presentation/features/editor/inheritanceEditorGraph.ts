@@ -19,6 +19,13 @@ export interface ShapeEditorNodeData {
   selected?: boolean
   selectedShapeIri?: string | null
   selectedPropertyKey?: string | null
+  reviewMode?: boolean
+  reviewShapeSeverity?: 'urgent' | 'warning' | null
+  reviewPropertySeverities?: Record<string, 'urgent' | 'warning'>
+  reviewAnnotationsByShape?: Record<string, {
+    shapeSeverity?: 'urgent' | 'warning' | null
+    propertySeverities?: Record<string, 'urgent' | 'warning'>
+  }>
 }
 
 export interface InheritedPropertyGroup {

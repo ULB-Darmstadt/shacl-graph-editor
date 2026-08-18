@@ -4,6 +4,7 @@ import type { NodeShape } from '@/domain/profiles'
 import {
   buildEditorShapeNodes,
   buildEditorStructuralEdges,
+  type EditorShapeReviewAnnotation,
   preserveEditorNodePositions,
   representedShapeIriFromNode,
   shouldAutoLayoutEditorGraph,
@@ -22,6 +23,8 @@ interface UseEditorGraphOptions {
   relayoutRequestTick?: Ref<number>
   clearRequestedNodePositions?: () => void
   readOnlyMode?: Ref<boolean>
+  reviewMode?: Ref<boolean>
+  reviewAnnotations?: Ref<Map<string, EditorShapeReviewAnnotation>>
   openShapePreview: (shape: NodeShape) => void | Promise<void>
   addField?: (shapeIri: string) => void
   removeReferenceEdge?: (shapeIri: string, propertyNodeId: string, targetShapeIri: string) => void
@@ -83,6 +86,13 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
       node.data.selected = representedShapeIri === selectedShapeIri
       node.data.selectedShapeIri = selectedShapeIri
       node.data.selectedPropertyKey = representedShapeIri === selectedShapeIri ? selectedPropertyKey : null
+      node.data.reviewMode = options.reviewMode?.value ?? false
+      node.data.reviewShapeSeverity = representedShapeIri
+        ? options.reviewAnnotations?.value.get(representedShapeIri)?.shapeSeverity ?? null
+        : null
+      node.data.reviewPropertySeverities = representedShapeIri
+        ? options.reviewAnnotations?.value.get(representedShapeIri)?.propertySeverities ?? {}
+        : {}
     }
   }
 
@@ -119,6 +129,8 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
       options.moveProperty,
       options.selectedShapeIri?.value,
       options.selectedPropertyKey?.value,
+      options.reviewMode?.value ?? false,
+      options.reviewAnnotations?.value,
     )
 
     const visibleNodeIds = new Set(shapeNodes.map(node => node.id))
@@ -157,6 +169,8 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
     rebuildGraph(true)
   })
   watch(options.readOnlyMode ?? ref(false), () => rebuildGraph())
+  watch(options.reviewMode ?? ref(false), () => rebuildGraph())
+  watch(options.reviewAnnotations ?? ref(new Map<string, EditorShapeReviewAnnotation>()), () => rebuildGraph())
   watch([options.selectedShapeIri ?? ref(null), options.selectedPropertyKey ?? ref(null)], updateSelectionState)
   watch(() => {
     const requestedPositions = (options.requestedNodePositions?.value ?? {}) as Record<string, { x: number; y: number }>

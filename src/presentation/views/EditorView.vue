@@ -2,7 +2,7 @@
 /**
  * SHACL editor main view.
  */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { VueFlow, useVueFlow, type Connection, type XYPosition } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
@@ -16,8 +16,10 @@ import { useEditorSelection } from '@/presentation/features/editor/useEditorSele
 import EditorDialogs from '@/presentation/features/editor/EditorDialogs.vue'
 import EditorInspector from '@/presentation/features/editor/components/inspector/EditorInspector.vue'
 import { useProfileWorkflowMenu } from '@/presentation/features/profile-workflow/useProfileWorkflowMenu'
-import { parseEditorShapeNodeTarget } from '@/presentation/features/editor/inheritanceEditorGraph'
+import { buildEditorShapeNodeId, parseEditorShapeNodeTarget } from '@/presentation/features/editor/inheritanceEditorGraph'
+import type { EditorShapeReviewAnnotation } from '@/presentation/features/editor/editorGraphBuilders'
 import { estimateEditorShapeHeight } from '@/presentation/features/editor/layoutEditorGraph'
+import { buildEditorReviewItems, type EditorReviewItem, type EditorReviewSeverity } from '@/presentation/features/editor/editorReview'
 import Button from 'primevue/button'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
@@ -33,11 +35,15 @@ import '@vue-flow/minimap/dist/style.css'
 const profileStore = useProfileEditorStore()
 const toast = useToast()
 const confirm = useConfirm()
-const { screenToFlowCoordinate, fitView } = useVueFlow()
+const { screenToFlowCoordinate, fitView, setCenter } = useVueFlow()
 const { nodeShapes, profiles, isResolvingImports, rootNodeShapes, fitViewRequestTick } = storeToRefs(profileStore)
 
+type EditorMode = 'edit' | 'review' | 'view'
+
 const requestedNodePositions = ref<Record<string, XYPosition>>({})
-const readOnlyMode = ref(false)
+const editorMode = ref<EditorMode>('edit')
+const readOnlyMode = computed(() => editorMode.value === 'view')
+const reviewMode = computed(() => editorMode.value === 'review')
 const draftPropertyNodeId = ref<string | null>(null)
 const pendingPlacementAnchor = ref<XYPosition | null>(null)
 const pendingPlacementOffset = ref(0)
@@ -108,6 +114,26 @@ const {
   resetUiState: resetEditorUiState,
 })
 
+const reviewItems = computed(() => buildEditorReviewItems(nodeShapes.value))
+const reviewAnnotations = computed(() => {
+  const annotations = new Map<string, EditorShapeReviewAnnotation>()
+
+  for (const item of reviewItems.value) {
+    const current = annotations.get(item.shapeIri) ?? { shapeSeverity: null, propertySeverities: {} }
+    if (item.subject === 'profile') {
+      current.shapeSeverity = strongerReviewSeverity(current.shapeSeverity ?? null, item.severity)
+    } else if (item.propertyNodeId) {
+      current.propertySeverities = {
+        ...current.propertySeverities,
+        [item.propertyNodeId]: strongerReviewSeverity(current.propertySeverities?.[item.propertyNodeId] ?? null, item.severity),
+      }
+    }
+    annotations.set(item.shapeIri, current)
+  }
+
+  return annotations
+})
+
 const { nodes, edges, nodeTypes, edgeTypes } = useEditorGraph({
   allShapes: nodeShapes,
   canvasShapes: rootNodeShapes,
@@ -116,6 +142,8 @@ const { nodes, edges, nodeTypes, edgeTypes } = useEditorGraph({
     requestedNodePositions.value = {}
   },
   readOnlyMode,
+  reviewMode,
+  reviewAnnotations,
   openShapePreview,
   addField: createProperty,
   removeReferenceEdge: requestRemoveReferenceEdge,
@@ -130,8 +158,8 @@ const { nodes, edges, nodeTypes, edgeTypes } = useEditorGraph({
 
 const hasNothing = computed(() => profiles.value.length === 0)
 const hasInspectorSelection = computed(() => selectedShape.value !== null)
-const modeToggleLabel = computed(() => readOnlyMode.value ? 'View Mode' : 'Edit Mode')
-const modeToggleIcon = computed(() => readOnlyMode.value ? 'pi pi-eye' : 'pi pi-pencil')
+const addProfileMenuOpen = ref(false)
+const settingsMenuOpen = ref(false)
 const canvasMenu = ref<{ x: number; y: number; open: boolean }>({ x: 0, y: 0, open: false })
 const shapeHeaderMenu = ref<{ x: number; y: number; open: boolean; shapeIri: string | null; label: string | null; allowDelete: boolean }>({
   x: 0,
@@ -147,12 +175,31 @@ type EditableConnection = {
   sourceHandle: string
   targetShapeIri: string
 }
+
+type CanvasNodePosition = {
+  id: string
+  position: XYPosition
+  dimensions?: {
+    width?: number
+    height?: number
+  }
+}
+
+type ReviewSeverityFilter = 'all' | 'urgent' | 'warning'
+
 const pendingConnection = ref<EditableConnection | null>(null)
 const selectedConnection = ref<EditableConnection | null>(null)
 const graphShellRef = ref<HTMLElement | null>(null)
 const canvasMenuRef = ref<HTMLElement | null>(null)
 const canvasActionBarRef = ref<HTMLElement | null>(null)
+const settingsMenuRef = ref<HTMLElement | null>(null)
+const settingsFabRef = ref<HTMLElement | null>(null)
+const actionOverlayRef = ref<HTMLElement | null>(null)
+const actionOverlayWidth = ref(0)
 const settingsOpen = ref(false)
+const reviewDialogOpen = ref(false)
+const reviewSeverityFilter = ref<ReviewSeverityFilter>('all')
+const reviewSearch = ref('')
 const subjectHeadingOptions = ref<SelectOption[]>([])
 const defaultCreator = ref(localStorage.getItem('editor.defaultCreator') ?? '')
 const defaultCreated = ref(localStorage.getItem('editor.defaultCreated') ?? '')
@@ -187,6 +234,12 @@ const CONNECTABLE_RELATION_OPTIONS: Array<{
   },
 ]
 
+const EDITOR_MODE_OPTIONS: Array<{ value: EditorMode; label: string; icon: string }> = [
+  { value: 'edit', label: 'Edit', icon: 'pi pi-pencil' },
+  { value: 'review', label: 'Review', icon: 'pi pi-flag' },
+  { value: 'view', label: 'View', icon: 'pi pi-eye' },
+]
+
 const activeEditableConnection = computed(() => pendingConnection.value ?? selectedConnection.value)
 const activeConnectionSourcePropertyLabel = computed(() => {
   const sourceHandle = activeEditableConnection.value?.sourceHandle
@@ -210,6 +263,30 @@ const selectedConnectionType = computed<PropertyEditorType | null>(() => {
   const property = propertyForConnection(connection)
   return property ? (property.editorType ?? inferPropertyEditorType(property)) as PropertyEditorType : null
 })
+const urgentReviewItems = computed(() => reviewItems.value.filter(item => item.severity === 'urgent'))
+const actionOverlayStyle = computed(() => ({
+  width: actionOverlayWidth.value > 0 ? `${actionOverlayWidth.value}px` : 'min(92vw, 760px)',
+}))
+const filteredReviewItems = computed(() => {
+  const needle = reviewSearch.value.trim().toLowerCase()
+  return reviewItems.value.filter(item => {
+    if (reviewSeverityFilter.value !== 'all' && item.severity !== reviewSeverityFilter.value) return false
+    if (!needle) return true
+    const haystack = [
+      item.title,
+      item.message,
+      item.profileLabel,
+      item.propertyLabel,
+      item.subject,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+    return haystack.includes(needle)
+  })
+})
+const filteredUrgentReviewItems = computed(() => filteredReviewItems.value.filter(item => item.severity === 'urgent'))
+const filteredWarningReviewItems = computed(() => filteredReviewItems.value.filter(item => item.severity === 'warning'))
 
 const isPlacementHintVisible = computed(() => pendingProfilePlacement.value && placementPreviewClientPosition.value !== null)
 const placementHintStyle = computed(() => {
@@ -220,6 +297,19 @@ const placementHintStyle = computed(() => {
     top: `${placementPreviewClientPosition.value.y - rect.top + 18}px`,
   }
 })
+
+function strongerReviewSeverity(
+  current: EditorReviewSeverity | null,
+  next: EditorReviewSeverity,
+): EditorReviewSeverity {
+  return current === 'urgent' || next === 'urgent' ? 'urgent' : 'warning'
+}
+
+function setEditorMode(mode: EditorMode): void {
+  editorMode.value = mode
+  closeActionMenus()
+  closeActionOverlay()
+}
 
 function createProfile(): string {
   const iri = profileStore.createProfile()
@@ -299,15 +389,48 @@ function closeShapeHeaderMenu(): void {
   shapeHeaderMenu.value.open = false
 }
 
+function closeActionMenus(): void {
+  addProfileMenuOpen.value = false
+  settingsMenuOpen.value = false
+}
+
+function closeActionOverlay(): void {
+  reviewDialogOpen.value = false
+  closeImportDialog()
+}
+
+function updateActionOverlayMetrics(): void {
+  actionOverlayWidth.value = canvasActionBarRef.value?.getBoundingClientRect().width ?? 0
+}
+
+function openImportOverlay(importerId: string): void {
+  reviewDialogOpen.value = false
+  updateActionOverlayMetrics()
+  openImportDialog(importerId)
+  void nextTick(updateActionOverlayMetrics)
+}
+
 function handleGlobalPointerDown(event: PointerEvent): void {
-  if (!canvasMenu.value.open && !shapeHeaderMenu.value.open) return
+  if (
+    !canvasMenu.value.open
+    && !shapeHeaderMenu.value.open
+    && !addProfileMenuOpen.value
+    && !settingsMenuOpen.value
+    && !reviewDialogOpen.value
+    && !activeImportDialogVisible.value
+  ) return
   const target = event.target as Node | null
   if (!target) return
   if (canvasMenuRef.value?.contains(target)) return
   if (canvasActionBarRef.value?.contains(target)) return
+  if (settingsFabRef.value?.contains(target)) return
+  if (settingsMenuRef.value?.contains(target)) return
+  if (actionOverlayRef.value?.contains(target)) return
   if ((target as Element).closest?.('.shape-header-menu')) return
   closeCanvasMenu()
   closeShapeHeaderMenu()
+  closeActionMenus()
+  closeActionOverlay()
 }
 
 function handlePaneClick(): void {
@@ -315,6 +438,8 @@ function handlePaneClick(): void {
   clearSelection()
   closeCanvasMenu()
   closeShapeHeaderMenu()
+  closeActionMenus()
+  closeActionOverlay()
 }
 
 function handleShellContextMenu(event: MouseEvent): void {
@@ -346,6 +471,8 @@ function handleCanvasNewProfile(): void {
   if (readOnlyMode.value) return
   const shouldPlaceImmediately = pendingPlacementAnchor.value !== null
   closeCanvasMenu()
+  closeActionMenus()
+  closeActionOverlay()
   if (shouldPlaceImmediately) {
     createProfileAt(pendingPlacementAnchor.value as XYPosition)
     return
@@ -356,13 +483,34 @@ function handleCanvasNewProfile(): void {
 function handleCanvasExistingProfile(): void {
   if (readOnlyMode.value) return
   closeCanvasMenu()
-  openImportDialog('aims-profile-catalog')
+  closeActionMenus()
+  openImportOverlay('aims-profile-catalog')
 }
 
 function handleCanvasUploadProfiles(): void {
   if (readOnlyMode.value) return
   closeCanvasMenu()
+  closeActionMenus()
+  closeActionOverlay()
   triggerSchemaUpload()
+}
+
+function handleConfirmResetAll(): void {
+  closeActionMenus()
+  closeActionOverlay()
+  confirmResetAll()
+}
+
+function handleExportProfiles(): void {
+  closeActionMenus()
+  closeActionOverlay()
+  exportProfiles()
+}
+
+function openDefaultSettings(): void {
+  closeActionMenus()
+  closeActionOverlay()
+  settingsOpen.value = true
 }
 
 function handleShapeHeaderDeleteProfile(): void {
@@ -412,10 +560,17 @@ function requestRemoveReferenceEdge(shapeIri: string, propertyNodeId: string, ta
 
 function openBottomAddMenu(): void {
   if (readOnlyMode.value) return
+  addProfileMenuOpen.value = !addProfileMenuOpen.value
+  settingsMenuOpen.value = false
   closeCanvasMenu()
+  closeShapeHeaderMenu()
+  closeActionOverlay()
+}
+
+function handleBottomAddNewProfile(): void {
   resetPendingPlacement()
   pendingPlacementAnchor.value = null
-  beginPendingProfilePlacement()
+  handleCanvasNewProfile()
 }
 
 function applyProfileDefaults(shapeIri: string): void {
@@ -489,6 +644,7 @@ function handleGraphShellClick(event: MouseEvent): void {
   if (!target) return
   if (canvasMenuRef.value?.contains(target)) return
   if (canvasActionBarRef.value?.contains(target)) return
+  if (actionOverlayRef.value?.contains(target)) return
 
   event.preventDefault()
   event.stopPropagation()
@@ -642,6 +798,66 @@ function propertyForConnection(connection: EditableConnection): (typeof nodeShap
 
   const shape = nodeShapes.value.find(candidate => candidate.nodeId.value === connection.sourceShapeIri)
   return shape?.properties.find(property => property.nodeId.value === propertyNodeId) ?? null
+}
+
+function openReviewDialog(): void {
+  closeImportDialog()
+  closeCanvasMenu()
+  closeShapeHeaderMenu()
+  closeActionMenus()
+  updateActionOverlayMetrics()
+  reviewDialogOpen.value = true
+  void nextTick(updateActionOverlayMetrics)
+}
+
+async function jumpToReviewItem(item: EditorReviewItem): Promise<void> {
+  const shape = profileStore.applicationProfile.findNodeShape(item.shapeIri)
+  if (!shape) return
+
+  editorMode.value = 'review'
+
+  if (item.propertyNodeId) {
+    const property = shape.properties.find(candidate => candidate.nodeId.value === item.propertyNodeId)
+    if (property) selectProperty(shape, property)
+    else selectShape(shape)
+  } else {
+    selectShape(shape)
+  }
+
+  reviewDialogOpen.value = false
+  await nextTick()
+  await waitForAnimationFrame()
+  await centerShapeInCanvas(item.shapeIri)
+}
+
+async function centerShapeInCanvas(shapeIri: string): Promise<void> {
+  const preferredNodeId = buildEditorShapeNodeId(shapeIri)
+  let node: CanvasNodePosition | undefined
+  const canvasNodes = nodes.value as unknown as CanvasNodePosition[]
+
+  for (const candidate of canvasNodes) {
+    if (candidate.id === preferredNodeId) {
+      node = candidate
+      break
+    }
+    const target = parseEditorShapeNodeTarget(candidate.id)
+    if (target?.representedShapeIri === shapeIri) {
+      node = candidate
+      break
+    }
+  }
+
+  if (!node) return
+  const dimensions = node.dimensions
+  await setCenter(
+    node.position.x + ((dimensions?.width ?? 340) / 2),
+    node.position.y + ((dimensions?.height ?? 220) / 2),
+    { zoom: 0.9, duration: 250 },
+  )
+}
+
+function waitForAnimationFrame(): Promise<void> {
+  return new Promise(resolve => requestAnimationFrame(() => resolve()))
 }
 
 watch(
@@ -830,18 +1046,23 @@ watch(fitViewRequestTick, (tick) => {
 onMounted(() => {
   window.addEventListener('pointerdown', handleGlobalPointerDown)
   window.addEventListener('keydown', handleGlobalKeyDown)
+  window.addEventListener('resize', updateActionOverlayMetrics)
+  updateActionOverlayMetrics()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('pointerdown', handleGlobalPointerDown)
   window.removeEventListener('keydown', handleGlobalKeyDown)
+  window.removeEventListener('resize', updateActionOverlayMetrics)
   cancelPendingProfilePlacement()
   resetPendingPlacement()
 })
 
 function handleGlobalKeyDown(event: KeyboardEvent): void {
-  if (event.key !== 'Escape' || !pendingProfilePlacement.value) return
-  cancelPendingProfilePlacement()
+  if (event.key !== 'Escape') return
+  if (pendingProfilePlacement.value) cancelPendingProfilePlacement()
+  closeActionMenus()
+  closeActionOverlay()
 }
 
 void fetchSubjectHeadingOptions().then(options => {
@@ -894,10 +1115,6 @@ void fetchSubjectHeadingOptions().then(options => {
             <Controls position="top-left" />
             <MiniMap pannable zoomable />
           </VueFlow>
-
-          <div class="canvas-hint">
-            {{ pendingProfilePlacement ? 'Move the profile and click to place it. Press Escape to cancel.' : 'Use Add Profile below or right-click empty canvas.' }}
-          </div>
         </template>
 
         <div
@@ -922,11 +1139,11 @@ void fetchSubjectHeadingOptions().then(options => {
           </button>
           <button type="button" class="canvas-menu__item" @click="handleCanvasExistingProfile">
             <i class="pi pi-book canvas-menu__icon" />
-            <span class="canvas-menu__label">Add existing profile</span>
+            <span class="canvas-menu__label">Search profiles</span>
           </button>
           <button type="button" class="canvas-menu__item" @click="handleCanvasUploadProfiles">
             <i class="pi pi-upload canvas-menu__icon" />
-            <span class="canvas-menu__label">Upload profile(s)</span>
+            <span class="canvas-menu__label">Import profiles</span>
           </button>
         </div>
 
@@ -947,35 +1164,197 @@ void fetchSubjectHeadingOptions().then(options => {
         </div>
       </div>
 
-      <button type="button" class="settings-fab" title="Settings" aria-label="Settings" @click="settingsOpen = true">
+      <button
+        ref="settingsFabRef"
+        type="button"
+        class="settings-fab"
+        title="Settings"
+        aria-label="Settings"
+        @click.stop="settingsMenuOpen = !settingsMenuOpen; addProfileMenuOpen = false"
+      >
         <i class="pi pi-cog" />
       </button>
+      <div v-if="settingsMenuOpen" ref="settingsMenuRef" class="settings-menu">
+        <button type="button" class="settings-menu__item" @click="openDefaultSettings">
+          <i class="pi pi-sliders-h" />
+          <span>Default Settings</span>
+        </button>
+        <button type="button" class="settings-menu__item" :disabled="profiles.length === 0" @click="handleExportProfiles">
+          <i class="pi pi-download" />
+          <span>Export Profiles</span>
+        </button>
+        <button type="button" class="settings-menu__item" :disabled="readOnlyMode" @click="handleCanvasUploadProfiles">
+          <i class="pi pi-upload" />
+          <span>Import Profiles</span>
+        </button>
+      </div>
 
       <div ref="canvasActionBarRef" class="canvas-action-bar">
-        <button type="button" class="action-tile action-tile--primary" :disabled="readOnlyMode" @click="openBottomAddMenu">
-          <i class="pi pi-plus-circle action-tile__icon" />
-          <span class="action-tile__label">Add new profile</span>
-        </button>
-        <button type="button" class="action-tile" :disabled="readOnlyMode" @click="handleCanvasExistingProfile">
-          <i class="pi pi-book action-tile__icon" />
-          <span class="action-tile__label">Load existing profiles</span>
-        </button>
-        <button type="button" class="action-tile" :disabled="readOnlyMode" @click="handleCanvasUploadProfiles">
-          <i class="pi pi-upload action-tile__icon" />
-          <span class="action-tile__label">Upload profiles</span>
-        </button>
-        <button type="button" class="action-tile" @click="confirmResetAll">
+        <div class="add-profile-control">
+          <button type="button" class="action-tile action-tile--primary add-profile-main" :disabled="readOnlyMode" @click="handleBottomAddNewProfile">
+            <i class="pi pi-plus-circle action-tile__icon" />
+            <span class="action-tile__label">Add Profile</span>
+          </button>
+          <button
+            type="button"
+            class="add-profile-menu-trigger"
+            title="Choose profile action"
+            aria-label="Choose profile action"
+            :disabled="readOnlyMode"
+            @click.stop="openBottomAddMenu"
+          >
+            <i class="pi pi-chevron-down" />
+          </button>
+          <div v-if="addProfileMenuOpen" class="add-profile-menu">
+            <button type="button" class="add-profile-menu__item" @click="handleBottomAddNewProfile">
+              <i class="pi pi-plus-circle" />
+              <span>Add new Profile</span>
+            </button>
+            <button type="button" class="add-profile-menu__item" @click="handleCanvasExistingProfile">
+              <i class="pi pi-book" />
+              <span>Search existing profiles</span>
+            </button>
+            <button type="button" class="add-profile-menu__item" @click="handleCanvasUploadProfiles">
+              <i class="pi pi-upload" />
+              <span>Import Profiles</span>
+            </button>
+          </div>
+        </div>
+        <button type="button" class="action-tile" @click="handleConfirmResetAll">
           <i class="pi pi-refresh action-tile__icon" />
           <span class="action-tile__label">Reset Editor</span>
         </button>
-        <button type="button" class="action-tile action-tile--mode" @click="readOnlyMode = !readOnlyMode">
-          <i :class="modeToggleIcon" class="action-tile__icon" />
-          <span class="action-tile__label">{{ modeToggleLabel }}</span>
+        <button type="button" class="action-tile action-tile--review" :disabled="profiles.length === 0" @click="openReviewDialog">
+          <i class="pi pi-verified action-tile__icon" />
+          <span class="action-tile__label">Review</span>
+          <span v-if="reviewItems.length > 0" class="review-count" :class="{ 'has-urgent': urgentReviewItems.length > 0 }">{{ reviewItems.length }}</span>
         </button>
-        <button type="button" class="action-tile" :disabled="profiles.length === 0" @click="exportProfiles">
-          <i class="pi pi-download action-tile__icon" />
-          <span class="action-tile__label">Export Profiles</span>
-        </button>
+        <div class="action-menu-divider" aria-hidden="true" />
+        <div class="mode-segment" aria-label="Editor mode">
+          <button
+            v-for="option in EDITOR_MODE_OPTIONS"
+            :key="option.value"
+            type="button"
+            class="mode-segment__button"
+            :class="{ 'is-active': editorMode === option.value }"
+            @click="setEditorMode(option.value)"
+          >
+            <i :class="option.icon" />
+            <span>{{ option.label }}</span>
+          </button>
+        </div>
+      </div>
+
+      <div
+        v-if="reviewDialogOpen || activeImportDialogVisible"
+        ref="actionOverlayRef"
+        class="action-menu-overlay"
+        :style="actionOverlayStyle"
+      >
+        <component
+          :is="activeImportDialogDefinition.component"
+          v-if="activeImportDialogDefinition && activeImportDialogVisible"
+          :key="activeImportDialogKey"
+          v-bind="activeImportDialogProps"
+          class="action-menu-overlay__body"
+          @added="closeImportDialog"
+        />
+
+        <div v-else-if="reviewDialogOpen" class="review-overlay">
+          <div class="review-overlay__search">
+            <input
+              v-model="reviewSearch"
+              class="review-search-input"
+              type="search"
+              placeholder="Search review findings"
+            />
+          </div>
+
+          <div v-if="reviewItems.length > 0" class="review-filters" aria-label="Review filters">
+            <div class="review-filter-group" aria-label="Severity">
+              <button
+                type="button"
+                class="review-filter"
+                :class="{ 'is-active': reviewSeverityFilter === 'all' }"
+                @click="reviewSeverityFilter = 'all'"
+              >
+                All
+              </button>
+              <button
+                type="button"
+                class="review-filter"
+                :class="{ 'is-active': reviewSeverityFilter === 'urgent' }"
+                @click="reviewSeverityFilter = 'urgent'"
+              >
+                Urgent
+              </button>
+              <button
+                type="button"
+                class="review-filter"
+                :class="{ 'is-active': reviewSeverityFilter === 'warning' }"
+                @click="reviewSeverityFilter = 'warning'"
+              >
+                Warning
+              </button>
+            </div>
+          </div>
+
+          <div v-if="reviewItems.length === 0" class="review-empty">
+            No review findings.
+          </div>
+
+          <div v-else-if="filteredReviewItems.length === 0" class="review-empty">
+            No findings match the current filters.
+          </div>
+
+          <div v-else class="review-list">
+            <section v-if="filteredUrgentReviewItems.length > 0" class="review-group">
+              <h3 class="review-group__title">
+                <span>Urgent</span>
+              </h3>
+              <button
+                v-for="item in filteredUrgentReviewItems"
+                :key="item.id"
+                type="button"
+                class="review-item"
+                :class="`is-${item.severity}`"
+                @click="jumpToReviewItem(item)"
+              >
+                <span class="review-item__body">
+                  <strong class="review-item__title">{{ item.title }}</strong>
+                  <span class="review-item__target">
+                    {{ item.subject === 'profile' ? 'Profile' : 'Property' }}:
+                    {{ item.profileLabel }}<template v-if="item.propertyLabel"> / {{ item.propertyLabel }}</template>
+                  </span>
+                </span>
+                <i class="pi pi-arrow-right review-item__icon" />
+              </button>
+            </section>
+
+            <section v-if="filteredWarningReviewItems.length > 0" class="review-group">
+              <h3 class="review-group__title">
+                <span>Warnings</span>
+              </h3>
+              <button
+                v-for="item in filteredWarningReviewItems"
+                :key="item.id"
+                type="button"
+                class="review-item"
+                :class="`is-${item.severity}`"
+                @click="jumpToReviewItem(item)"
+              >
+                <span class="review-item__body">
+                  <strong class="review-item__title">{{ item.title }}</strong>
+                  <span class="review-item__target">
+                    {{ item.subject === 'profile' ? 'Profile' : 'Property' }}:
+                    {{ item.profileLabel }}<template v-if="item.propertyLabel"> / {{ item.propertyLabel }}</template>
+                  </span>
+                </span>
+                <i class="pi pi-arrow-right review-item__icon" />
+              </button>
+            </section>
+          </div>
+        </div>
       </div>
 
       <div v-if="hasInspectorSelection" class="editor-inspector-overlay">
@@ -1001,17 +1380,11 @@ void fetchSubjectHeadingOptions().then(options => {
     </div>
 
     <EditorDialogs
-      :active-import-dialog-definition="activeImportDialogDefinition"
-      :active-import-dialog-visible="activeImportDialogVisible"
-      :active-import-dialog-key="activeImportDialogKey"
-      :active-import-dialog-props="activeImportDialogProps"
       :shape-preview-open="shapePreviewOpen"
       :preview-shape="previewShape"
       :combined-canvas-shapes-turtle="combinedCanvasShapesTurtle"
       :preview-shape-values-turtle="previewShapeValuesTurtle"
       :preview-shape-subjects="previewShapeSubjects"
-      @close-import-dialog="closeImportDialog"
-      @update:active-import-dialog-visible="activeImportDialogVisible = $event"
       @update:shape-preview-open="shapePreviewOpen = $event"
     />
 
@@ -1170,10 +1543,10 @@ void fetchSubjectHeadingOptions().then(options => {
   z-index: 6;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: 10px 12px;
+  gap: 14px;
+  padding: 8px 10px;
   border: 1px solid var(--color-border);
-  border-radius: 20px;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.95);
   box-shadow: var(--shadow-md);
 }
@@ -1203,46 +1576,63 @@ void fetchSubjectHeadingOptions().then(options => {
   transform: translateY(-1px);
 }
 
-.action-tile {
-  min-width: 108px;
-  min-height: 88px;
-  padding: 10px 12px;
+.settings-menu {
+  position: absolute;
+  left: 18px;
+  bottom: 86px;
+  z-index: 20;
+  min-width: 210px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.settings-menu__item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
   border: 0;
-  border-radius: 16px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-menu__item:hover:not(:disabled) {
+  background: var(--color-surface-2);
+}
+
+.settings-menu__item:disabled {
+  cursor: not-allowed;
+  color: var(--color-text-muted);
+}
+
+.action-tile {
+  min-width: 72px;
+  min-height: 59px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 11px;
   background: transparent;
   color: var(--color-text);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 7px;
   font: inherit;
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.canvas-action-bar .action-tile:nth-child(4) {
-  position: relative;
-  margin-left: 10px;
-  margin-right: 10px;
-}
-
-.canvas-action-bar .action-tile:nth-child(4)::before,
-.canvas-action-bar .action-tile:nth-child(4)::after {
-  content: '';
-  position: absolute;
-  top: -10px;
-  bottom: -10px;
-  width: 1px;
-  background: rgba(15, 23, 42, 0.12);
-}
-
-.canvas-action-bar .action-tile:nth-child(4)::before {
-  left: -10px;
-}
-
-.canvas-action-bar .action-tile:nth-child(4)::after {
-  right: -10px;
 }
 
 .action-tile:hover:not(:disabled) {
@@ -1264,32 +1654,190 @@ void fetchSubjectHeadingOptions().then(options => {
 }
 
 .action-tile__icon {
-  font-size: 1.9rem;
+  font-size: 1.27rem;
 }
 
 .action-tile__label {
+  font-size: 0.72rem;
   line-height: 1.25;
   text-align: center;
+}
+
+.action-tile--review {
+  position: relative;
+}
+
+.add-profile-control {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(72px, auto) 20px;
+  gap: 3px;
+  align-items: stretch;
+}
+
+.add-profile-main {
+  min-width: 72px;
+  border-radius: 9px;
+}
+
+.add-profile-menu-trigger {
+  width: 20px;
+  min-height: 59px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--color-surface);
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: 0.48rem;
+}
+
+.add-profile-menu-trigger:hover:not(:disabled) {
+  background: var(--color-surface-2);
+}
+
+.add-profile-menu-trigger:disabled {
+  cursor: not-allowed;
+  color: var(--color-text-muted);
+  background: transparent;
+}
+
+.add-profile-menu-trigger .pi {
+  font-size: 0.48rem;
+}
+
+.add-profile-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.add-profile-menu__item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.add-profile-menu__item:hover {
+  background: var(--color-primary-soft);
+}
+
+.action-menu-divider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 48px;
+  background: rgba(15, 23, 42, 0.14);
+}
+
+.mode-segment {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 12px;
+  background: #f3f4f6;
+}
+
+.mode-segment__button {
+  min-width: 64px;
+  min-height: 59px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--color-text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.mode-segment__button:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+
+.mode-segment__button.is-active {
+  background: var(--color-surface);
+  color: #111827;
+  box-shadow: var(--shadow-sm);
+}
+
+.mode-segment__button .pi {
+  font-size: 1.15rem;
+}
+
+.mode-segment__button span {
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.review-count {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #f59e0b;
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.review-count.has-urgent {
+  background: #dc2626;
+}
+
+.action-menu-overlay {
+  position: absolute;
+  left: 50%;
+  bottom: 106px;
+  transform: translateX(-50%);
+  z-index: 15;
+  height: 520px;
+  max-height: min(72vh, 520px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-surface) 98%, transparent);
+  box-shadow: var(--shadow-md);
+  pointer-events: auto;
+}
+
+.action-menu-overlay__body {
+  min-height: 0;
+  flex: 1;
 }
 
 .editor-graph {
   width: 100%;
   height: 100%;
-}
-
-.canvas-hint {
-  position: absolute;
-  left: 50%;
-  bottom: 72px;
-  transform: translateX(-50%);
-  padding: 8px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  color: var(--color-text-muted);
-  font-size: 0.8rem;
-  box-shadow: var(--shadow-sm);
-  pointer-events: none;
 }
 
 .placement-hint-float {
@@ -1419,6 +1967,155 @@ void fetchSubjectHeadingOptions().then(options => {
   border-top: 1px solid var(--color-border);
 }
 
+.review-overlay {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.review-overlay__search {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.review-search-input {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 11px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-1);
+  color: var(--color-text);
+  font: inherit;
+  outline: none;
+}
+
+.review-search-input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14);
+}
+
+.review-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: var(--space-2) var(--space-3) 0;
+}
+
+.review-filter-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.review-filter {
+  min-height: 30px;
+  padding: 5px 11px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: #a3a3a3;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.review-filter:hover {
+  color: #111827;
+}
+
+.review-filter.is-active {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.review-empty {
+  margin: var(--space-3);
+  padding: 20px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.review-list {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: auto;
+  padding: var(--space-3);
+}
+
+.review-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.review-group__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--color-text);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.review-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-left-width: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.review-item:hover {
+  background: var(--color-surface-1);
+  box-shadow: var(--shadow-sm);
+}
+
+.review-item.is-urgent {
+  border-left-color: #dc2626;
+}
+
+.review-item.is-warning {
+  border-left-color: #f59e0b;
+}
+
+.review-item__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.review-item__title {
+  color: var(--color-text);
+}
+
+.review-item__target {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.review-item__icon {
+  color: var(--color-text-muted);
+}
+
 .canvas-menu {
   position: fixed;
   z-index: 12;
@@ -1518,7 +2215,7 @@ void fetchSubjectHeadingOptions().then(options => {
 
   .canvas-action-bar {
     flex-wrap: wrap;
-    width: min(92vw, 540px);
+    width: min(92vw, 640px);
     justify-content: center;
     border-radius: var(--radius-md);
   }

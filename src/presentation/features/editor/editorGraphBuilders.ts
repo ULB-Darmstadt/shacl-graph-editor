@@ -14,6 +14,18 @@ import {
   parseEditorShapeNodeTarget,
   type ShapeEditorNodeData,
 } from '@/presentation/features/editor/inheritanceEditorGraph'
+import type { EditorReviewSeverity } from '@/presentation/features/editor/editorReview'
+
+export interface EditorShapeReviewAnnotation {
+  shapeSeverity?: EditorReviewSeverity | null
+  propertySeverities?: Record<string, EditorReviewSeverity>
+}
+
+function reviewAnnotationsRecord(
+  annotations: Map<string, EditorShapeReviewAnnotation> | undefined,
+): Record<string, EditorShapeReviewAnnotation> {
+  return Object.fromEntries(annotations?.entries() ?? [])
+}
 
 export function buildEditorShapeNodes(
   rootShapes: NodeShape[],
@@ -28,8 +40,11 @@ export function buildEditorShapeNodes(
   moveProperty?: (sourceShapeIri: string, propertyNodeId: string, targetShapeIri: string, targetIndex?: number) => boolean,
   selectedShapeIri?: string | null,
   selectedPropertyKey?: string | null,
+  reviewMode = false,
+  reviewAnnotations?: Map<string, EditorShapeReviewAnnotation>,
 ): Node[] {
   const descriptors = collectVisibleShapeNodeDescriptors(rootShapes, allShapes, expandedShapeNodeIds)
+  const reviewAnnotationsByShape = reviewAnnotationsRecord(reviewAnnotations)
 
   return descriptors.map(descriptor => ({
     id: descriptor.nodeId,
@@ -55,6 +70,10 @@ export function buildEditorShapeNodes(
       selected: descriptor.representedShapeIri === selectedShapeIri,
       selectedShapeIri: selectedShapeIri ?? null,
       selectedPropertyKey: descriptor.representedShapeIri === selectedShapeIri ? selectedPropertyKey ?? null : null,
+      reviewMode,
+      reviewShapeSeverity: reviewAnnotations?.get(descriptor.representedShapeIri)?.shapeSeverity ?? null,
+      reviewPropertySeverities: reviewAnnotations?.get(descriptor.representedShapeIri)?.propertySeverities ?? {},
+      reviewAnnotationsByShape,
     } satisfies ShapeEditorNodeData,
   }))
 }

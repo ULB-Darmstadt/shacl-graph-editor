@@ -72,6 +72,25 @@ function isSelectedProperty(property: PropertyShape): boolean {
   return props.data.selectedPropertyKey === propertyKey(property)
 }
 
+function reviewClass(severity: 'urgent' | 'warning' | null | undefined): string | null {
+  if (!props.data.reviewMode || !severity) return null
+  return severity === 'urgent' ? 'is-review-urgent' : 'is-review-warning'
+}
+
+function shapeReviewClass(): string | null {
+  return reviewClass(props.data.reviewShapeSeverity)
+}
+
+function inheritedShapeReviewClass(shapeIri: string): string | null {
+  return reviewClass(props.data.reviewAnnotationsByShape?.[shapeIri]?.shapeSeverity)
+}
+
+function propertyReviewClass(property: PropertyShape, shapeIri = props.data.representedShapeIri): string | null {
+  const severity = props.data.reviewAnnotationsByShape?.[shapeIri]?.propertySeverities?.[property.nodeId.value]
+    ?? props.data.reviewPropertySeverities?.[property.nodeId.value]
+  return reviewClass(severity)
+}
+
 function isInheritedPropertyHighlighted(shapeIri: string): boolean {
   return isSelectedInheritedProfile(shapeIri)
 }
@@ -375,7 +394,7 @@ function onShapeDrop(event: DragEvent): void {
     @dragleave="onShapeDragLeave"
     @drop="onShapeDrop"
   >
-    <header @contextmenu.stop.prevent="openShapeHeaderContextMenu">
+    <header :class="shapeReviewClass()" @contextmenu.stop.prevent="openShapeHeaderContextMenu">
       <Handle
         id="shape-header"
         type="target"
@@ -402,7 +421,10 @@ function onShapeDrop(event: DragEvent): void {
     <template v-for="section in inheritedSections()" :key="`${section.depth}:${section.title}`">
       <div
         class="section-label inherited-section-label inherited-section-button"
-        :class="{ 'is-selected': isSelectedInheritedProfile(section.shapeIri) }"
+        :class="[
+          inheritedShapeReviewClass(section.shapeIri),
+          { 'is-selected': isSelectedInheritedProfile(section.shapeIri) },
+        ]"
         :style="{ paddingLeft: `${12 + (section.depth * 18)}px` }"
         @click.stop="selectInheritedShape(section.shapeIri)"
         @contextmenu.stop.prevent="openInheritedShapeContextMenu(section.shapeIri, $event)"
@@ -418,7 +440,10 @@ function onShapeDrop(event: DragEvent): void {
           v-for="property in section.properties"
           :key="`inh:${section.title}:${property.path?.value ?? property.nodeId.value}`"
           class="row inherited-row nodrag"
-          :class="{ 'is-ref': isObjectRef(property), 'is-selected': isSelectedProperty(property) || isInheritedPropertyHighlighted(section.shapeIri) }"
+          :class="[
+            propertyReviewClass(property, section.shapeIri),
+            { 'is-ref': isObjectRef(property), 'is-selected': isSelectedProperty(property) || isInheritedPropertyHighlighted(section.shapeIri) },
+          ]"
           @click.stop="selectProperty(property)"
         >
           <template v-if="isObjectRef(property)">
@@ -465,7 +490,10 @@ function onShapeDrop(event: DragEvent): void {
         <li v-if="dropPreviewIndex === index" :key="`drop:${index}`" class="property-drop-line" />
         <li
           class="row nodrag"
-          :class="{ 'is-ref': isObjectRef(property), 'is-selected': isSelectedProperty(property) }"
+          :class="[
+            propertyReviewClass(property),
+            { 'is-ref': isObjectRef(property), 'is-selected': isSelectedProperty(property) },
+          ]"
           @click.stop="selectProperty(property)"
         >
           <template v-if="isObjectRef(property)">
@@ -567,6 +595,18 @@ function onShapeDrop(event: DragEvent): void {
 .shape-node.is-selected header {
   background: var(--color-primary-soft);
   color: var(--color-text);
+}
+
+header.is-review-urgent {
+  background: #fee2e2;
+  color: #7f1d1d;
+  box-shadow: inset 0 -1px 0 rgba(220, 38, 38, 0.24);
+}
+
+header.is-review-warning {
+  background: #fef3c7;
+  color: #78350f;
+  box-shadow: inset 0 -1px 0 rgba(245, 158, 11, 0.26);
 }
 
 header {
@@ -685,6 +725,23 @@ header {
   color: var(--color-text);
 }
 
+.inherited-section-button.is-review-urgent {
+  background: #fee2e2;
+  color: #7f1d1d;
+  box-shadow: inset 4px 0 0 #dc2626;
+}
+
+.inherited-section-button.is-review-warning {
+  background: #fef3c7;
+  color: #78350f;
+  box-shadow: inset 4px 0 0 #f59e0b;
+}
+
+.inherited-section-button.is-selected.is-review-urgent,
+.inherited-section-button.is-selected.is-review-warning {
+  box-shadow: inset 4px 0 0 var(--color-primary);
+}
+
 .section-icon {
   font-size: 0.72rem;
   color: #9ca3af;
@@ -712,6 +769,14 @@ header {
     background: var(--color-primary-soft);
     box-shadow: inset 3px 0 0 var(--color-primary);
   }
+}
+
+.row.is-review-urgent {
+  box-shadow: inset 4px 0 0 #dc2626;
+}
+
+.row.is-review-warning {
+  box-shadow: inset 4px 0 0 #f59e0b;
 }
 
 .prop-name {

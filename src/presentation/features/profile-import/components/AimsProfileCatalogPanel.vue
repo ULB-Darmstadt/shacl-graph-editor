@@ -1,9 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import InputText from 'primevue/inputtext'
-import Button from 'primevue/button'
 import Message from 'primevue/message'
-import Tag from 'primevue/tag'
 import { useToast } from 'primevue/usetoast'
 import { loadAimsProfiles, fetchAimsProfileTurtle, type AimsProfile } from '@/infrastructure/external/aimsProfileService'
 import { useProfileEditorStore } from '@/application/profiles/profileEditorStore'
@@ -14,10 +11,9 @@ const toast = useToast()
 const profileStore = useProfileEditorStore()
 
 const profiles = ref<AimsProfile[]>([])
-const selectedProfile = ref<AimsProfile | null>(null)
 const search = ref('')
 const isLoading = ref(false)
-const isSubmitting = ref(false)
+const submittingProfileUrl = ref<string | null>(null)
 const error = ref<string | null>(null)
 
 const filteredProfiles = computed(() => {
@@ -37,9 +33,6 @@ async function loadProfiles(): Promise<void> {
   error.value = null
   try {
     profiles.value = await loadAimsProfiles()
-    if (!selectedProfile.value || !profiles.value.some(profile => profile.base_url === selectedProfile.value?.base_url)) {
-      selectedProfile.value = profiles.value[0] ?? null
-    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -47,21 +40,16 @@ async function loadProfiles(): Promise<void> {
   }
 }
 
-async function addProfile(): Promise<void> {
-  if (!selectedProfile.value) {
-    error.value = 'Waehle zuerst ein Profil aus dem Metadata Profile Service aus.'
-    return
-  }
-
-  isSubmitting.value = true
+async function addProfile(profile: AimsProfile): Promise<void> {
+  submittingProfileUrl.value = profile.base_url
   error.value = null
   try {
-    const turtle = await fetchAimsProfileTurtle(selectedProfile.value)
-    await profileStore.addProfileFromTurtle(turtle, `${selectedProfile.value.name}.ttl`, selectedProfile.value.base_url)
+    const turtle = await fetchAimsProfileTurtle(profile)
+    await profileStore.addProfileFromTurtle(turtle, `${profile.name}.ttl`, profile.base_url)
     toast.add({
       severity: 'success',
       summary: 'Profile loaded',
-      detail: `${selectedProfile.value.name} wurde aus dem Metadata Profile Service geladen.`,
+      detail: `${profile.name} was loaded from the NFDI4ING Metadata Profile Service.`,
       life: 3500,
     })
     if (profileStore.lastResolveErrors.length > 0) {
@@ -76,7 +64,7 @@ async function addProfile(): Promise<void> {
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
-    isSubmitting.value = false
+    submittingProfileUrl.value = null
   }
 }
 
@@ -87,16 +75,9 @@ onMounted(() => { void loadProfiles() })
   <div class="aims-profile-panel">
     <div class="toolbar">
       <label class="field field-stack search-field">
-        <span>Profile durchsuchen</span>
-        <InputText v-model="search" placeholder="Profil suchen" fluid />
+        <span>Search NFDI4ING Metadata Profile Service</span>
+        <input v-model="search" class="profile-search-input" type="search" placeholder="Search profiles" />
       </label>
-      <Button
-        label="Aktualisieren"
-        icon="pi pi-refresh"
-        severity="secondary"
-        :loading="isLoading"
-        @click="loadProfiles"
-      />
     </div>
 
     <Message v-if="error" severity="error" :closable="false">
@@ -109,76 +90,39 @@ onMounted(() => { void loadProfiles() })
           v-for="profile in filteredProfiles"
           :key="profile.base_url"
           class="profile-option"
-          :class="{ selected: selectedProfile?.base_url === profile.base_url }"
-          @click="selectedProfile = profile"
+          :class="{ loading: submittingProfileUrl === profile.base_url }"
+          :disabled="submittingProfileUrl !== null"
+          @click="addProfile(profile)"
         >
-          <strong>{{ profile.name }}</strong>
-          <span>{{ profile.description || profile.base_url }}</span>
+          <span class="profile-option__main">
+            <strong>{{ profile.name }}</strong>
+            <i v-if="submittingProfileUrl === profile.base_url" class="pi pi-spin pi-spinner" />
+          </span>
+          <span class="profile-option__description">{{ profile.description || profile.base_url }}</span>
         </button>
         <div v-if="!isLoading && filteredProfiles.length === 0" class="empty-list">
-          Keine passenden Profile gefunden.
+          No matching profiles found.
         </div>
       </aside>
-
-      <section class="profile-detail">
-        <template v-if="selectedProfile">
-          <header class="detail-header">
-            <div>
-              <h3 class="panel-title">{{ selectedProfile.name }}</h3>
-              <p class="helper-text">{{ selectedProfile.description || 'Keine Beschreibung hinterlegt.' }}</p>
-            </div>
-            <Tag :value="String(selectedProfile.state ?? 'public')" severity="info" />
-          </header>
-
-          <dl class="detail-grid">
-            <div>
-              <dt>Creator</dt>
-              <dd>{{ selectedProfile.creator || 'Unbekannt' }}</dd>
-            </div>
-            <div>
-              <dt>Created</dt>
-              <dd>{{ selectedProfile.created || 'Unbekannt' }}</dd>
-            </div>
-            <div>
-              <dt>MIME type</dt>
-              <dd>{{ selectedProfile.mimeType || 'text/turtle' }}</dd>
-            </div>
-            <div>
-              <dt>Base URL</dt>
-              <dd>{{ selectedProfile.base_url }}</dd>
-            </div>
-          </dl>
-        </template>
-        <div v-else class="empty-detail">
-          Waehle links ein Profil aus.
-        </div>
-      </section>
-    </div>
-
-    <div class="actions actions-row actions-row--end">
-      <Button
-        label="Ausgewaehltes Profil laden"
-        icon="pi pi-plus"
-        :disabled="!selectedProfile"
-        :loading="isSubmitting"
-        @click="addProfile"
-      />
     </div>
   </div>
 </template>
 
 <style scoped lang="scss">
 .aims-profile-panel {
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
 }
 
 .toolbar {
   display: flex;
-  align-items: end;
-  gap: var(--space-3);
+  align-items: flex-end;
+  gap: var(--space-2);
   flex-wrap: wrap;
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .search-field {
@@ -186,26 +130,36 @@ onMounted(() => { void loadProfiles() })
   flex: 1;
 }
 
-.list-shell {
-  display: grid;
-  grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
-  gap: var(--space-3);
+.profile-search-input {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 11px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-1);
+  color: var(--color-text);
+  font: inherit;
+  outline: none;
 }
 
-.profile-list,
-.profile-detail {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-1);
+.profile-search-input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14);
+}
+
+.list-shell {
+  min-height: 0;
+  flex: 1;
+  padding: 0;
 }
 
 .profile-list {
-  max-height: 60vh;
+  height: 100%;
   overflow: auto;
-  padding: var(--space-2);
+  padding: var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 14px;
 }
 
 .profile-option {
@@ -214,69 +168,52 @@ onMounted(() => { void loadProfiles() })
   gap: 4px;
   width: 100%;
   text-align: left;
-  padding: var(--space-3);
+  padding: 12px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: var(--color-surface-1);
+  background: var(--color-surface);
   cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 
   strong {
     font-size: 0.95rem;
   }
 
-  span {
-    color: var(--color-text-muted);
-    font-size: 0.8rem;
-    overflow-wrap: anywhere;
-  }
-
   &:hover {
-    background: var(--color-surface-2);
+    background: var(--color-surface-1);
+    box-shadow: var(--shadow-sm);
   }
 
-  &.selected {
+  &.loading {
     border-color: var(--color-accent);
     background: rgba(99, 102, 241, 0.06);
   }
+
+  &:disabled {
+    cursor: wait;
+  }
 }
 
-.profile-detail {
-  padding: var(--space-4);
+.profile-option__main {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.detail-header {
-  display: flex;
-  align-items: start;
+  align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  color: var(--color-text);
 }
 
-.detail-grid {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 8px 12px;
-  margin: 0;
-
-  div { display: contents; }
-
-  dt {
-    color: var(--color-text-muted);
-    font-weight: 600;
-  }
-
-  dd {
-    margin: 0;
-    overflow-wrap: anywhere;
-    font-family: var(--font-mono);
-  }
-}
-
-.empty-list,
-.empty-detail {
-  padding: var(--space-4);
+.profile-option__description {
   color: var(--color-text-muted);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.empty-list {
+  margin: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  text-align: center;
 }
 </style>

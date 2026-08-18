@@ -27,7 +27,7 @@ export interface ProfileImportSourceDefinition {
 const dialogDefinitions: ProfileImportDialogDefinition[] = [
   {
     id: 'aims-profile-catalog',
-    header: 'Load SHACL Profile from Metadata Profile Service',
+    header: 'Search NFDI4ING Metadata Profile Service',
     width: 'min(1200px, 96vw)',
     component: AimsProfileCatalogPanel,
   },
@@ -42,7 +42,7 @@ export const profileImportSources: ProfileImportSourceDefinition[] = [
   },
   {
     id: 'aims-profile-service',
-    label: 'Metadata Profile Service',
+    label: 'NFDI4ING Metadata Profile Service',
     icon: 'pi pi-server',
     action: 'open-dialog',
     dialogId: 'aims-profile-catalog',

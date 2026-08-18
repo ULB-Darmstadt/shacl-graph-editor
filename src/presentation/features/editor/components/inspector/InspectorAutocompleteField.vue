@@ -8,6 +8,7 @@ const props = defineProps<{
   options: Array<{ label: string; value: string }>
   disabled?: boolean
   invalid?: boolean
+  warning?: boolean
   helperText?: string | null
   autoFocus?: boolean
 }>()
@@ -31,7 +32,7 @@ function onInput(event: Event): void {
 
     <input
       class="autocomplete-field__input ui-sidepanel-field-input"
-      :class="{ 'is-invalid': invalid }"
+      :class="{ 'is-invalid': invalid, 'is-warning': warning && !invalid }"
       :value="value ?? ''"
       :placeholder="placeholder"
       :disabled="disabled"
@@ -46,7 +47,7 @@ function onInput(event: Event): void {
       </option>
     </datalist>
 
-    <span v-if="helperText" class="autocomplete-field__helper" :class="{ 'is-invalid': invalid }">{{ helperText }}</span>
+    <span v-if="helperText" class="autocomplete-field__helper" :class="{ 'is-invalid': invalid, 'is-warning': warning && !invalid }">{{ helperText }}</span>
   </label>
 </template>
 
@@ -74,6 +75,11 @@ function onInput(event: Event): void {
   box-shadow: 0 0 0 1px rgba(216, 76, 76, 0.14), inset 0 -2px 0 rgba(216, 76, 76, 0.16);
 }
 
+.autocomplete-field__input.is-warning {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.16), inset 0 -2px 0 rgba(245, 158, 11, 0.2);
+}
+
 .autocomplete-field__helper {
   font-size: 0.78rem;
   color: var(--color-text-muted);
@@ -81,6 +87,10 @@ function onInput(event: Event): void {
 
 .autocomplete-field__helper.is-invalid {
   color: #b42323;
+}
+
+.autocomplete-field__helper.is-warning {
+  color: #b45309;
 }
 
 .autocomplete-field__input:disabled {

@@ -4,7 +4,6 @@ import { useConfirm } from 'primevue/useconfirm'
 import {
   buildProfileLicenseOptions,
   fetchSubjectHeadingOptions,
-  PROFILE_LICENSE_OPTIONS,
   PROPERTY_TERM_OPTIONS,
   PROPERTY_TYPE_OPTIONS,
   resolveImportedSubjectLabel,
@@ -161,8 +160,24 @@ const missingCreator = computed(() => !props.property && !props.shape?.creator?.
 const missingCreated = computed(() => !props.property && !props.shape?.created?.trim())
 const missingLicense = computed(() => !props.property && !props.shape?.license?.trim())
 const missingPropertyTerm = computed(() => Boolean(props.property) && !props.property?.path?.value?.trim())
+const missingPropertyName = computed(() => Boolean(props.property) && !props.property?.name?.trim())
+const missingPropertyOrder = computed(() => Boolean(props.property) && props.property?.order === undefined)
 const missingProfileTarget = computed(() =>
   (propertyTypeValue.value === 'profile' || propertyTypeValue.value === 'qualifiedProfile') && !propertyNodeTarget.value,
+)
+const missingQualifiedCounts = computed(() =>
+  propertyTypeValue.value === 'qualifiedProfile'
+  && props.property?.qualifiedMinCount === undefined
+  && props.property?.qualifiedMaxCount === undefined,
+)
+const missingShapeDescription = computed(() => !props.property && !props.shape?.description?.trim())
+const missingPropertyDescription = computed(() => Boolean(props.property) && !props.property?.description?.trim())
+const missingAllowedValues = computed(() =>
+  propertyTypeValue.value === 'list' && (!props.property?.allowedValues || props.property.allowedValues.length === 0),
+)
+const missingAlternativeTargets = computed(() =>
+  propertyTypeValue.value === 'oneOfProfiles'
+  && propertyAlternativeTargets.value.filter(Boolean).length <= 1,
 )
 const isDraftProperty = computed(() => Boolean(props.property && props.property.nodeId.value === props.draftPropertyNodeId))
 
@@ -356,12 +371,22 @@ function requestDeleteProperty(): void {
               :value="property.name ?? null"
               placeholder="Unnamed field"
               :disabled="readOnly"
+              :invalid="missingPropertyName"
+              :helper-text="missingPropertyName ? 'Field name is required.' : null"
               :auto-focus="!property.name?.trim()"
               @update:value="updateProperty('name', $event)"
               @blur="onDraftFieldNameBlur"
               @submit="onDraftFieldNameSubmit"
             />
-            <InspectorEditableField label="Description" :value="property.description" placeholder="Description" multiline @update:value="updateProperty('description', $event)" />
+            <InspectorEditableField
+              label="Description"
+              :value="property.description"
+              placeholder="Description"
+              multiline
+              :warning="missingPropertyDescription"
+              :helper-text="missingPropertyDescription ? 'Description is recommended.' : null"
+              @update:value="updateProperty('description', $event)"
+            />
             <InspectorEditableField label="Property Type" :value="propertyTypeValue" placeholder="" :options="PROPERTY_TYPE_OPTIONS" @update:value="onPropertyTypeChange" />
 
             <InspectorEditableField
@@ -408,12 +433,15 @@ function requestDeleteProperty(): void {
               :value="propertyAllowedValuesText"
               placeholder="One value per line"
               multiline
-              helper-text="Serialized as sh:in."
+              :invalid="missingAllowedValues"
+              :helper-text="missingAllowedValues ? 'At least one value is required.' : 'Serialized as sh:in.'"
               @update:value="updateProperty('allowedValues', $event)"
             />
-            <div v-else-if="propertyTypeValue === 'oneOfProfiles'" class="alternative-targets">
+            <div v-else-if="propertyTypeValue === 'oneOfProfiles'" class="alternative-targets" :class="{ 'is-invalid': missingAlternativeTargets }">
               <span class="editable-field__label ui-sidepanel-field-label">Alternative Profile Targets</span>
-              <span class="alternative-targets__helper">Serialized as `sh:or` with one profile dropdown per alternative.</span>
+              <span class="alternative-targets__helper" :class="{ 'is-invalid': missingAlternativeTargets }">
+                {{ missingAlternativeTargets ? 'At least two profile targets are required.' : 'Serialized as `sh:or` with one profile dropdown per alternative.' }}
+              </span>
               <div v-for="(targetValue, index) in propertyAlternativeTargetInputs" :key="`${property.nodeId.value}:alt:${index}`" class="alternative-target-row">
                 <InspectorEditableField
                   :label="`Profile Option ${index + 1}`"
@@ -439,7 +467,8 @@ function requestDeleteProperty(): void {
               :value="property.qualifiedMinCount?.toString() ?? null"
               placeholder="1"
               type="number"
-              helper-text="Serialized as sh:qualifiedMinCount."
+              :invalid="missingQualifiedCounts"
+              :helper-text="missingQualifiedCounts ? 'Set a qualified minimum or maximum count.' : 'Serialized as sh:qualifiedMinCount.'"
               @update:value="updateProperty('qualifiedMinCount', $event)"
             />
             <InspectorEditableField
@@ -448,10 +477,19 @@ function requestDeleteProperty(): void {
               :value="property.qualifiedMaxCount?.toString() ?? null"
               placeholder="*"
               type="number"
-              helper-text="Serialized as sh:qualifiedMaxCount."
+              :invalid="missingQualifiedCounts"
+              :helper-text="missingQualifiedCounts ? 'Set a qualified minimum or maximum count.' : 'Serialized as sh:qualifiedMaxCount.'"
               @update:value="updateProperty('qualifiedMaxCount', $event)"
             />
-            <InspectorEditableField label="Position On Metadata Form" :value="property.order?.toString() ?? null" placeholder="0" type="number" @update:value="updateProperty('order', $event)" />
+            <InspectorEditableField
+              label="Position On Metadata Form"
+              :value="property.order?.toString() ?? null"
+              placeholder="0"
+              type="number"
+              :invalid="missingPropertyOrder"
+              :helper-text="missingPropertyOrder ? 'Form position is required.' : null"
+              @update:value="updateProperty('order', $event)"
+            />
           </section>
         </template>
 
@@ -471,7 +509,15 @@ function requestDeleteProperty(): void {
               :auto-focus="!shape.label?.trim()"
               @update:value="updateShape('label', $event)"
             />
-            <InspectorEditableField label="Description" :value="shape.description ?? null" placeholder="Description" multiline @update:value="updateShape('description', $event)" />
+            <InspectorEditableField
+              label="Description"
+              :value="shape.description ?? null"
+              placeholder="Description"
+              multiline
+              :warning="missingShapeDescription"
+              :helper-text="missingShapeDescription ? 'Description is recommended.' : null"
+              @update:value="updateShape('description', $event)"
+            />
           </section>
 
           <section class="inspector-section">
@@ -714,9 +760,20 @@ function requestDeleteProperty(): void {
   gap: 10px;
 }
 
+.alternative-targets.is-invalid {
+  padding: 10px;
+  border: 1px solid #d84c4c;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 0 1px rgba(216, 76, 76, 0.14);
+}
+
 .alternative-targets__helper {
   font-size: 0.78rem;
   color: var(--color-text-muted);
+}
+
+.alternative-targets__helper.is-invalid {
+  color: #b42323;
 }
 
 .alternative-target-row {
