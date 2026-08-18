@@ -2,21 +2,23 @@
 
 SHACL Graph Editor is a browser-based editor for the workflow:
 
-1. import SHACL profiles
-2. inspect and edit shapes on a graph canvas
+1. import or create SHACL profiles
+2. inspect, review and edit shapes on a graph canvas
 3. export SHACL again
 
 ## [OPEN DEMO](https://ulb-darmstadt.github.io/shacl-graph-editor/#/editor)
 
 ## Features
 
-- Import SHACL from local Turtle files
-- Load profiles from the Metadata Profile Service
-- Resolve `owl:imports`
-- Visualize linked `sh:node` relations on a canvas
-- Edit profiles and fields in the sidebar
-- Preview shapes with `@ulb-darmstadt/shacl-form`
-- Export the current editor state as SHACL/Turtle
+- Start from local Turtle files or search profiles from the NFDI4ING Metadata Profile Service.
+- Work visually on a graph canvas with profiles, inherited profiles, properties, and SHACL relations.
+- Edit profile metadata and property details in the side panel.
+- Create and adjust profile connections such as `sh:node`, `sh:or`, and `sh:qualifiedvalueshape`.
+- Move properties between profiles or reorder them within a profile by drag and drop.
+- Use Review mode to find missing required metadata, incomplete property definitions, and other profile quality issues.
+- Jump from review findings directly to the affected profile or property on the canvas.
+- Preview shapes with `@ulb-darmstadt/shacl-form`.
+- Export the current editor state as SHACL/Turtle.
 
 ## Tech Stack
 
@@ -60,34 +62,17 @@ src/
   presentation/         editor UI, dialogs, canvas, inspector, preview
   shared/               shared RDF helpers and global styles
 public/
-  dfgfo.ttl             subject heading source
-  shacl-logo.png        app branding
+  shacl-icon.svg        app icon and branding
 ```
 
 ## Architecture
 
-- `domain/profiles` contains the clean editor data model.
+- `domain/profiles` contains the editor data model.
 - `infrastructure/shacl` contains SHACL import and export logic.
 - `application/profiles` coordinates editor mutations and workflows.
 - `presentation/features/editor` contains the graph editor UI.
 
-This keeps the intended workflow explicit in the repository:
-import SHACL -> edit in the graph editor -> export SHACL.
-
-## Deployment
-
-The app is a static SPA and can be deployed to GitHub Pages.
-
-The included GitHub Actions workflow:
-
-- installs dependencies with `npm ci`
-- runs type checking
-- builds the app
-- publishes `dist/` to GitHub Pages
-
-In production, the Vite base path is derived from the GitHub repository name,
-so the same build can be deployed under the target repository path.
-
 ## License
 
 MIT. See [LICENSE](LICENSE).
+created by Roger Winkler, ULB Darmstadt

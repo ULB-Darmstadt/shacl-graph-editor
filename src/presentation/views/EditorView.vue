@@ -1138,7 +1138,7 @@ void fetchSubjectHeadingOptions().then(options => {
             <span class="canvas-menu__label">Add new profile</span>
           </button>
           <button type="button" class="canvas-menu__item" @click="handleCanvasExistingProfile">
-            <i class="pi pi-book canvas-menu__icon" />
+            <i class="pi pi-search canvas-menu__icon" />
             <span class="canvas-menu__label">Search profiles</span>
           </button>
           <button type="button" class="canvas-menu__item" @click="handleCanvasUploadProfiles">
@@ -1211,7 +1211,7 @@ void fetchSubjectHeadingOptions().then(options => {
               <span>Add new Profile</span>
             </button>
             <button type="button" class="add-profile-menu__item" @click="handleCanvasExistingProfile">
-              <i class="pi pi-book" />
+              <i class="pi pi-search" />
               <span>Search existing profiles</span>
             </button>
             <button type="button" class="add-profile-menu__item" @click="handleCanvasUploadProfiles">
@@ -1581,7 +1581,7 @@ void fetchSubjectHeadingOptions().then(options => {
   left: 18px;
   bottom: 86px;
   z-index: 20;
-  min-width: 210px;
+  min-width: 230px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1604,6 +1604,8 @@ void fetchSubjectHeadingOptions().then(options => {
   background: transparent;
   color: var(--color-text);
   font: inherit;
+  font-size: 0.86rem;
+  white-space: nowrap;
   text-align: left;
   cursor: pointer;
 }
@@ -1710,7 +1712,7 @@ void fetchSubjectHeadingOptions().then(options => {
   left: 0;
   bottom: calc(100% + 8px);
   z-index: 20;
-  min-width: 190px;
+  min-width: 230px;
   padding: 6px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -1730,6 +1732,8 @@ void fetchSubjectHeadingOptions().then(options => {
   background: transparent;
   color: var(--color-text);
   font: inherit;
+  font-size: 0.86rem;
+  white-space: nowrap;
   text-align: left;
   cursor: pointer;
 }
@@ -2136,6 +2140,8 @@ void fetchSubjectHeadingOptions().then(options => {
   background: transparent;
   text-align: left;
   font: inherit;
+  font-size: 0.86rem;
+  white-space: nowrap;
   cursor: pointer;
   display: flex;
   align-items: center;

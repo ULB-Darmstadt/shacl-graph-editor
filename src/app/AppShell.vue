@@ -2,7 +2,7 @@
   <div class="app-shell">
     <header class="app-shell__header">
       <div class="app-shell__brand">
-        <i class="pi pi-sitemap app-shell__brand-icon" />
+        <img class="app-shell__brand-icon" src="/shacl-icon.svg" alt="" aria-hidden="true" />
         <div class="app-shell__brand-copy">
           <h1 class="app-shell__title">SHACL Editor</h1>
         </div>
@@ -41,8 +41,9 @@
 }
 
 .app-shell__brand-icon {
-  font-size: 1.5rem;
-  color: var(--color-primary);
+  width: 30px;
+  height: 32px;
+  object-fit: contain;
   flex-shrink: 0;
 }
 
