@@ -398,6 +398,30 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     return true
   }
 
+  function movePropertyToShape(sourceShapeIri: string, propertyNodeId: string, targetShapeIri: string, targetIndex?: number): boolean {
+    const sourceContext = findEditableShapeContext(sourceShapeIri)
+    const targetContext = findEditableShapeContext(targetShapeIri)
+    if (!sourceContext || !targetContext) return false
+
+    const sourceIndex = sourceContext.shape.properties.findIndex(property => property.nodeId.value === propertyNodeId)
+    if (sourceIndex < 0) return false
+
+    const property = sourceContext.shape.properties[sourceIndex]
+    if (!property || property.inherited) return false
+    if (sourceShapeIri !== targetShapeIri && propertyNodeTargets(property).some(target => target.value === targetShapeIri)) return false
+
+    sourceContext.shape.properties.splice(sourceIndex, 1)
+    const requestedIndex = targetIndex ?? targetContext.shape.properties.length
+    const insertionIndex = sourceShapeIri === targetShapeIri && requestedIndex > sourceIndex
+      ? clampIndex(requestedIndex - 1, targetContext.shape.properties.length)
+      : clampIndex(requestedIndex, targetContext.shape.properties.length)
+    targetContext.shape.properties.splice(insertionIndex, 0, property)
+    normalizePropertyOrder(sourceContext.shape)
+    if (sourceShapeIri !== targetShapeIri) normalizePropertyOrder(targetContext.shape)
+    syncSerializedProfiles()
+    return true
+  }
+
   function removePropertyTarget(shapeIri: string, propertyNodeId: string, targetShapeIri: string): void {
     const context = findEditablePropertyContext(shapeIri, propertyNodeId)
     if (!context) return
@@ -516,6 +540,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     createProfile,
     createProperty,
     removeProperty,
+    movePropertyToShape,
     updateShapeField,
     updatePropertyField,
     setShapeInheritance,
@@ -574,6 +599,19 @@ type EditablePropertyField =
 function normalizeString(value: string | null): string | undefined {
   const trimmed = value?.trim()
   return trimmed ? trimmed : undefined
+}
+
+function clampIndex(index: number, length: number): number {
+  if (!Number.isFinite(index)) return length
+  return Math.max(0, Math.min(length, Math.trunc(index)))
+}
+
+function normalizePropertyOrder(shape: NodeShape): void {
+  shape.properties
+    .filter(property => !property.inherited)
+    .forEach((property, index) => {
+      property.order = index
+    })
 }
 
 export type PropertyEditorType = 'datatype' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'list'

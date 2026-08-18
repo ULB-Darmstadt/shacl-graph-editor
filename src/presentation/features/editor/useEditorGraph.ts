@@ -30,6 +30,8 @@ interface UseEditorGraphOptions {
   selectedPropertyKey?: Ref<string | null>
   selectShape?: (shape: NodeShape) => void
   selectProperty?: (shape: NodeShape, property: import('@/domain/profiles').PropertyShape) => void
+  openShapeHeaderMenu?: (shape: NodeShape, event: MouseEvent, options?: { allowDelete?: boolean }) => void
+  moveProperty?: (sourceShapeIri: string, propertyNodeId: string, targetShapeIri: string, targetIndex?: number) => boolean
 }
 
 export function useEditorGraph(options: UseEditorGraphOptions) {
@@ -113,6 +115,8 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
       options.addField,
       options.selectShape,
       options.selectProperty,
+      options.openShapeHeaderMenu,
+      options.moveProperty,
       options.selectedShapeIri?.value,
       options.selectedPropertyKey?.value,
     )

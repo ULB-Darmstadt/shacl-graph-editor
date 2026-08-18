@@ -14,6 +14,8 @@ export interface ShapeEditorNodeData {
   onAddField?: (shapeIri: string) => void
   onSelectShape?: (shape: NodeShape) => void
   onSelectProperty?: (shape: NodeShape, property: PropertyShape) => void
+  onShapeHeaderContextMenu?: (shape: NodeShape, event: MouseEvent, options?: { allowDelete?: boolean }) => void
+  onMoveProperty?: (sourceShapeIri: string, propertyNodeId: string, targetShapeIri: string, targetIndex?: number) => boolean
   selected?: boolean
   selectedShapeIri?: string | null
   selectedPropertyKey?: string | null

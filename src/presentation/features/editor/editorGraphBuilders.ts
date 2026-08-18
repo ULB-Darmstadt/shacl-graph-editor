@@ -24,6 +24,8 @@ export function buildEditorShapeNodes(
   addField?: (shapeIri: string) => void,
   selectShape?: (shape: NodeShape) => void,
   selectProperty?: (shape: NodeShape, property: PropertyShape) => void,
+  openShapeHeaderMenu?: (shape: NodeShape, event: MouseEvent, options?: { allowDelete?: boolean }) => void,
+  moveProperty?: (sourceShapeIri: string, propertyNodeId: string, targetShapeIri: string, targetIndex?: number) => boolean,
   selectedShapeIri?: string | null,
   selectedPropertyKey?: string | null,
 ): Node[] {
@@ -48,6 +50,8 @@ export function buildEditorShapeNodes(
         : undefined,
       onSelectShape: selectShape,
       onSelectProperty: selectProperty,
+      onShapeHeaderContextMenu: interactive ? openShapeHeaderMenu : undefined,
+      onMoveProperty: interactive ? moveProperty : undefined,
       selected: descriptor.representedShapeIri === selectedShapeIri,
       selectedShapeIri: selectedShapeIri ?? null,
       selectedPropertyKey: descriptor.representedShapeIri === selectedShapeIri ? selectedPropertyKey ?? null : null,

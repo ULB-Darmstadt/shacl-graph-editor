@@ -81,6 +81,7 @@ function resetEditorUiState(): void {
   pendingConnection.value = null
   selectedConnection.value = null
   canvasMenu.value.open = false
+  shapeHeaderMenu.value.open = false
   clearSelection()
   cancelPendingProfilePlacement()
   resetPendingPlacement()
@@ -123,6 +124,8 @@ const { nodes, edges, nodeTypes, edgeTypes } = useEditorGraph({
   selectedPropertyKey,
   selectShape,
   selectProperty,
+  openShapeHeaderMenu,
+  moveProperty,
 })
 
 const hasNothing = computed(() => profiles.value.length === 0)
@@ -130,6 +133,14 @@ const hasInspectorSelection = computed(() => selectedShape.value !== null)
 const modeToggleLabel = computed(() => readOnlyMode.value ? 'View Mode' : 'Edit Mode')
 const modeToggleIcon = computed(() => readOnlyMode.value ? 'pi pi-eye' : 'pi pi-pencil')
 const canvasMenu = ref<{ x: number; y: number; open: boolean }>({ x: 0, y: 0, open: false })
+const shapeHeaderMenu = ref<{ x: number; y: number; open: boolean; shapeIri: string | null; label: string | null; allowDelete: boolean }>({
+  x: 0,
+  y: 0,
+  open: false,
+  shapeIri: null,
+  label: null,
+  allowDelete: true,
+})
 const relationChoiceDialogOpen = ref(false)
 type EditableConnection = {
   sourceShapeIri: string
@@ -210,17 +221,18 @@ const placementHintStyle = computed(() => {
   }
 })
 
-function createProfile(): void {
+function createProfile(): string {
   const iri = profileStore.createProfile()
   queueShapePlacement(iri, 0)
   applyProfileDefaults(iri)
   const shape = profileStore.applicationProfile.findNodeShape(iri)
   if (shape) selectShape(shape)
+  return iri
 }
 
-function createProfileAt(position: XYPosition): void {
+function createProfileAt(position: XYPosition): string {
   pendingPlacementAnchor.value = position
-  createProfile()
+  return createProfile()
 }
 
 function createProperty(shapeIri: string): void {
@@ -252,6 +264,16 @@ function deleteSelectedProperty(shapeIri: string, propertyNodeId: string): boole
   return deleted
 }
 
+function moveProperty(sourceShapeIri: string, propertyNodeId: string, targetShapeIri: string, targetIndex?: number): boolean {
+  const moved = profileStore.movePropertyToShape(sourceShapeIri, propertyNodeId, targetShapeIri, targetIndex)
+  if (!moved) return false
+
+  const targetShape = profileStore.applicationProfile.findNodeShape(targetShapeIri)
+  const movedProperty = targetShape?.properties.find(property => property.nodeId.value === propertyNodeId)
+  if (targetShape && movedProperty) selectProperty(targetShape, movedProperty)
+  return true
+}
+
 function commitDraftProperty(propertyNodeId: string): void {
   if (draftPropertyNodeId.value === propertyNodeId) {
     draftPropertyNodeId.value = null
@@ -273,25 +295,51 @@ function closeCanvasMenu(): void {
   canvasMenu.value.open = false
 }
 
+function closeShapeHeaderMenu(): void {
+  shapeHeaderMenu.value.open = false
+}
+
 function handleGlobalPointerDown(event: PointerEvent): void {
-  if (!canvasMenu.value.open) return
+  if (!canvasMenu.value.open && !shapeHeaderMenu.value.open) return
   const target = event.target as Node | null
   if (!target) return
   if (canvasMenuRef.value?.contains(target)) return
   if (canvasActionBarRef.value?.contains(target)) return
+  if ((target as Element).closest?.('.shape-header-menu')) return
   closeCanvasMenu()
+  closeShapeHeaderMenu()
 }
 
 function handlePaneClick(): void {
   if (pendingProfilePlacement.value) return
   clearSelection()
   closeCanvasMenu()
+  closeShapeHeaderMenu()
 }
 
 function handleShellContextMenu(event: MouseEvent): void {
   if (readOnlyMode.value) return
   event.preventDefault()
+  closeShapeHeaderMenu()
   openCanvasMenu(event)
+}
+
+function openShapeHeaderMenu(shape: (typeof nodeShapes.value)[number], event: MouseEvent, options: { allowDelete?: boolean } = {}): void {
+  if (readOnlyMode.value) return
+  event.preventDefault()
+  event.stopPropagation()
+  closeCanvasMenu()
+  cancelPendingProfilePlacement()
+  resetPendingPlacement()
+  selectShape(shape)
+  shapeHeaderMenu.value = {
+    x: event.clientX,
+    y: event.clientY,
+    open: true,
+    shapeIri: shape.nodeId.value,
+    label: shape.label ?? shape.nodeId.value,
+    allowDelete: options.allowDelete ?? true,
+  }
 }
 
 function handleCanvasNewProfile(): void {
@@ -315,6 +363,42 @@ function handleCanvasUploadProfiles(): void {
   if (readOnlyMode.value) return
   closeCanvasMenu()
   triggerSchemaUpload()
+}
+
+function handleShapeHeaderDeleteProfile(): void {
+  const shapeIri = shapeHeaderMenu.value.shapeIri
+  if (!shapeIri) return
+  closeShapeHeaderMenu()
+
+  confirm.require({
+    header: 'Delete profile',
+    message: 'Delete this profile from the editor?',
+    icon: 'pi pi-exclamation-triangle',
+    acceptLabel: 'Delete',
+    rejectLabel: 'Cancel',
+    acceptClass: 'p-button-danger',
+    accept: () => {
+      const result = deleteSelectedShape(shapeIri)
+      if (!result.ok) window.alert(result.reason ?? 'Profile cannot be deleted.')
+    },
+  })
+}
+
+function handleShapeHeaderCreateInheritedProfile(): void {
+  const inheritedShapeIri = shapeHeaderMenu.value.shapeIri
+  if (!inheritedShapeIri) return
+
+  const placement = resolvePlacementPosition(shapeHeaderMenu.value.x, shapeHeaderMenu.value.y)
+  closeShapeHeaderMenu()
+  pendingPlacementAnchor.value = placement
+  const iri = createProfile()
+  profileStore.setShapeInheritance(iri, inheritedShapeIri)
+  queueShapePlacementAt(iri, {
+    x: placement.x + IMPORT_HORIZONTAL_OFFSET,
+    y: placement.y,
+  })
+  const shape = profileStore.applicationProfile.findNodeShape(iri)
+  if (shape) selectShape(shape)
 }
 
 function requestRemoveReferenceEdge(shapeIri: string, propertyNodeId: string, targetShapeIri: string): void {
@@ -845,6 +929,22 @@ void fetchSubjectHeadingOptions().then(options => {
             <span class="canvas-menu__label">Upload profile(s)</span>
           </button>
         </div>
+
+        <div
+          v-if="shapeHeaderMenu.open"
+          class="canvas-menu shape-header-menu"
+          :style="{ left: `${shapeHeaderMenu.x}px`, top: `${shapeHeaderMenu.y}px` }"
+        >
+          <div class="shape-header-menu__title">{{ shapeHeaderMenu.label ?? 'Profile' }}</div>
+          <button type="button" class="canvas-menu__item" @click="handleShapeHeaderCreateInheritedProfile">
+            <i class="pi pi-sitemap canvas-menu__icon" />
+            <span class="canvas-menu__label">Create inherited profile</span>
+          </button>
+          <button v-if="shapeHeaderMenu.allowDelete" type="button" class="canvas-menu__item canvas-menu__item--danger" @click="handleShapeHeaderDeleteProfile">
+            <i class="pi pi-trash canvas-menu__icon" />
+            <span class="canvas-menu__label">Delete profile</span>
+          </button>
+        </div>
       </div>
 
       <button type="button" class="settings-fab" title="Settings" aria-label="Settings" @click="settingsOpen = true">
@@ -1349,13 +1449,35 @@ void fetchSubjectHeadingOptions().then(options => {
   background: var(--color-primary-soft);
 }
 
+.canvas-menu__item--danger {
+  color: #b42323;
+}
+
+.canvas-menu__item--danger:hover {
+  background: #fff1f1;
+}
+
 .canvas-menu__icon {
   font-size: 1rem;
   color: var(--color-text-muted);
 }
 
+.canvas-menu__item--danger .canvas-menu__icon {
+  color: #b42323;
+}
+
 .canvas-menu__label {
   line-height: 1.3;
+}
+
+.shape-header-menu__title {
+  max-width: 280px;
+  padding: 8px 12px 6px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .editor-inspector-overlay {
