@@ -2,9 +2,13 @@
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from '@vue-flow/core'
 import { computed } from 'vue'
 
-const props = defineProps<EdgeProps<{ relationLabel?: string; edgeKind?: 'structural' | 'inherited'; onRemove?: () => void }>>()
+const props = defineProps<EdgeProps<{ relationLabel?: string; edgeKind?: 'structural' | 'inherited'; selected?: boolean; onRemove?: () => void }>>()
 
 const edgeKindClass = computed(() => `is-${props.data?.edgeKind ?? 'structural'}`)
+const edgeLabelClasses = computed(() => [
+  edgeKindClass.value,
+  { 'is-selected': props.data?.selected },
+])
 
 const edgePath = computed(() => getBezierPath({
   sourceX: props.sourceX,
@@ -30,7 +34,7 @@ const edgePath = computed(() => getBezierPath({
     <div
       v-if="data?.relationLabel"
       class="edge-label"
-      :class="edgeKindClass"
+      :class="edgeLabelClasses"
       :style="{ transform: `translate(-50%, -50%) translate(${edgePath[1]}px, ${edgePath[2]}px)` }"
     >
       {{ data.relationLabel }}
@@ -63,5 +67,10 @@ const edgePath = computed(() => getBezierPath({
 
 .is-inherited {
   background: rgba(241, 245, 249, 0.96);
+}
+
+.edge-label.is-selected {
+  border-color: rgba(90, 62, 155, 0.45);
+  color: #5A3E9B;
 }
 </style>

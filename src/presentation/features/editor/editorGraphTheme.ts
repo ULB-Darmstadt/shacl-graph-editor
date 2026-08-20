@@ -3,6 +3,10 @@ export const EDITOR_EDGE_STYLES = {
     stroke: '#6b7280',
     strokeWidth: 1.5,
   },
+  selected: {
+    stroke: '#5A3E9B',
+    strokeWidth: 2.4,
+  },
 }
 
 export const EDITOR_NODE_COLORS = {

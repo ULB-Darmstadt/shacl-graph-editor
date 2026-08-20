@@ -14,6 +14,8 @@ export interface ShapeEditorNodeData {
   onAddField?: (shapeIri: string) => void
   onSelectShape?: (shape: NodeShape) => void
   onSelectProperty?: (shape: NodeShape, property: PropertyShape) => void
+  onRenameShape?: (shapeIri: string, label: string) => void
+  onRenameProperty?: (shapeIri: string, propertyNodeId: string, name: string) => void
   onShapeHeaderContextMenu?: (shape: NodeShape, event: MouseEvent, options?: { allowDelete?: boolean }) => void
   onMoveProperty?: (sourceShapeIri: string, propertyNodeId: string, targetShapeIri: string, targetIndex?: number) => boolean
   selected?: boolean
@@ -59,10 +61,10 @@ export function collectReachableShapeIris(rootShapes: NodeShape[], allShapes: No
     if (!shape) continue
 
     for (const property of shape.properties) {
-      for (const target of propertyNodeTargets(property)) {
-        if (visited.has(target.value)) continue
-        if (!allShapesByIri.has(target.value)) continue
-        queue.push(target.value)
+      for (const targetIri of propertyGraphTargetIris(property, allShapes)) {
+        if (visited.has(targetIri)) continue
+        if (!allShapesByIri.has(targetIri)) continue
+        queue.push(targetIri)
       }
     }
   }
@@ -137,6 +139,19 @@ export function buildInheritedPropertyGroups(shape: NodeShape, allShapes: NodeSh
 
 export function buildOwnProperties(shape: NodeShape, _allShapes: NodeShape[]): PropertyShape[] {
   return shape.properties.filter(property => !property.inherited)
+}
+
+export function propertyGraphTargetIris(property: PropertyShape, allShapes: NodeShape[]): string[] {
+  const targets = new Set(propertyNodeTargets(property).map(target => target.value))
+
+  if (property.cls?.value) {
+    const matchingShapes = allShapes.filter(shape => shape.targetClass?.value === property.cls?.value)
+    if (matchingShapes.length === 1) {
+      targets.add(matchingShapes[0].nodeId.value)
+    }
+  }
+
+  return [...targets]
 }
 
 function buildInheritedPropertyGroup(rootShape: NodeShape, inheritedShape: NodeShape, allShapes: NodeShape[]): InheritedPropertyGroup {

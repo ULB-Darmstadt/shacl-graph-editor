@@ -25,9 +25,9 @@ const activePropertyDrag = reactive<{
 import { Handle, Position } from '@vue-flow/core'
 import { propertyConstraintSummary, propertyNodeTargets, type NodeShape, type PropertyShape } from '@/domain/profiles'
 import { EDITOR_NODE_COLORS } from '@/presentation/features/editor/editorGraphTheme'
-import type { ShapeEditorNodeData } from '@/presentation/features/editor/inheritanceEditorGraph'
+import { propertyGraphTargetIris, type ShapeEditorNodeData } from '@/presentation/features/editor/inheritanceEditorGraph'
 import { useProfileEditorStore } from '@/application/profiles/profileEditorStore'
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 
 const props = defineProps<{ data: ShapeEditorNodeData }>()
 const profiles = useProfileEditorStore()
@@ -35,6 +35,11 @@ const dragOverAllowed = ref(false)
 const dragOverBlocked = ref(false)
 const dropPreviewIndex = ref<number | null>(null)
 const ownPropertiesListRef = ref<HTMLElement | null>(null)
+const shapeNodeRef = ref<HTMLElement | null>(null)
+const editingShapeIri = ref<string | null>(null)
+const editingPropertyKey = ref<string | null>(null)
+const inlineNameDraft = ref('')
+const inlineOriginalName = ref('')
 
 const label = () => props.data.shape.label?.trim() || 'Unnamed profile'
 const inheritedProperties = () => props.data.shape.properties.slice(0, inheritedPropertyPrefixCount())
@@ -44,16 +49,16 @@ const visibleOwnProperties = computed(() =>
 )
 const inheritedSections = () => flattenInheritedGroups(props.data.inheritedGroups ?? [])
 
-function localName(iri: string): string {
-  return iri.split(/[/#]/).filter(Boolean).pop() ?? iri
-}
-
 function propertyLabel(property: PropertyShape): string {
   return property.name?.trim() || 'Unnamed field'
 }
 
 function propertyKey(property: PropertyShape): string {
   return property.nodeId.value
+}
+
+function propertyEditKey(shapeIri: string, property: PropertyShape): string {
+  return `${shapeIri}::${property.nodeId.value}`
 }
 
 function isSelectedShape(): boolean {
@@ -103,6 +108,83 @@ function openShapeHeaderContextMenu(event: MouseEvent): void {
   props.data.onShapeHeaderContextMenu?.(props.data.shape, event, { allowDelete: true })
 }
 
+function focusInlineEditor(): void {
+  void nextTick(() => {
+    window.setTimeout(() => {
+      const input = shapeNodeRef.value?.querySelector<HTMLInputElement>('[data-inline-name-editor="active"]')
+      input?.focus()
+      input?.select()
+    }, 0)
+  })
+}
+
+function startShapeNameEdit(shapeIri: string, value: string | undefined, event?: Event): void {
+  if (!isInteractive() || !props.data.onRenameShape) return
+  event?.stopPropagation()
+  const shape = profiles.applicationProfile.findNodeShape(shapeIri)
+  if (shape) props.data.onSelectShape?.(shape)
+  editingPropertyKey.value = null
+  editingShapeIri.value = shapeIri
+  inlineNameDraft.value = value ?? ''
+  inlineOriginalName.value = inlineNameDraft.value
+  focusInlineEditor()
+}
+
+function onShapeNameInput(shapeIri: string, event: Event): void {
+  const value = (event.target as HTMLInputElement).value
+  inlineNameDraft.value = value
+  props.data.onRenameShape?.(shapeIri, value)
+}
+
+function commitShapeNameEdit(shapeIri: string): void {
+  if (editingShapeIri.value !== shapeIri) return
+  props.data.onRenameShape?.(shapeIri, inlineNameDraft.value)
+  editingShapeIri.value = null
+}
+
+function cancelShapeNameEdit(shapeIri: string): void {
+  if (editingShapeIri.value === shapeIri) {
+    props.data.onRenameShape?.(shapeIri, inlineOriginalName.value)
+  }
+  editingShapeIri.value = null
+}
+
+function startPropertyNameEdit(shapeIri: string, property: PropertyShape, event?: Event): void {
+  if (!isInteractive() || !props.data.onRenameProperty) return
+  event?.stopPropagation()
+  const shape = profiles.applicationProfile.findNodeShape(shapeIri)
+  const selectedProperty = shape?.properties.find(candidate =>
+    candidate.nodeId.value === property.nodeId.value
+    || candidate.path?.value === property.path?.value,
+  )
+  if (shape && selectedProperty) props.data.onSelectProperty?.(shape, selectedProperty)
+  editingShapeIri.value = null
+  editingPropertyKey.value = propertyEditKey(shapeIri, property)
+  inlineNameDraft.value = property.name ?? ''
+  inlineOriginalName.value = inlineNameDraft.value
+  focusInlineEditor()
+}
+
+function onPropertyNameInput(shapeIri: string, property: PropertyShape, event: Event): void {
+  const value = (event.target as HTMLInputElement).value
+  inlineNameDraft.value = value
+  props.data.onRenameProperty?.(shapeIri, property.nodeId.value, value)
+}
+
+function commitPropertyNameEdit(shapeIri: string, property: PropertyShape): void {
+  const editKey = propertyEditKey(shapeIri, property)
+  if (editingPropertyKey.value !== editKey) return
+  props.data.onRenameProperty?.(shapeIri, property.nodeId.value, inlineNameDraft.value)
+  editingPropertyKey.value = null
+}
+
+function cancelPropertyNameEdit(shapeIri: string, property: PropertyShape): void {
+  if (editingPropertyKey.value === propertyEditKey(shapeIri, property)) {
+    props.data.onRenameProperty?.(shapeIri, property.nodeId.value, inlineOriginalName.value)
+  }
+  editingPropertyKey.value = null
+}
+
 function selectProperty(property: PropertyShape): void {
   props.data.onSelectProperty?.(props.data.shape, property)
 }
@@ -129,13 +211,17 @@ function hasRelationshipHandle(_property: PropertyShape): boolean {
   return true
 }
 
-function refShapeLabel(property: PropertyShape): string {
-  return propertyNodeTargets(property)
-    .map(node => {
-      const linked = profiles.applicationProfile.findNodeShape(node.value)
-      return linked?.label ?? localName(node.value)
-    })
-    .join(' | ')
+function isPropertyHandleOccupied(property: PropertyShape): boolean {
+  return propertyGraphTargetIris(property, profiles.applicationProfile.allNodeShapes()).length > 0
+}
+
+function isShapeTargetHandleOccupied(): boolean {
+  const allShapes = profiles.applicationProfile.allNodeShapes()
+  return allShapes.some(shape =>
+    shape.properties.some(property =>
+      propertyGraphTargetIris(property, allShapes).includes(props.data.representedShapeIri),
+    ),
+  )
 }
 
 function constraintBadgeLabel(property: PropertyShape): string | null {
@@ -175,13 +261,6 @@ function flattenInheritedGroupShapes(groups: NonNullable<ShapeEditorNodeData['in
   return shapes
 }
 
-function isShapeMissingRequiredFields(): boolean {
-  return !props.data.shape.label?.trim()
-    || !props.data.shape.creator?.trim()
-    || !props.data.shape.created?.trim()
-    || !props.data.shape.license?.trim()
-}
-
 function hasTermIri(property: PropertyShape): boolean {
   return Boolean(property.path?.value?.trim())
 }
@@ -206,7 +285,7 @@ function canMovePropertyToThisShape(payload: PropertyDragPayload): boolean {
   const property = sourceShape?.properties.find(candidate => candidate.nodeId.value === payload.propertyNodeId)
   if (!property || property.inherited) return false
 
-  return !propertyNodeTargets(property).some(target => target.value === props.data.representedShapeIri)
+  return true
 }
 
 function parsePropertyDragPayload(event: DragEvent): PropertyDragPayload | null {
@@ -374,6 +453,7 @@ function onShapeDrop(event: DragEvent): void {
 
 <template>
   <div
+    ref="shapeNodeRef"
     class="shape-node"
     :class="{ 'is-selected': isSelectedProfile(), 'is-drop-target': dragOverAllowed, 'is-drop-blocked': dragOverBlocked }"
     :style="{
@@ -394,18 +474,34 @@ function onShapeDrop(event: DragEvent): void {
     @dragleave="onShapeDragLeave"
     @drop="onShapeDrop"
   >
-    <header :class="shapeReviewClass()" @contextmenu.stop.prevent="openShapeHeaderContextMenu">
+    <header
+      :class="shapeReviewClass()"
+      @dblclick.stop="startShapeNameEdit(data.representedShapeIri, data.shape.label, $event)"
+      @contextmenu.stop.prevent="openShapeHeaderContextMenu"
+    >
       <Handle
         id="shape-header"
         type="target"
         :position="Position.Left"
         :connectable="isInteractive()"
         class="handle handle-shape-target"
-        :class="{ 'handle-readonly': !isInteractive() }"
+        :class="{ 'handle-active': isShapeTargetHandleOccupied(), 'handle-readonly': !isInteractive() }"
       />
       <i class="pi pi-bookmark" />
-      <span class="label">{{ label() }}</span>
-      <i v-if="isShapeMissingRequiredFields()" class="pi pi-exclamation-triangle warning-icon" title="Required profile fields are missing" />
+      <input
+        v-if="editingShapeIri === data.representedShapeIri"
+        data-inline-name-editor="active"
+        v-model="inlineNameDraft"
+        class="inline-name-editor inline-name-editor--header"
+        aria-label="Profile name"
+        @click.stop
+        @dblclick.stop
+        @input="onShapeNameInput(data.representedShapeIri, $event)"
+        @blur="commitShapeNameEdit(data.representedShapeIri)"
+        @keydown.enter.prevent="commitShapeNameEdit(data.representedShapeIri)"
+        @keydown.esc.prevent="cancelShapeNameEdit(data.representedShapeIri)"
+      />
+      <span v-else class="label">{{ label() }}</span>
       <button
         v-if="data.onPreview"
         class="preview-btn"
@@ -427,11 +523,26 @@ function onShapeDrop(event: DragEvent): void {
         ]"
         :style="{ paddingLeft: `${12 + (section.depth * 18)}px` }"
         @click.stop="selectInheritedShape(section.shapeIri)"
+        @dblclick.stop="startShapeNameEdit(section.shapeIri, section.title, $event)"
         @contextmenu.stop.prevent="openInheritedShapeContextMenu(section.shapeIri, $event)"
       >
         <span class="inherited-section-label__content">
           <i class="pi pi-sitemap section-icon" />
-          <span>{{ section.title }} (Inherited)</span>
+          <input
+            v-if="editingShapeIri === section.shapeIri"
+            data-inline-name-editor="active"
+            v-model="inlineNameDraft"
+            class="inline-name-editor inline-name-editor--section"
+            aria-label="Inherited profile name"
+            @click.stop
+            @dblclick.stop
+            @input="onShapeNameInput(section.shapeIri, $event)"
+            @blur="commitShapeNameEdit(section.shapeIri)"
+            @keydown.enter.prevent="commitShapeNameEdit(section.shapeIri)"
+            @keydown.esc.prevent="cancelShapeNameEdit(section.shapeIri)"
+          />
+          <span v-else>{{ section.title }}</span>
+          <span class="inherited-suffix">(Inherited)</span>
         </span>
       </div>
 
@@ -445,16 +556,42 @@ function onShapeDrop(event: DragEvent): void {
             { 'is-ref': isObjectRef(property), 'is-selected': isSelectedProperty(property) || isInheritedPropertyHighlighted(section.shapeIri) },
           ]"
           @click.stop="selectProperty(property)"
+          @dblclick.stop="startPropertyNameEdit(section.shapeIri, property, $event)"
         >
           <template v-if="isObjectRef(property)">
             <i class="pi pi-book field-icon" :class="{ 'field-icon--muted': !hasTermIri(property) }" />
-            <span class="prop-name">{{ propertyLabel(property) }}</span>
-            <i class="pi pi-link fk-icon" :title="refShapeLabel(property)" />
+            <input
+              v-if="editingPropertyKey === propertyEditKey(section.shapeIri, property)"
+              data-inline-name-editor="active"
+              v-model="inlineNameDraft"
+              class="inline-name-editor prop-name"
+              aria-label="Property name"
+              @click.stop
+              @dblclick.stop
+              @input="onPropertyNameInput(section.shapeIri, property, $event)"
+              @blur="commitPropertyNameEdit(section.shapeIri, property)"
+              @keydown.enter.prevent="commitPropertyNameEdit(section.shapeIri, property)"
+              @keydown.esc.prevent="cancelPropertyNameEdit(section.shapeIri, property)"
+            />
+            <span v-else class="prop-name">{{ propertyLabel(property) }}</span>
           </template>
 
           <template v-else>
             <i class="pi pi-book field-icon" :class="{ 'field-icon--muted': !hasTermIri(property) }" />
-            <span class="prop-name">{{ propertyLabel(property) }}</span>
+            <input
+              v-if="editingPropertyKey === propertyEditKey(section.shapeIri, property)"
+              data-inline-name-editor="active"
+              v-model="inlineNameDraft"
+              class="inline-name-editor prop-name"
+              aria-label="Property name"
+              @click.stop
+              @dblclick.stop
+              @input="onPropertyNameInput(section.shapeIri, property, $event)"
+              @blur="commitPropertyNameEdit(section.shapeIri, property)"
+              @keydown.enter.prevent="commitPropertyNameEdit(section.shapeIri, property)"
+              @keydown.esc.prevent="cancelPropertyNameEdit(section.shapeIri, property)"
+            />
+            <span v-else class="prop-name">{{ propertyLabel(property) }}</span>
           </template>
 
           <Handle
@@ -463,8 +600,8 @@ function onShapeDrop(event: DragEvent): void {
             type="source"
             :position="Position.Right"
             :connectable="isInteractive()"
-            class="handle handle-ref-source handle-active"
-            :class="{ 'handle-readonly': !isInteractive() }"
+            class="handle handle-ref-source"
+            :class="{ 'handle-active': isPropertyHandleOccupied(property), 'handle-readonly': !isInteractive() }"
           />
         </li>
       </ul>
@@ -495,6 +632,7 @@ function onShapeDrop(event: DragEvent): void {
             { 'is-ref': isObjectRef(property), 'is-selected': isSelectedProperty(property) },
           ]"
           @click.stop="selectProperty(property)"
+          @dblclick.stop="startPropertyNameEdit(data.representedShapeIri, property, $event)"
         >
           <template v-if="isObjectRef(property)">
             <i
@@ -508,8 +646,20 @@ function onShapeDrop(event: DragEvent): void {
               @dragend="onPropertyDragEnd"
             />
             <i class="pi pi-book field-icon" :class="{ 'field-icon--muted': !hasTermIri(property) }" />
-            <span class="prop-name">{{ propertyLabel(property) }}</span>
-            <i class="pi pi-link fk-icon" :title="refShapeLabel(property)" />
+            <input
+              v-if="editingPropertyKey === propertyEditKey(data.representedShapeIri, property)"
+              data-inline-name-editor="active"
+              v-model="inlineNameDraft"
+              class="inline-name-editor prop-name"
+              aria-label="Property name"
+              @click.stop
+              @dblclick.stop
+              @input="onPropertyNameInput(data.representedShapeIri, property, $event)"
+              @blur="commitPropertyNameEdit(data.representedShapeIri, property)"
+              @keydown.enter.prevent="commitPropertyNameEdit(data.representedShapeIri, property)"
+              @keydown.esc.prevent="cancelPropertyNameEdit(data.representedShapeIri, property)"
+            />
+            <span v-else class="prop-name">{{ propertyLabel(property) }}</span>
           </template>
 
           <template v-else>
@@ -524,7 +674,20 @@ function onShapeDrop(event: DragEvent): void {
               @dragend="onPropertyDragEnd"
             />
             <i class="pi pi-book field-icon" :class="{ 'field-icon--muted': !hasTermIri(property) }" />
-            <span class="prop-name">{{ propertyLabel(property) }}</span>
+            <input
+              v-if="editingPropertyKey === propertyEditKey(data.representedShapeIri, property)"
+              data-inline-name-editor="active"
+              v-model="inlineNameDraft"
+              class="inline-name-editor prop-name"
+              aria-label="Property name"
+              @click.stop
+              @dblclick.stop
+              @input="onPropertyNameInput(data.representedShapeIri, property, $event)"
+              @blur="commitPropertyNameEdit(data.representedShapeIri, property)"
+              @keydown.enter.prevent="commitPropertyNameEdit(data.representedShapeIri, property)"
+              @keydown.esc.prevent="cancelPropertyNameEdit(data.representedShapeIri, property)"
+            />
+            <span v-else class="prop-name">{{ propertyLabel(property) }}</span>
             <span v-if="constraintBadgeLabel(property)" class="type-badge">{{ constraintBadgeLabel(property) }}</span>
           </template>
 
@@ -534,8 +697,8 @@ function onShapeDrop(event: DragEvent): void {
             type="source"
             :position="Position.Right"
             :connectable="isInteractive()"
-            class="handle handle-ref-source handle-active"
-            :class="{ 'handle-readonly': !isInteractive() }"
+            class="handle handle-ref-source"
+            :class="{ 'handle-active': isPropertyHandleOccupied(property), 'handle-readonly': !isInteractive() }"
           />
         </li>
       </template>
@@ -567,7 +730,7 @@ function onShapeDrop(event: DragEvent): void {
 
 <style scoped lang="scss">
 .shape-node {
-  background: var(--color-surface-1);
+  background: transparent;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   min-width: 300px;
@@ -626,8 +789,33 @@ header {
 
 .label { flex: 1; word-break: break-all; }
 
-.warning-icon {
-  color: var(--color-warning);
+.inline-name-editor {
+  min-width: 0;
+  flex: 1;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--color-primary);
+  border-radius: 0;
+  outline: 0;
+  background: rgba(255, 255, 255, 0.82);
+  color: inherit;
+  font: inherit;
+  line-height: 1.25;
+  padding: 1px 2px 2px;
+}
+
+.inline-name-editor:focus {
+  box-shadow: inset 0 -1px 0 var(--color-primary);
+}
+
+.inline-name-editor--header {
+  font-weight: 600;
+}
+
+.inline-name-editor--section {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: none;
 }
 
 .preview-btn {
@@ -649,7 +837,12 @@ header {
   }
 }
 
-.properties { list-style: none; padding: 0; margin: 0; }
+.properties {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  background: rgba(251, 251, 251, 0.9);
+}
 
 .properties--own {
   position: relative;
@@ -678,7 +871,7 @@ header {
 .section-label {
   padding: 6px 12px;
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface-2);
+  background: rgba(239, 239, 239, 0.9);
   color: var(--color-text-muted);
   font-size: 0.72rem;
   font-weight: 700;
@@ -690,7 +883,7 @@ header {
 }
 
 .inherited-section-label {
-  background: #f9fafb;
+  background: rgba(249, 250, 251, 0.9);
   border-top: 1px solid var(--color-border);
 }
 
@@ -706,6 +899,11 @@ header {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  flex: 1;
+}
+
+.inherited-suffix {
+  flex-shrink: 0;
 }
 
 .add-field-row--inherited {
@@ -716,23 +914,23 @@ header {
 }
 
 .inherited-section-button:hover {
-  background: #f3f4f6;
+  background: rgba(243, 244, 246, 0.9);
 }
 
 .inherited-section-button.is-selected {
-  background: var(--color-primary-soft);
+  background: rgba(90, 62, 155, 0.1);
   box-shadow: inset 3px 0 0 var(--color-primary);
   color: var(--color-text);
 }
 
 .inherited-section-button.is-review-urgent {
-  background: #fee2e2;
+  background: rgba(254, 226, 226, 0.9);
   color: #7f1d1d;
   box-shadow: inset 4px 0 0 #dc2626;
 }
 
 .inherited-section-button.is-review-warning {
-  background: #fef3c7;
+  background: rgba(254, 243, 199, 0.9);
   color: #78350f;
   box-shadow: inset 4px 0 0 #f59e0b;
 }
@@ -760,13 +958,13 @@ header {
   &:last-child { border-bottom: none; }
 
   &.is-ref {
-    background: var(--shape-ref-bg);
+    background: color-mix(in srgb, var(--shape-ref-bg) 90%, transparent);
 
-    &:hover { background: var(--shape-ref-hover-bg); }
+    &:hover { background: color-mix(in srgb, var(--shape-ref-hover-bg) 90%, transparent); }
   }
 
   &.is-selected {
-    background: var(--color-primary-soft);
+    background: rgba(90, 62, 155, 0.1);
     box-shadow: inset 3px 0 0 var(--color-primary);
   }
 }
@@ -839,30 +1037,26 @@ header {
   font-size: 0.7rem;
 }
 
-.fk-icon {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-}
-
 .handle {
   width: 10px;
   height: 10px;
   border-width: 2px;
-  background: white;
+  border-color: rgba(107, 114, 128, 0.28);
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .handle-ref-source {
-  border-color: var(--shape-handle-color);
+  border-color: color-mix(in srgb, var(--shape-handle-color) 28%, white);
 }
 
 .handle-ref-target {
-  border-color: var(--shape-wire-color);
-  background: var(--shape-wire-color);
+  border-color: color-mix(in srgb, var(--shape-wire-color) 28%, white);
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .handle-shape-target {
-  border-color: var(--shape-wire-color);
-  background: var(--shape-wire-color);
+  border-color: color-mix(in srgb, var(--shape-wire-color) 28%, white);
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .handle-active {

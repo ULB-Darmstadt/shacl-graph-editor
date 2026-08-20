@@ -254,6 +254,7 @@ export function propertyRelationshipKinds(property: PropertyConstraintCarrier): 
   }
 
   push('sh:node', Boolean(property.node))
+  push('sh:class', Boolean(property.cls))
   push('sh:or', Boolean(property.alternatives?.length))
   push('sh:and', Boolean(property.conjunctions?.length))
   push('sh:xone', Boolean(property.exclusiveAlternatives?.length))

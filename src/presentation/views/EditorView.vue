@@ -146,6 +146,8 @@ const { nodes, edges, nodeTypes, edgeTypes } = useEditorGraph({
   reviewAnnotations,
   openShapePreview,
   addField: createProperty,
+  renameShape,
+  renameProperty,
   removeReferenceEdge: requestRemoveReferenceEdge,
   requestedNodePositions,
   selectedShapeIri,
@@ -333,6 +335,14 @@ function createProperty(shapeIri: string): void {
     draftPropertyNodeId.value = property.nodeId.value
     selectProperty(shape, property)
   }
+}
+
+function renameShape(shapeIri: string, label: string): void {
+  profileStore.updateShapeField(shapeIri, 'label', label)
+}
+
+function renameProperty(shapeIri: string, propertyNodeId: string, name: string): void {
+  profileStore.updatePropertyField(shapeIri, propertyNodeId, 'name', name)
 }
 
 function deleteSelectedShape(shapeIri: string): { ok: boolean; reason?: string } {
@@ -698,7 +708,6 @@ function handleConnect(connection: Connection): void {
   const sourceHandle = connection.sourceHandle
   const propertyNodeId = propertyNodeIdFromReferenceHandle(sourceHandle)
   if (!propertyNodeId || !sourceHandle) return
-  if (source.representedShapeIri === target.representedShapeIri) return
 
   const sourceShape = nodeShapes.value.find(shape => shape.nodeId.value === source.representedShapeIri)
   const sourceProperty = sourceShape?.properties.find(property => property.nodeId.value === propertyNodeId)

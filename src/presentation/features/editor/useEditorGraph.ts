@@ -27,6 +27,8 @@ interface UseEditorGraphOptions {
   reviewAnnotations?: Ref<Map<string, EditorShapeReviewAnnotation>>
   openShapePreview: (shape: NodeShape) => void | Promise<void>
   addField?: (shapeIri: string) => void
+  renameShape?: (shapeIri: string, label: string) => void
+  renameProperty?: (shapeIri: string, propertyNodeId: string, name: string) => void
   removeReferenceEdge?: (shapeIri: string, propertyNodeId: string, targetShapeIri: string) => void
   requestedNodePositions?: Ref<Record<string, Node['position']>>
   selectedShapeIri?: Ref<string | null>
@@ -125,6 +127,8 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
       options.addField,
       options.selectShape,
       options.selectProperty,
+      options.renameShape,
+      options.renameProperty,
       options.openShapeHeaderMenu,
       options.moveProperty,
       options.selectedShapeIri?.value,
@@ -139,6 +143,8 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
       options.allShapes.value,
       visibleNodeIds,
       options.removeReferenceEdge,
+      options.selectedShapeIri?.value,
+      options.selectedPropertyKey?.value,
     ).filter(edge => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target))
 
     const existingNodes = nodes.value as Node[]
@@ -171,7 +177,10 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
   watch(options.readOnlyMode ?? ref(false), () => rebuildGraph())
   watch(options.reviewMode ?? ref(false), () => rebuildGraph())
   watch(options.reviewAnnotations ?? ref(new Map<string, EditorShapeReviewAnnotation>()), () => rebuildGraph())
-  watch([options.selectedShapeIri ?? ref(null), options.selectedPropertyKey ?? ref(null)], updateSelectionState)
+  watch([options.selectedShapeIri ?? ref(null), options.selectedPropertyKey ?? ref(null)], () => {
+    updateSelectionState()
+    rebuildGraph()
+  })
   watch(() => {
     const requestedPositions = (options.requestedNodePositions?.value ?? {}) as Record<string, { x: number; y: number }>
     return Object.entries(requestedPositions)

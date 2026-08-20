@@ -1,5 +1,5 @@
 import type { Edge, Node } from '@vue-flow/core'
-import { propertyNodeTargets, type NodeShape, type PropertyShape } from '@/domain/profiles'
+import type { NodeShape, PropertyShape } from '@/domain/profiles'
 import { applyDefaultEditorEdgeStyle, propertyRelationshipLabel, type EditorEdgeKind } from '@/presentation/features/editor/editorEdgeLabels'
 import { EDITOR_EDGE_STYLES } from '@/presentation/features/editor/editorGraphTheme'
 import {
@@ -12,6 +12,7 @@ import {
   inheritedOriginShapesForRoot,
   inheritedPropertyPrefixCount,
   parseEditorShapeNodeTarget,
+  propertyGraphTargetIris,
   type ShapeEditorNodeData,
 } from '@/presentation/features/editor/inheritanceEditorGraph'
 import type { EditorReviewSeverity } from '@/presentation/features/editor/editorReview'
@@ -36,6 +37,8 @@ export function buildEditorShapeNodes(
   addField?: (shapeIri: string) => void,
   selectShape?: (shape: NodeShape) => void,
   selectProperty?: (shape: NodeShape, property: PropertyShape) => void,
+  renameShape?: (shapeIri: string, label: string) => void,
+  renameProperty?: (shapeIri: string, propertyNodeId: string, name: string) => void,
   openShapeHeaderMenu?: (shape: NodeShape, event: MouseEvent, options?: { allowDelete?: boolean }) => void,
   moveProperty?: (sourceShapeIri: string, propertyNodeId: string, targetShapeIri: string, targetIndex?: number) => boolean,
   selectedShapeIri?: string | null,
@@ -65,6 +68,8 @@ export function buildEditorShapeNodes(
         : undefined,
       onSelectShape: selectShape,
       onSelectProperty: selectProperty,
+      onRenameShape: interactive ? renameShape : undefined,
+      onRenameProperty: interactive ? renameProperty : undefined,
       onShapeHeaderContextMenu: interactive ? openShapeHeaderMenu : undefined,
       onMoveProperty: interactive ? moveProperty : undefined,
       selected: descriptor.representedShapeIri === selectedShapeIri,
@@ -83,8 +88,10 @@ export function buildEditorStructuralEdges(
   allShapes: NodeShape[] = rootShapes,
   visibleNodeIds?: Set<string>,
   onRemoveReferenceEdge?: (shapeIri: string, propertyNodeId: string, targetShapeIri: string) => void,
+  selectedShapeIri?: string | null,
+  selectedPropertyKey?: string | null,
 ): Edge[] {
-  return buildShapeReferenceEdges(rootShapes, allShapes, visibleNodeIds, onRemoveReferenceEdge)
+  return buildShapeReferenceEdges(rootShapes, allShapes, visibleNodeIds, onRemoveReferenceEdge, selectedShapeIri, selectedPropertyKey)
 }
 
 function buildShapeReferenceEdges(
@@ -92,6 +99,8 @@ function buildShapeReferenceEdges(
   allShapes: NodeShape[],
   visibleNodeIds?: Set<string>,
   onRemoveReferenceEdge?: (shapeIri: string, propertyNodeId: string, targetShapeIri: string) => void,
+  selectedShapeIri?: string | null,
+  selectedPropertyKey?: string | null,
 ): Edge[] {
   const edges: Edge[] = []
   const reachableShapeIris = collectReachableShapeIris(rootShapes, allShapes)
@@ -101,14 +110,17 @@ function buildShapeReferenceEdges(
 
   for (const shape of reachableShapes) {
     for (const property of shape.properties) {
-      const targetNodes = propertyNodeTargets(property)
-      if (targetNodes.length === 0) continue
+      const targetIris = propertyGraphTargetIris(property, allShapes)
+      if (targetIris.length === 0) continue
       const source = findVisibleShapeNodeId(shape.nodeId.value, visibleNodeIds, allShapes)
-      for (const targetNode of targetNodes) {
-        const target = findVisibleShapeNodeId(targetNode.value, visibleNodeIds, allShapes)
+      for (const targetIri of targetIris) {
+        const target = findVisibleShapeNodeId(targetIri, visibleNodeIds, allShapes)
         if (!source || !target) continue
+        const isSelectedOutgoingProperty = selectedShapeIri === shape.nodeId.value && selectedPropertyKey === property.nodeId.value
+        const isSelectedIncomingShape = selectedShapeIri === targetIri && !selectedPropertyKey
+        const isSelectedEdge = isSelectedOutgoingProperty || isSelectedIncomingShape
         edges.push({
-          id: `ref:${shape.nodeId.value}::${property.nodeId.value}->${targetNode.value}`,
+          id: `ref:${shape.nodeId.value}::${property.nodeId.value}->${targetIri}`,
           source,
           sourceHandle: `ref:${property.nodeId.value}`,
           target,
@@ -116,12 +128,13 @@ function buildShapeReferenceEdges(
           label: propertyRelationshipLabel(property),
           type: 'default',
           animated: false,
-          style: EDITOR_EDGE_STYLES.structural,
+          style: isSelectedEdge ? EDITOR_EDGE_STYLES.selected : EDITOR_EDGE_STYLES.structural,
           data: {
             relationLabel: propertyRelationshipLabel(property),
             edgeKind: 'structural' satisfies EditorEdgeKind,
+            selected: isSelectedEdge,
             onRemove: onRemoveReferenceEdge
-              ? () => onRemoveReferenceEdge(shape.nodeId.value, property.nodeId.value, targetNode.value)
+              ? () => onRemoveReferenceEdge(shape.nodeId.value, property.nodeId.value, targetIri)
               : undefined,
           },
         })

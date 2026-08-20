@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { NamedNode } from 'rdflib'
 import { computed, shallowRef, ref } from 'vue'
-import { ApplicationProfile, classifyShape, propertyNodeTargets, type NodeShape, type PropertyShape, type ShaclProfile } from '@/domain/profiles'
+import { ApplicationProfile, classifyShape, type NodeShape, type PropertyShape, type ShaclProfile } from '@/domain/profiles'
 import {
   importProfileFromTurtle,
   importUploadedProfileFile,
@@ -31,34 +31,14 @@ export const useProfileEditorStore = defineStore('profiles', () => {
 
   const rootNodeShapes = computed<NodeShape[]>(() => {
     const hiddenImportedShapeIds = applicationProfile.value.inheritedImportedNodeShapeIds()
-    const explicitlyReferencedShapeIds = new Set<string>()
-    const classReferencedShapeIds = new Set<string>()
-
-    for (const nodeShape of nodeShapes.value) {
-      for (const property of nodeShape.properties) {
-        for (const target of propertyNodeTargets(property)) explicitlyReferencedShapeIds.add(target.value)
-        if (property.cls?.value) {
-          for (const candidate of nodeShapes.value) {
-            if (candidate.targetClass?.value === property.cls.value) {
-              classReferencedShapeIds.add(candidate.nodeId.value)
-            }
-          }
-        }
-      }
-    }
 
     const candidates = nodeShapes.value.filter(nodeShape => {
       const isDirectlyLoadedRoot = profiles.value.some(profile =>
         profile.iri === nodeShape.sourceProfileIri && profile.source !== profile.iri,
       )
-      const isExplicitlyReferenced = explicitlyReferencedShapeIds.has(nodeShape.nodeId.value)
-      if (isExplicitlyReferenced) {
-        return isDirectlyLoadedRoot && classifyShape(nodeShape) === 'form'
-      }
       if (hiddenImportedShapeIds.has(nodeShape.nodeId.value)) return false
       if (!isDirectlyLoadedRoot) return false
-      if (classifyShape(nodeShape) === 'form') return true
-      return !classReferencedShapeIds.has(nodeShape.nodeId.value)
+      return true
     })
 
     const inheritedByOtherCandidateIds = new Set(
@@ -275,8 +255,6 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     const property = context.property
     const target = targetShapeIri?.trim()
 
-    if (target === shapeIri) return
-
     if (target) {
       if (property.editorType === 'qualifiedProfile') {
         property.qualifiedValueShape = { node: new NamedNode(target) }
@@ -315,7 +293,6 @@ export const useProfileEditorStore = defineStore('profiles', () => {
 
     const normalizedTargets = targetShapeIris
       .map(value => value.trim())
-      .filter(value => value !== shapeIri)
 
     context.property.alternatives = normalizedTargets.map(value =>
       value ? { node: new NamedNode(value) } : {},
@@ -334,7 +311,6 @@ export const useProfileEditorStore = defineStore('profiles', () => {
 
   function connectPropertyToShape(shapeIri: string, sourceHandle: string | null | undefined, targetShapeIri: string | null): void {
     if (!sourceHandle?.startsWith('ref:')) return
-    if (targetShapeIri?.trim() === shapeIri) return
     const propertyNodeId = sourceHandle.slice('ref:'.length).trim()
     if (!propertyNodeId) return
     const context = findEditableShapeContext(shapeIri)
@@ -408,7 +384,6 @@ export const useProfileEditorStore = defineStore('profiles', () => {
 
     const property = sourceContext.shape.properties[sourceIndex]
     if (!property || property.inherited) return false
-    if (sourceShapeIri !== targetShapeIri && propertyNodeTargets(property).some(target => target.value === targetShapeIri)) return false
 
     sourceContext.shape.properties.splice(sourceIndex, 1)
     const requestedIndex = targetIndex ?? targetContext.shape.properties.length
@@ -427,6 +402,19 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     if (!context) return
 
     const property = context.property
+    if (property.cls) {
+      const targetShape = applicationProfile.value.findNodeShape(targetShapeIri)
+      if (targetShape?.targetClass?.value === property.cls.value) {
+        property.cls = undefined
+        if (property.editorType === 'class') {
+          property.datatype = new NamedNode('http://www.w3.org/2001/XMLSchema#string')
+          property.editorType = 'datatype'
+        }
+        syncSerializedProfiles()
+        return
+      }
+    }
+
     if (property.editorType === 'oneOfProfiles') {
       const remaining = property.alternatives
         ?.map(alternative => alternative.node?.value)
