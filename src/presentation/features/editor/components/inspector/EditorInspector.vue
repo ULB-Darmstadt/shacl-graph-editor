@@ -19,6 +19,7 @@ import {
   propertyRelationshipKinds,
   type NodeShape,
   type PropertyShape,
+  type RdfLiteralValue,
   type ShaclProfile,
 } from '@/domain/profiles'
 import type { PropertyEditorType } from '@/application/profiles/profileEditorStore'
@@ -28,6 +29,10 @@ import InspectorReadOnlyField from '@/presentation/features/editor/components/in
 import InspectorConstraintRangeField from '@/presentation/features/editor/components/inspector/InspectorConstraintRangeField.vue'
 
 type InspectorTab = 'basic' | 'advanced'
+type AllowedValueRow = {
+  label: string
+  iri: string
+}
 type EditableShapeField =
   | 'label'
   | 'description'
@@ -51,6 +56,7 @@ type EditablePropertyField =
   | 'order'
   | 'defaultValue'
   | 'allowedValues'
+  | 'allowedValueLabels'
   | 'alternativeTargets'
   | 'message'
   | 'severity'
@@ -87,6 +93,8 @@ const props = defineProps<{
 const confirm = useConfirm()
 const activeTab = ref<InspectorTab>('basic')
 const subjectHeadingOptions = ref<SelectOption[]>([])
+const allowedValuesDialogOpen = ref(false)
+const allowedValueDraftRows = ref<AllowedValueRow[]>([])
 
 const isPropertyInspector = computed(() => props.shape !== null && props.property !== null)
 const inspectorTitle = computed(() => {
@@ -99,7 +107,27 @@ const propertyDatatype = computed(() => props.property ? propertyDatatypeTargets
 const propertyNodeTarget = computed(() => props.property ? propertyNodeTargets(props.property)[0]?.value ?? null : null)
 const propertyRelations = computed(() => props.property ? propertyRelationshipKinds(props.property) : [])
 const propertyConstraintText = computed(() => props.property ? propertyConstraintSummary(props.property) ?? null : null)
-const propertyAllowedValuesText = computed(() => props.property?.allowedValues?.join('\n') ?? null)
+const propertyAllowedValueRows = computed<AllowedValueRow[]>(() => {
+  if (!props.property?.allowedValues?.length) return []
+  return props.property.allowedValues
+    .map(value => {
+      const label = preferredLiteralLabel(props.property?.allowedValueLabels?.[value])
+      if (label) return { label, iri: value }
+      return isResourceIdentifier(value)
+        ? { label: '', iri: value }
+        : { label: value, iri: '' }
+    })
+})
+const propertyAllowedValueRowInputs = computed<AllowedValueRow[]>(() => [
+  ...allowedValueDraftRows.value,
+  { label: '', iri: '' },
+])
+const propertyAllowedValueDisplayItems = computed(() =>
+  propertyAllowedValueRows.value.map(row => ({
+    label: row.label || row.iri,
+    iri: row.iri || null,
+  })),
+)
 const propertyAlternativeTargets = computed(() =>
   props.property?.alternatives?.map(alternative => alternative.node?.value ?? '') ?? [],
 )
@@ -231,6 +259,63 @@ function onPropertyTypeChange(value: string): void {
   props.setPropertyType(props.shape.nodeId.value, props.property.nodeId.value, value as PropertyEditorType)
 }
 
+function openAllowedValuesDialog(): void {
+  allowedValueDraftRows.value = propertyAllowedValueRows.value.map(row => ({ ...row }))
+  allowedValuesDialogOpen.value = true
+}
+
+function closeAllowedValuesDialog(): void {
+  allowedValuesDialogOpen.value = false
+  allowedValueDraftRows.value = []
+}
+
+function saveAllowedValuesDialog(): void {
+  updateAllowedValueLabels(serializeAllowedValueRows(allowedValueDraftRows.value))
+  closeAllowedValuesDialog()
+}
+
+function updateAllowedValueLabels(value: string): void {
+  updateProperty('allowedValueLabels', value)
+}
+
+function updateAllowedValueRow(index: number, field: keyof AllowedValueRow, value: string): void {
+  const rows = [...allowedValueDraftRows.value]
+  while (rows.length <= index) rows.push({ label: '', iri: '' })
+  rows[index] = { ...rows[index], [field]: value }
+  allowedValueDraftRows.value = rows
+}
+
+function onAllowedValueRowInput(index: number, field: keyof AllowedValueRow, event: Event): void {
+  updateAllowedValueRow(index, field, (event.target as HTMLInputElement).value)
+}
+
+function removeAllowedValueRow(index: number): void {
+  allowedValueDraftRows.value = allowedValueDraftRows.value.filter((_, currentIndex) => currentIndex !== index)
+}
+
+function serializeAllowedValueRows(rows: AllowedValueRow[]): string {
+  return rows
+    .map(row => ({ label: row.label.trim(), iri: row.iri.trim() }))
+    .filter(row => row.label || row.iri)
+    .map(row => {
+      if (row.iri && row.label) return `${row.iri} | ${row.label}`
+      return row.iri || row.label
+    })
+    .join('\n')
+}
+
+function preferredLiteralLabel(labels: RdfLiteralValue[] | undefined): string | undefined {
+  if (!labels?.length) return undefined
+  return labels.find(label => label.lang === 'en')?.value
+    ?? labels.find(label => label.lang?.startsWith('en-'))?.value
+    ?? labels.find(label => !label.lang)?.value
+    ?? labels[0]?.value
+}
+
+function isResourceIdentifier(value: string): boolean {
+  return /^(https?:|urn:)/.test(value)
+}
+
 function onDraftFieldNameBlur(): void {
   if (!props.shape || !props.property || !isDraftProperty.value) return
   if (props.property.name?.trim()) {
@@ -351,271 +436,334 @@ function requestDeleteProperty(): void {
       </div>
 
       <fieldset v-if="isPropertyInspector ? activeTab === 'basic' : true" class="inspector-fieldset" :disabled="readOnly">
-      <div class="inspector-section-stack">
-        <template v-if="property">
-          <section class="inspector-section">
-            <h3 class="inspector-section-title ui-sidepanel-section-title">Basic Information</h3>
+        <div class="inspector-section-stack">
+          <template v-if="property">
+            <section class="inspector-section">
+              <h3 class="inspector-section-title ui-sidepanel-section-title">Basic Information</h3>
 
-            <InspectorAutocompleteField
-              label="Term IRI"
-              :value="property.path?.value ?? null"
-              :options="PROPERTY_TERM_OPTIONS"
-              placeholder="https://..."
-              :disabled="readOnly"
-              :invalid="missingPropertyTerm"
-              :helper-text="missingPropertyTerm ? 'A Term IRI is required for this field.' : 'Type your own IRI or choose a suggested term while typing.'"
-              @update:value="updateProperty('path', $event)"
-            />
-            <InspectorEditableField
-              label="Field Name"
-              :value="property.name ?? null"
-              placeholder="Unnamed field"
-              :disabled="readOnly"
-              :invalid="missingPropertyName"
-              :helper-text="missingPropertyName ? 'Field name is required.' : null"
-              :auto-focus="!property.name?.trim()"
-              @update:value="updateProperty('name', $event)"
-              @blur="onDraftFieldNameBlur"
-              @submit="onDraftFieldNameSubmit"
-            />
-            <InspectorEditableField
-              label="Description"
-              :value="property.description"
-              placeholder="Description"
-              multiline
-              :warning="missingPropertyDescription"
-              :helper-text="missingPropertyDescription ? 'Description is recommended.' : null"
-              @update:value="updateProperty('description', $event)"
-            />
-            <InspectorEditableField label="Property Type" :value="propertyTypeValue" placeholder="" :options="PROPERTY_TYPE_OPTIONS" @update:value="onPropertyTypeChange" />
+              <InspectorAutocompleteField
+                label="Term IRI"
+                :value="property.path?.value ?? null"
+                :options="PROPERTY_TERM_OPTIONS"
+                placeholder="https://..."
+                :disabled="readOnly"
+                :invalid="missingPropertyTerm"
+                :helper-text="missingPropertyTerm ? 'A Term IRI is required for this field.' : 'Type your own IRI or choose a suggested term while typing.'"
+                @update:value="updateProperty('path', $event)"
+              />
+              <InspectorEditableField
+                label="Field Name"
+                :value="property.name ?? null"
+                placeholder="Unnamed field"
+                :disabled="readOnly"
+                :invalid="missingPropertyName"
+                :helper-text="missingPropertyName ? 'Field name is required.' : null"
+                @update:value="updateProperty('name', $event)"
+                @blur="onDraftFieldNameBlur"
+                @submit="onDraftFieldNameSubmit"
+              />
+              <InspectorEditableField
+                label="Description"
+                :value="property.description"
+                placeholder="Description"
+                multiline
+                :warning="missingPropertyDescription"
+                :helper-text="missingPropertyDescription ? 'Description is recommended.' : null"
+                @update:value="updateProperty('description', $event)"
+              />
+              <InspectorEditableField label="Property Type" :value="propertyTypeValue" placeholder="" :options="PROPERTY_TYPE_OPTIONS" @update:value="onPropertyTypeChange" />
 
-            <InspectorEditableField
-              v-if="propertyTypeValue === 'datatype'"
-              label="Datatype"
-              :value="propertyDatatype"
-              placeholder=""
-              :options="SHACL_DATATYPE_OPTIONS"
-              @update:value="updateProperty('datatype', $event)"
-            />
-            <InspectorEditableField
-              v-else-if="propertyTypeValue === 'nodeKind'"
-              label="Node Kind"
-              :value="property.nodeKind?.value ?? null"
-              placeholder=""
-              :options="SHACL_NODE_KIND_OPTIONS"
-              @update:value="updateProperty('nodeKind', $event)"
-            />
-            <InspectorEditableField
-              v-else-if="propertyTypeValue === 'class'"
-              label="Class"
-              :value="property.cls?.value ?? null"
-              placeholder="https://...class"
-              helper-text="Serialized as sh:class without creating a graph link."
-              @update:value="updateProperty('cls', $event)"
-            />
-            <InspectorEditableField
-              v-else-if="propertyTypeValue === 'profile' || propertyTypeValue === 'qualifiedProfile'"
-              label="Node Target"
-              :value="propertyNodeTarget"
-              placeholder=""
-              :options="propertyNodeOptions"
-              :invalid="missingProfileTarget"
-              :helper-text="missingProfileTarget
-                ? (propertyTypeValue === 'qualifiedProfile'
-                  ? 'Select a target profile to create the sh:qualifiedValueShape connection.'
-                  : 'Select a target profile to create the sh:node connection.')
-                : null"
-              @update:value="onNodeTargetChange"
-            />
-            <InspectorEditableField
-              v-else-if="propertyTypeValue === 'list'"
-              label="Allowed Values"
-              :value="propertyAllowedValuesText"
-              placeholder="One value per line"
-              multiline
-              :invalid="missingAllowedValues"
-              :helper-text="missingAllowedValues ? 'At least one value is required.' : 'Serialized as sh:in.'"
-              @update:value="updateProperty('allowedValues', $event)"
-            />
-            <div v-else-if="propertyTypeValue === 'oneOfProfiles'" class="alternative-targets" :class="{ 'is-invalid': missingAlternativeTargets }">
-              <span class="editable-field__label ui-sidepanel-field-label">Alternative Profile Targets</span>
-              <span class="alternative-targets__helper" :class="{ 'is-invalid': missingAlternativeTargets }">
-                {{ missingAlternativeTargets ? 'At least two profile targets are required.' : 'Serialized as `sh:or` with one profile dropdown per alternative.' }}
-              </span>
-              <div v-for="(targetValue, index) in propertyAlternativeTargetInputs" :key="`${property.nodeId.value}:alt:${index}`" class="alternative-target-row">
-                <InspectorEditableField
-                  :label="`Profile Option ${index + 1}`"
-                  :value="targetValue || null"
-                  placeholder=""
-                  :options="propertyNodeOptions"
-                  @update:value="onAlternativeTargetChange(index, $event)"
-                />
-                <button v-if="targetValue" type="button" class="alternative-target-remove" :disabled="readOnly" title="Remove profile option" @click="removeAlternativeTarget(index)">
-                  <i class="pi pi-times" />
+              <InspectorEditableField
+                v-if="propertyTypeValue === 'datatype'"
+                label="Datatype"
+                :value="propertyDatatype"
+                placeholder=""
+                :options="SHACL_DATATYPE_OPTIONS"
+                @update:value="updateProperty('datatype', $event)"
+              />
+              <InspectorEditableField
+                v-else-if="propertyTypeValue === 'nodeKind'"
+                label="Node Kind"
+                :value="property.nodeKind?.value ?? null"
+                placeholder=""
+                :options="SHACL_NODE_KIND_OPTIONS"
+                @update:value="updateProperty('nodeKind', $event)"
+              />
+              <InspectorEditableField
+                v-else-if="propertyTypeValue === 'class'"
+                label="Class"
+                :value="property.cls?.value ?? null"
+                placeholder="https://...class"
+                helper-text="Serialized as sh:class without creating a graph link."
+                @update:value="updateProperty('cls', $event)"
+              />
+              <InspectorEditableField
+                v-else-if="propertyTypeValue === 'profile' || propertyTypeValue === 'qualifiedProfile'"
+                label="Node Target"
+                :value="propertyNodeTarget"
+                placeholder=""
+                :options="propertyNodeOptions"
+                :invalid="missingProfileTarget"
+                :helper-text="missingProfileTarget
+                  ? (propertyTypeValue === 'qualifiedProfile'
+                    ? 'Select a target profile to create the sh:qualifiedValueShape connection.'
+                    : 'Select a target profile to create the sh:node connection.')
+                  : null"
+                @update:value="onNodeTargetChange"
+              />
+              <div v-else-if="propertyTypeValue === 'list'" class="allowed-values-sidebar" :class="{ 'is-invalid': missingAllowedValues }">
+                <span class="editable-field__label ui-sidepanel-field-label">Allowed Values</span>
+                <div v-if="propertyAllowedValueDisplayItems.length > 0" class="allowed-values-sidebar__items">
+                  <div v-for="(item, index) in propertyAllowedValueDisplayItems" :key="`${item.label}:${index}`" class="allowed-values-sidebar__item">
+                    <span class="allowed-values-sidebar__label">{{ item.label }}</span>
+                    <span v-if="item.iri" class="allowed-values-sidebar__iri">{{ item.iri }}</span>
+                  </div>
+                </div>
+                <p v-else class="allowed-values-sidebar__empty" :class="{ 'is-invalid': missingAllowedValues }">
+                  {{ missingAllowedValues ? 'At least one value is required.' : 'No values defined.' }}
+                </p>
+                <button
+                  type="button"
+                  class="allowed-values-label-button"
+                  :disabled="readOnly"
+                  @click="openAllowedValuesDialog"
+                >
+                  Edit Values
                 </button>
               </div>
-            </div>
-          </section>
+              <div v-else-if="propertyTypeValue === 'oneOfProfiles'" class="alternative-targets" :class="{ 'is-invalid': missingAlternativeTargets }">
+                <span class="editable-field__label ui-sidepanel-field-label">Alternative Profile Targets</span>
+                <span class="alternative-targets__helper" :class="{ 'is-invalid': missingAlternativeTargets }">
+                  {{ missingAlternativeTargets ? 'At least two profile targets are required.' : 'Serialized as `sh:or` with one profile dropdown per alternative.' }}
+                </span>
+                <div v-for="(targetValue, index) in propertyAlternativeTargetInputs" :key="`${property.nodeId.value}:alt:${index}`" class="alternative-target-row">
+                  <InspectorEditableField
+                    :label="`Profile Option ${index + 1}`"
+                    :value="targetValue || null"
+                    placeholder=""
+                    :options="propertyNodeOptions"
+                    @update:value="onAlternativeTargetChange(index, $event)"
+                  />
+                  <button v-if="targetValue" type="button" class="alternative-target-remove" :disabled="readOnly" title="Remove profile option" @click="removeAlternativeTarget(index)">
+                    <i class="pi pi-times" />
+                  </button>
+                </div>
+              </div>
+            </section>
 
-          <section class="inspector-section">
-            <h3 class="inspector-section-title ui-sidepanel-section-title">Form Behavior</h3>
-            <InspectorEditableField label="Minimum Required Entries" :value="property.minCount?.toString() ?? null" placeholder="1" type="number" @update:value="updateProperty('minCount', $event)" />
-            <InspectorEditableField label="Maximum Possible Entries" :value="property.maxCount?.toString() ?? null" placeholder="*" type="number" @update:value="updateProperty('maxCount', $event)" />
-            <InspectorEditableField
-              v-if="propertyTypeValue === 'qualifiedProfile'"
-              label="Minimum Matching Profiles"
-              :value="property.qualifiedMinCount?.toString() ?? null"
-              placeholder="1"
-              type="number"
-              :invalid="missingQualifiedCounts"
-              :helper-text="missingQualifiedCounts ? 'Set a qualified minimum or maximum count.' : 'Serialized as sh:qualifiedMinCount.'"
-              @update:value="updateProperty('qualifiedMinCount', $event)"
-            />
-            <InspectorEditableField
-              v-if="propertyTypeValue === 'qualifiedProfile'"
-              label="Maximum Matching Profiles"
-              :value="property.qualifiedMaxCount?.toString() ?? null"
-              placeholder="*"
-              type="number"
-              :invalid="missingQualifiedCounts"
-              :helper-text="missingQualifiedCounts ? 'Set a qualified minimum or maximum count.' : 'Serialized as sh:qualifiedMaxCount.'"
-              @update:value="updateProperty('qualifiedMaxCount', $event)"
-            />
-            <InspectorEditableField
-              label="Position On Metadata Form"
-              :value="property.order?.toString() ?? null"
-              placeholder="0"
-              type="number"
-              :invalid="missingPropertyOrder"
-              :helper-text="missingPropertyOrder ? 'Form position is required.' : null"
-              @update:value="updateProperty('order', $event)"
-            />
-          </section>
-        </template>
+            <section class="inspector-section">
+              <h3 class="inspector-section-title ui-sidepanel-section-title">Form Behavior</h3>
+              <InspectorEditableField label="Minimum Required Entries" :value="property.minCount?.toString() ?? null" placeholder="1" type="number" @update:value="updateProperty('minCount', $event)" />
+              <InspectorEditableField label="Maximum Possible Entries" :value="property.maxCount?.toString() ?? null" placeholder="*" type="number" @update:value="updateProperty('maxCount', $event)" />
+              <InspectorEditableField
+                v-if="propertyTypeValue === 'qualifiedProfile'"
+                label="Minimum Matching Profiles"
+                :value="property.qualifiedMinCount?.toString() ?? null"
+                placeholder="1"
+                type="number"
+                :invalid="missingQualifiedCounts"
+                :helper-text="missingQualifiedCounts ? 'Set a qualified minimum or maximum count.' : 'Serialized as sh:qualifiedMinCount.'"
+                @update:value="updateProperty('qualifiedMinCount', $event)"
+              />
+              <InspectorEditableField
+                v-if="propertyTypeValue === 'qualifiedProfile'"
+                label="Maximum Matching Profiles"
+                :value="property.qualifiedMaxCount?.toString() ?? null"
+                placeholder="*"
+                type="number"
+                :invalid="missingQualifiedCounts"
+                :helper-text="missingQualifiedCounts ? 'Set a qualified minimum or maximum count.' : 'Serialized as sh:qualifiedMaxCount.'"
+                @update:value="updateProperty('qualifiedMaxCount', $event)"
+              />
+              <InspectorEditableField
+                label="Position On Metadata Form"
+                :value="property.order?.toString() ?? null"
+                placeholder="0"
+                type="number"
+                :invalid="missingPropertyOrder"
+                :helper-text="missingPropertyOrder ? 'Form position is required.' : null"
+                @update:value="updateProperty('order', $event)"
+              />
+            </section>
+          </template>
 
-        <template v-else>
-          <section class="inspector-section">
-            <InspectorReadOnlyField label="Profile Identifier" :value="profileIdentifier" link trailing-icon="pi pi-copy" />
-          </section>
+          <template v-else>
+            <section class="inspector-section">
+              <InspectorReadOnlyField label="Profile Identifier" :value="profileIdentifier" link trailing-icon="pi pi-copy" />
+            </section>
 
-          <section class="inspector-section">
-            <h3 class="inspector-section-title ui-sidepanel-section-title">Overview</h3>
-            <InspectorEditableField
-              label="Title"
-              :value="shape.label ?? null"
-              placeholder="Unnamed profile"
-              :invalid="missingTitle"
-              :helper-text="missingTitle ? 'Title is required.' : null"
-              :auto-focus="!shape.label?.trim()"
-              @update:value="updateShape('label', $event)"
-            />
-            <InspectorEditableField
-              label="Description"
-              :value="shape.description ?? null"
-              placeholder="Description"
-              multiline
-              :warning="missingShapeDescription"
-              :helper-text="missingShapeDescription ? 'Description is recommended.' : null"
-              @update:value="updateShape('description', $event)"
-            />
-          </section>
+            <section class="inspector-section">
+              <h3 class="inspector-section-title ui-sidepanel-section-title">Overview</h3>
+              <InspectorEditableField
+                label="Title"
+                :value="shape.label ?? null"
+                placeholder="Unnamed profile"
+                :invalid="missingTitle"
+                :helper-text="missingTitle ? 'Title is required.' : null"
+                :auto-focus="!shape.label?.trim()"
+                @update:value="updateShape('label', $event)"
+              />
+              <InspectorEditableField
+                label="Description"
+                :value="shape.description ?? null"
+                placeholder="Description"
+                multiline
+                :warning="missingShapeDescription"
+                :helper-text="missingShapeDescription ? 'Description is recommended.' : null"
+                @update:value="updateShape('description', $event)"
+              />
+            </section>
 
-          <section class="inspector-section">
-            <h3 class="inspector-section-title ui-sidepanel-section-title">Attribution</h3>
-            <InspectorEditableField
-              label="Creator"
-              :value="shape.creator ?? null"
-              placeholder="Creator"
-              :invalid="missingCreator"
-              :helper-text="missingCreator ? 'Creator is required.' : null"
-              @update:value="updateShape('creator', $event)"
-            />
-            <InspectorEditableField
-              label="Creation Date"
-              :value="shape.created ?? null"
-              placeholder="YYYY-MM-DD"
-              type="date"
-              :invalid="missingCreated"
-              :helper-text="missingCreated ? 'Creation date is required.' : null"
-              @update:value="updateShape('created', $event)"
-            />
-            <InspectorEditableField
-              label="License"
-              :value="shape.license ?? null"
-              placeholder=""
-              :options="shapeLicenseOptions"
-              :invalid="missingLicense"
-              :helper-text="missingLicense ? 'License is required.' : null"
-              @update:value="updateShape('license', $event)"
-            />
-            <InspectorEditableField label="Subject" :value="shape.subject ?? null" placeholder="" :options="subjectOptionsForShape" @update:value="updateShape('subject', $event)" />
-          </section>
+            <section class="inspector-section">
+              <h3 class="inspector-section-title ui-sidepanel-section-title">Attribution</h3>
+              <InspectorEditableField
+                label="Creator"
+                :value="shape.creator ?? null"
+                placeholder="Creator"
+                :invalid="missingCreator"
+                :helper-text="missingCreator ? 'Creator is required.' : null"
+                @update:value="updateShape('creator', $event)"
+              />
+              <InspectorEditableField
+                label="Creation Date"
+                :value="shape.created ?? null"
+                placeholder="YYYY-MM-DD"
+                type="date"
+                :invalid="missingCreated"
+                :helper-text="missingCreated ? 'Creation date is required.' : null"
+                @update:value="updateShape('created', $event)"
+              />
+              <InspectorEditableField
+                label="License"
+                :value="shape.license ?? null"
+                placeholder=""
+                :options="shapeLicenseOptions"
+                :invalid="missingLicense"
+                :helper-text="missingLicense ? 'License is required.' : null"
+                @update:value="updateShape('license', $event)"
+              />
+              <InspectorEditableField label="Subject" :value="shape.subject ?? null" placeholder="" :options="subjectOptionsForShape" @update:value="updateShape('subject', $event)" />
+            </section>
 
-          <section class="inspector-section">
-            <h3 class="inspector-section-title ui-sidepanel-section-title">Links</h3>
-            <InspectorEditableField label="Inherits from" :value="shape.inheritedShapeIris?.[0] ?? null" placeholder="" :options="inheritanceOptions" @update:value="onInheritanceChange" />
-            <InspectorEditableField label="Target Class" :value="shape.targetClass?.value ?? null" placeholder="https://...class" @update:value="updateShape('targetClass', $event)" />
-          </section>
+            <section class="inspector-section">
+              <h3 class="inspector-section-title ui-sidepanel-section-title">Links</h3>
+              <InspectorEditableField label="Inherits from" :value="shape.inheritedShapeIris?.[0] ?? null" placeholder="" :options="inheritanceOptions" @update:value="onInheritanceChange" />
+              <InspectorEditableField label="Target Class" :value="shape.targetClass?.value ?? null" placeholder="https://...class" @update:value="updateShape('targetClass', $event)" />
+            </section>
 
-          <section class="inspector-section inspector-section--compact">
-            <label class="toggle-field">
-              <span class="editable-field__label ui-sidepanel-field-label">Closed Shape</span>
-              <button type="button" class="toggle-field__button" :disabled="readOnly" :class="{ 'is-on': closedToggle }" @click="closedToggle = !closedToggle">
-                <span class="toggle-field__thumb" />
-              </button>
-            </label>
-          </section>
-        </template>
-      </div>
+            <section class="inspector-section inspector-section--compact">
+              <label class="toggle-field">
+                <span class="editable-field__label ui-sidepanel-field-label">Closed Shape</span>
+                <button type="button" class="toggle-field__button" :disabled="readOnly" :class="{ 'is-on': closedToggle }" @click="closedToggle = !closedToggle">
+                  <span class="toggle-field__thumb" />
+                </button>
+              </label>
+            </section>
+          </template>
+        </div>
       </fieldset>
 
       <fieldset v-if="isPropertyInspector && activeTab === 'advanced'" class="inspector-fieldset" :disabled="readOnly">
-      <div class="inspector-section-stack">
-        <template v-if="property">
-          <section class="inspector-section">
-            <h3 class="inspector-section-title ui-sidepanel-section-title">Value Constraints</h3>
-            <InspectorConstraintRangeField
-              label="Minimum"
-              :value="propertyMinValue"
-              placeholder="Min"
-              :mode="propertyMinMode ?? 'inclusive'"
-              editable
-              @update:value="onPropertyMinValueChange"
-              @update:mode="onPropertyMinModeChange"
-            />
-            <InspectorConstraintRangeField
-              label="Maximum"
-              :value="propertyMaxValue"
-              placeholder="Max"
-              :mode="propertyMaxMode ?? 'inclusive'"
-              editable
-              @update:value="onPropertyMaxValueChange"
-              @update:mode="onPropertyMaxModeChange"
-            />
-          </section>
+        <div class="inspector-section-stack">
+          <template v-if="property">
+            <section class="inspector-section">
+              <h3 class="inspector-section-title ui-sidepanel-section-title">Value Constraints</h3>
+              <InspectorConstraintRangeField
+                label="Minimum"
+                :value="propertyMinValue"
+                placeholder="Min"
+                :mode="propertyMinMode ?? 'inclusive'"
+                editable
+                @update:value="onPropertyMinValueChange"
+                @update:mode="onPropertyMinModeChange"
+              />
+              <InspectorConstraintRangeField
+                label="Maximum"
+                :value="propertyMaxValue"
+                placeholder="Max"
+                :mode="propertyMaxMode ?? 'inclusive'"
+                editable
+                @update:value="onPropertyMaxValueChange"
+                @update:mode="onPropertyMaxModeChange"
+              />
+            </section>
 
-          <section class="inspector-section">
-            <h3 class="inspector-section-title ui-sidepanel-section-title">Administrative</h3>
-            <InspectorEditableField label="Default Value" :value="property.defaultValue ?? null" placeholder="Default Value" @update:value="updateProperty('defaultValue', $event)" />
-            <InspectorEditableField label="Error Message" :value="property.message ?? null" placeholder="Please enter a valid value." multiline @update:value="updateProperty('message', $event)" />
-            <InspectorEditableField label="Severity" :value="property.severity?.value ?? null" placeholder="https://...severity" @update:value="updateProperty('severity', $event)" />
-          </section>
+            <section class="inspector-section">
+              <h3 class="inspector-section-title ui-sidepanel-section-title">Administrative</h3>
+              <InspectorEditableField label="Default Value" :value="property.defaultValue ?? null" placeholder="Default Value" @update:value="updateProperty('defaultValue', $event)" />
+              <InspectorEditableField label="Error Message" :value="property.message ?? null" placeholder="Please enter a valid value." multiline @update:value="updateProperty('message', $event)" />
+              <InspectorEditableField label="Severity" :value="property.severity?.value ?? null" placeholder="https://...severity" @update:value="updateProperty('severity', $event)" />
+            </section>
 
-          <section class="inspector-section">
-            <h3 class="inspector-section-title ui-sidepanel-section-title">Relationship</h3>
-            <InspectorEditableField label="Class" :value="property.cls?.value ?? null" placeholder="https://...class" @update:value="updateProperty('cls', $event)" />
-            <InspectorEditableField label="Pattern" :value="property.pattern ?? null" placeholder="Regex pattern" @update:value="updateProperty('pattern', $event)" />
-            <InspectorEditableField label="Equal To" :value="property.equals?.value ?? null" placeholder="https://...property" @update:value="updateProperty('equals', $event)" />
-            <InspectorEditableField label="Disjoint To" :value="property.disjoint?.value ?? null" placeholder="https://...property" @update:value="updateProperty('disjoint', $event)" />
-            <InspectorEditableField label="Less Than" :value="property.lessThan?.value ?? null" placeholder="https://...property" @update:value="updateProperty('lessThan', $event)" />
-            <InspectorEditableField label="Less Than Or Equal To" :value="property.lessThanOrEquals?.value ?? null" placeholder="https://...property" @update:value="updateProperty('lessThanOrEquals', $event)" />
-            <InspectorReadOnlyField label="Constraint Summary" :value="propertyConstraintText" placeholder="Not defined" multiline />
-            <InspectorReadOnlyField label="Relationship Kinds" :value="propertyRelations.length > 0 ? propertyRelations.join(', ') : null" placeholder="Not defined" multiline />
-            <InspectorReadOnlyField label="Inherited From" :value="property.inheritedFromShapeIri ?? null" placeholder="Not inherited" link />
-          </section>
-        </template>
-      </div>
+            <section class="inspector-section">
+              <h3 class="inspector-section-title ui-sidepanel-section-title">Relationship</h3>
+              <InspectorEditableField label="Class" :value="property.cls?.value ?? null" placeholder="https://...class" @update:value="updateProperty('cls', $event)" />
+              <InspectorEditableField label="Pattern" :value="property.pattern ?? null" placeholder="Regex pattern" @update:value="updateProperty('pattern', $event)" />
+              <InspectorEditableField label="Equal To" :value="property.equals?.value ?? null" placeholder="https://...property" @update:value="updateProperty('equals', $event)" />
+              <InspectorEditableField label="Disjoint To" :value="property.disjoint?.value ?? null" placeholder="https://...property" @update:value="updateProperty('disjoint', $event)" />
+              <InspectorEditableField label="Less Than" :value="property.lessThan?.value ?? null" placeholder="https://...property" @update:value="updateProperty('lessThan', $event)" />
+              <InspectorEditableField label="Less Than Or Equal To" :value="property.lessThanOrEquals?.value ?? null" placeholder="https://...property" @update:value="updateProperty('lessThanOrEquals', $event)" />
+              <InspectorReadOnlyField label="Constraint Summary" :value="propertyConstraintText" placeholder="Not defined" multiline />
+              <InspectorReadOnlyField label="Relationship Kinds" :value="propertyRelations.length > 0 ? propertyRelations.join(', ') : null" placeholder="Not defined" multiline />
+              <InspectorReadOnlyField label="Inherited From" :value="property.inheritedFromShapeIri ?? null" placeholder="Not inherited" link />
+            </section>
+          </template>
+        </div>
       </fieldset>
+
+      <div v-if="property && allowedValuesDialogOpen" class="metadata-dialog" role="dialog" aria-modal="true" aria-label="Allowed value labels">
+        <div class="metadata-dialog__panel">
+          <div class="metadata-dialog__header">
+            <h3 class="inspector-section-title ui-sidepanel-section-title">Allowed Values</h3>
+            <button type="button" class="metadata-dialog__close" title="Close" @click="closeAllowedValuesDialog">
+              <i class="pi pi-times" />
+            </button>
+          </div>
+          <div class="allowed-value-dialog__rows">
+            <div class="allowed-value-dialog__head" aria-hidden="true">
+              <span>Label</span>
+              <span>IRI (optional)</span>
+              <span />
+            </div>
+            <div
+              v-for="(row, index) in propertyAllowedValueRowInputs"
+              :key="`${property.nodeId.value}:allowed:${index}`"
+              class="allowed-value-dialog__row"
+            >
+              <input
+                class="allowed-value-dialog__input ui-sidepanel-field-input"
+                :value="row.label || null"
+                placeholder="Display label"
+                :disabled="readOnly"
+                :aria-label="`Allowed value label ${index + 1}`"
+                @input="onAllowedValueRowInput(index, 'label', $event)"
+              />
+              <input
+                class="allowed-value-dialog__input ui-sidepanel-field-input"
+                :value="row.iri || null"
+                placeholder="https://example.org/value"
+                :disabled="readOnly"
+                :aria-label="`Allowed value IRI ${index + 1}`"
+                @input="onAllowedValueRowInput(index, 'iri', $event)"
+              />
+              <button
+                v-if="row.label || row.iri"
+                type="button"
+                class="allowed-value-dialog__remove"
+                :disabled="readOnly"
+                title="Remove value"
+                @click="removeAllowedValueRow(index)"
+              >
+                <i class="pi pi-times" />
+              </button>
+            </div>
+          </div>
+          <div class="metadata-dialog__footer">
+            <button type="button" class="metadata-dialog__secondary" @click="closeAllowedValuesDialog">Cancel</button>
+            <button type="button" class="metadata-dialog__primary" :disabled="readOnly" @click="saveAllowedValuesDialog">Save</button>
+          </div>
+        </div>
+      </div>
     </template>
 
     <div v-else class="inspector-empty-state">
@@ -776,6 +924,57 @@ function requestDeleteProperty(): void {
   color: #b42323;
 }
 
+.allowed-values-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.allowed-values-sidebar.is-invalid {
+  padding: 10px;
+  border: 1px solid #d84c4c;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 0 1px rgba(216, 76, 76, 0.14);
+}
+
+.allowed-values-sidebar__items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.allowed-values-sidebar__item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.allowed-values-sidebar__label {
+  color: var(--color-text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.allowed-values-sidebar__iri,
+.allowed-values-sidebar__empty {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.allowed-values-sidebar__empty {
+  margin: 0;
+}
+
+.allowed-values-sidebar__empty.is-invalid {
+  color: #b42323;
+}
+
 .alternative-target-row {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -792,6 +991,179 @@ function requestDeleteProperty(): void {
   color: var(--color-text);
   cursor: pointer;
   font: inherit;
+}
+
+.allowed-values-label-button {
+  min-height: 38px;
+  align-self: start;
+  padding: 0 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.allowed-values-label-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.metadata-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.28);
+}
+
+.metadata-dialog__panel {
+  width: min(820px, 100%);
+  max-height: min(680px, 90vh);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.metadata-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.metadata-dialog__close {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.metadata-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.metadata-dialog__primary,
+.metadata-dialog__secondary {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font: inherit;
+}
+
+.metadata-dialog__primary {
+  border: 1px solid var(--color-primary);
+  background: var(--color-primary);
+  color: white;
+}
+
+.metadata-dialog__secondary {
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.metadata-dialog__primary:disabled,
+.metadata-dialog__secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.allowed-value-dialog__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.allowed-value-dialog__head {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(240px, 1.4fr) 42px;
+  gap: 10px;
+  padding: 0 10px;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.allowed-value-dialog__row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(240px, 1.4fr) 42px;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, var(--color-surface) 0%, var(--color-surface-1) 100%);
+}
+
+.allowed-value-dialog__input {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-sm), inset 0 -2px 0 var(--color-border-soft);
+  font: inherit;
+  min-width: 0;
+}
+
+.allowed-value-dialog__input:disabled {
+  cursor: not-allowed;
+  color: var(--color-text-muted);
+  background: var(--color-surface-2);
+  border-color: var(--color-border);
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.03);
+  opacity: 0.9;
+}
+
+.allowed-value-dialog__remove {
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.allowed-value-dialog__remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 720px) {
+  .allowed-value-dialog__head {
+    display: none;
+  }
+
+  .allowed-value-dialog__row {
+    grid-template-columns: minmax(0, 1fr) 42px;
+  }
+
+  .allowed-value-dialog__input:nth-child(2) {
+    grid-column: 1 / -1;
+  }
 }
 
 .alternative-target-remove {

@@ -1,20 +1,49 @@
-import type { ApplicationProfile, NodeShape, PropertyShape, ShaclProfile } from '@/domain/profiles'
+import type { ApplicationProfile, NodeShape, PropertyShape, RdfLiteralValue, ShaclProfile } from '@/domain/profiles'
 import { PREFIX_APS } from '@/shared/rdf/rdfConstants'
 
 const PREFIXES = [
-  '@prefix sh: <http://www.w3.org/ns/shacl#> .',
+  '@prefix dash: <http://datashapes.org/dash#> .',
+  '@prefix dcat: <http://www.w3.org/ns/dcat#> .',
+  '@prefix dcmitype: <http://purl.org/dc/dcmitype/> .',
   '@prefix dcterms: <http://purl.org/dc/terms/> .',
+  '@prefix foaf: <http://xmlns.com/foaf/0.1/> .',
   '@prefix owl: <http://www.w3.org/2002/07/owl#> .',
+  '@prefix prov: <http://www.w3.org/ns/prov#> .',
+  '@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .',
+  '@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .',
+  '@prefix sh: <http://www.w3.org/ns/shacl#> .',
+  '@prefix skos: <http://www.w3.org/2004/02/skos/core#> .',
   '@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .',
   '@prefix aps: <https://w3id.org/nfdi4ing/profiles/> .',
-  '@prefix dash: <http://datashapes.org/dash#> .',
 ]
 
+const PREFIX_DEFINITIONS = [
+  ['dash', 'http://datashapes.org/dash#'],
+  ['dcat', 'http://www.w3.org/ns/dcat#'],
+  ['dcmitype', 'http://purl.org/dc/dcmitype/'],
+  ['dcterms', 'http://purl.org/dc/terms/'],
+  ['foaf', 'http://xmlns.com/foaf/0.1/'],
+  ['owl', 'http://www.w3.org/2002/07/owl#'],
+  ['prov', 'http://www.w3.org/ns/prov#'],
+  ['rdf', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'],
+  ['rdfs', 'http://www.w3.org/2000/01/rdf-schema#'],
+  ['sh', 'http://www.w3.org/ns/shacl#'],
+  ['skos', 'http://www.w3.org/2004/02/skos/core#'],
+  ['xsd', 'http://www.w3.org/2001/XMLSchema#'],
+  ['aps', PREFIX_APS],
+] as const
+
 export function serializeProfilesAsTurtle(profiles: readonly ShaclProfile[]): string {
-  return profiles
-    .map(profile => serializeProfileAsTurtle(profile, profiles).trim())
+  const blocks = profiles
+    .map(profile => serializeProfileBodyAsTurtle(profile, profiles).trim())
     .filter(Boolean)
-    .join('\n\n')
+
+  if (blocks.length === 0) return PREFIXES.join('\n')
+  return [
+    ...PREFIXES,
+    '',
+    blocks.join('\n\n'),
+  ].join('\n')
 }
 
 export function serializeApplicationProfileAsTurtle(applicationProfile: ApplicationProfile): string {
@@ -47,38 +76,35 @@ export function downloadProfilesAsTurtle(profiles: readonly ShaclProfile[], base
 }
 
 export function serializeProfileAsTurtle(profile: ShaclProfile, allProfiles: readonly ShaclProfile[]): string {
+  return [
+    ...PREFIXES,
+    '',
+    serializeProfileBodyAsTurtle(profile, allProfiles),
+  ].join('\n')
+}
+
+function serializeProfileBodyAsTurtle(profile: ShaclProfile, allProfiles: readonly ShaclProfile[]): string {
   const shapeToProfile = buildShapeToProfileMap(allProfiles)
   const imports = determineProfileImports(profile, shapeToProfile)
   const blocks: string[] = []
 
-  blocks.push([
-    ...PREFIXES,
-    '',
-    serializeProfileHeader(profile, imports),
-  ].join('\n'))
-
   for (const shape of profile.nodeShapes) {
-    blocks.push(serializeNodeShape(shape))
-    for (const property of shape.properties.filter(property => !property.inherited)) {
+    blocks.push(serializeNodeShape(shape, shape.nodeId.value === profile.iri ? imports : []))
+    for (const property of shape.properties.filter(property => !property.inherited && !isInlinePropertyShapeIdentifier(property.nodeId.value))) {
       blocks.push(serializePropertyShape(property))
     }
   }
 
+  blocks.push(serializeAllowedValueLabels(profile))
+
   return blocks.filter(Boolean).join('\n\n')
 }
 
-function serializeProfileHeader(profile: ShaclProfile, imports: string[]): string {
-  const statements = ['a owl:Ontology']
-  for (const importIri of imports) {
-    statements.push(`owl:imports ${term(importIri)}`)
-  }
-  return serializeSubject(profile.iri, statements)
-}
-
-function serializeNodeShape(shape: NodeShape): string {
+function serializeNodeShape(shape: NodeShape, imports: string[]): string {
   const statements = ['a sh:NodeShape']
-  pushLiteralStatement(statements, 'dcterms:title', shape.label)
-  pushLiteralStatement(statements, 'dcterms:description', shape.description)
+  pushLiteralStatements(statements, 'dcterms:title', shape.labelLiterals, shape.label)
+  pushLiteralStatements(statements, 'rdfs:label', shape.rdfsLabelLiterals, shape.rdfsLabel)
+  pushLiteralStatements(statements, 'dcterms:description', shape.descriptionLiterals, shape.description)
   pushLiteralStatement(statements, 'dcterms:creator', shape.creator)
   pushLiteralStatement(statements, 'dcterms:created', shape.created, 'xsd:date')
   if (shape.license?.trim()) {
@@ -91,27 +117,55 @@ function serializeNodeShape(shape: NodeShape): string {
   }
   if (shape.closed !== undefined) statements.push(`sh:closed ${shape.closed ? 'true' : 'false'}`)
   if (shape.targetClass?.value) statements.push(`sh:targetClass ${term(shape.targetClass.value)}`)
+  for (const importIri of imports) {
+    statements.push(`owl:imports ${term(importIri)}`)
+  }
+  for (const iri of shape.wasDerivedFrom ?? []) {
+    statements.push(`prov:wasDerivedFrom ${term(iri)}`)
+  }
+  for (const iri of shape.wasRevisionOf ?? []) {
+    statements.push(`prov:wasRevisionOf ${term(iri)}`)
+  }
   for (const inheritedIri of shape.inheritedShapeIris ?? []) {
     statements.push(`sh:node ${term(inheritedIri)}`)
   }
   for (const property of shape.properties.filter(property => !property.inherited)) {
-    statements.push(`sh:property ${term(property.nodeId.value)}`)
+    statements.push(
+      isInlinePropertyShapeIdentifier(property.nodeId.value)
+        ? `sh:property ${serializeInlinePropertyShape(property)}`
+        : `sh:property ${term(property.nodeId.value)}`,
+    )
   }
   return serializeSubject(shape.nodeId.value, statements)
 }
 
 function serializePropertyShape(property: PropertyShape): string {
-  const statements = ['a sh:PropertyShape']
+  return serializeSubject(property.nodeId.value, propertyStatements(property, true))
+}
+
+function serializeInlinePropertyShape(property: PropertyShape): string {
+  const statements = propertyStatements(property, false)
+  if (statements.length === 0) return '[]'
+  if (statements.length === 1) return `[ ${statements[0]} ]`
+  return `[\n    ${statements.join(' ;\n    ')}\n  ]`
+}
+
+function propertyStatements(property: PropertyShape, includeType: boolean): string[] {
+  const statements = includeType ? ['a sh:PropertyShape'] : []
   if (property.path?.value) statements.push(`sh:path ${term(property.path.value)}`)
-  pushLiteralStatement(statements, 'sh:name', property.name)
-  pushLiteralStatement(statements, 'sh:description', property.description)
+  pushLiteralStatements(statements, 'sh:name', property.nameLiterals, property.name)
+  pushLiteralStatements(statements, 'rdfs:label', property.rdfsLabelLiterals, property.rdfsLabel)
+  pushLiteralStatements(statements, 'sh:description', property.descriptionLiterals, property.description)
   pushNamedNodeStatement(statements, 'sh:datatype', property.datatype?.value)
   pushNamedNodeStatement(statements, 'sh:node', property.node?.value)
-  pushNamedNodeStatement(statements, 'sh:qualifiedValueShape', property.qualifiedValueShape?.node?.value)
+  pushConstraintStatement(statements, 'sh:qualifiedValueShape', property.qualifiedValueShape)
   pushNamedNodeStatement(statements, 'sh:nodeKind', property.nodeKind?.value)
   pushNamedNodeStatement(statements, 'sh:class', property.cls?.value)
   pushStringListStatement(statements, 'sh:in', property.allowedValues)
   pushConstraintListStatement(statements, 'sh:or', property.alternatives)
+  pushConstraintListStatement(statements, 'sh:and', property.conjunctions)
+  pushConstraintListStatement(statements, 'sh:xone', property.exclusiveAlternatives)
+  pushConstraintStatement(statements, 'sh:not', property.negatedConstraint)
   pushNumericStatement(statements, 'sh:minCount', property.minCount)
   pushNumericStatement(statements, 'sh:maxCount', property.maxCount)
   pushNumericStatement(statements, 'sh:qualifiedMinCount', property.qualifiedMinCount)
@@ -129,7 +183,28 @@ function serializePropertyShape(property: PropertyShape): string {
   pushLiteralStatement(statements, 'sh:minExclusive', property.minExclusive)
   pushLiteralStatement(statements, 'sh:maxInclusive', property.maxInclusive)
   pushLiteralStatement(statements, 'sh:maxExclusive', property.maxExclusive)
-  return serializeSubject(property.nodeId.value, statements)
+  if (property.dashSingleLine !== undefined) statements.push(`dash:singleLine ${property.dashSingleLine ? 'true' : 'false'}`)
+  return statements
+}
+
+function serializeAllowedValueLabels(profile: ShaclProfile): string {
+  const labelBlocks = new Map<string, RdfLiteralValue[]>()
+  for (const shape of profile.nodeShapes) {
+    for (const property of shape.properties.filter(property => !property.inherited)) {
+      for (const [value, labels] of Object.entries(property.allowedValueLabels ?? {})) {
+        if (labels.length > 0 && isLikelyResourceIdentifier(value)) labelBlocks.set(value, labels)
+      }
+    }
+  }
+
+  return [...labelBlocks.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([value, labels]) => {
+      const statements: string[] = []
+      pushLiteralStatements(statements, 'rdfs:label', labels)
+      return serializeSubject(value, statements)
+    })
+    .join('\n\n')
 }
 
 function determineProfileImports(profile: ShaclProfile, shapeToProfile: Map<string, string>): string[] {
@@ -182,6 +257,22 @@ function pushLiteralStatement(statements: string[], predicate: string, value: st
   statements.push(datatype ? `${predicate} "${escaped}"^^${datatype}` : `${predicate} "${escaped}"`)
 }
 
+function pushLiteralStatements(
+  statements: string[],
+  predicate: string,
+  literals: RdfLiteralValue[] | undefined,
+  fallback?: string,
+): void {
+  const serialized = (literals ?? [])
+    .filter(literal => literal.value.trim())
+    .map(literal => `${predicate} ${literalTerm(literal)}`)
+  if (serialized.length > 0) {
+    statements.push(...serialized)
+    return
+  }
+  pushLiteralStatement(statements, predicate, fallback)
+}
+
 function pushNamedNodeStatement(statements: string[], predicate: string, iri: string | undefined): void {
   if (!iri?.trim()) return
   statements.push(`${predicate} ${term(iri)}`)
@@ -223,6 +314,25 @@ function pushConstraintListStatement(
   statements.push(`${predicate} (\n    ${serialized.join('\n    ')}\n  )`)
 }
 
+function pushConstraintStatement(
+  statements: string[],
+  predicate: string,
+  constraint: {
+    node?: { value: string }
+    datatype?: { value: string }
+    nodeKind?: { value: string }
+    cls?: { value: string }
+    label?: string
+    description?: string
+    pattern?: string
+  } | undefined,
+): void {
+  if (!constraint) return
+  const serialized = serializeConstraintNode(constraint)
+  if (!serialized) return
+  statements.push(`${predicate} ${serialized}`)
+}
+
 function serializeConstraintNode(constraint: {
   node?: { value: string }
   datatype?: { value: string }
@@ -247,14 +357,15 @@ function serializeConstraintNode(constraint: {
 
 function term(iri: string): string {
   if (isBlankNodeIdentifier(iri)) return blankNodeLabel(iri)
-  if (iri.startsWith(PREFIX_APS)) {
-    const suffix = iri.slice(PREFIX_APS.length)
-    if (canUseApsPrefix(suffix)) return `aps:${suffix}`
+  for (const [prefix, namespace] of PREFIX_DEFINITIONS) {
+    if (!iri.startsWith(namespace)) continue
+    const suffix = iri.slice(namespace.length)
+    if (canUsePrefixLocalName(suffix)) return `${prefix}:${suffix}`
   }
   return `<${iri}>`
 }
 
-function canUseApsPrefix(suffix: string): boolean {
+function canUsePrefixLocalName(suffix: string): boolean {
   return /^[A-Za-z0-9_](?:[A-Za-z0-9._-]*[A-Za-z0-9_-])?$/.test(suffix)
 }
 
@@ -265,12 +376,31 @@ function escapeLiteral(value: string): string {
     .replace(/\n/g, '\\n')
 }
 
+function literalTerm(literal: RdfLiteralValue): string {
+  const escaped = `"${escapeLiteral(literal.value.trim())}"`
+  if (literal.lang) return `${escaped}@${literal.lang}`
+  if (literal.datatype && literal.datatype !== 'http://www.w3.org/2001/XMLSchema#string') {
+    return `${escaped}^^${term(literal.datatype)}`
+  }
+  return escaped
+}
+
 function isLikelyIri(value: string): boolean {
   return /^https?:\/\//.test(value)
 }
 
+function isLikelyResourceIdentifier(value: string): boolean {
+  return /^(https?:|urn:)/.test(value)
+}
+
 function isBlankNodeIdentifier(value: string): boolean {
   return value.startsWith('_:') || value.startsWith('_g_')
+}
+
+function isInlinePropertyShapeIdentifier(value: string): boolean {
+  return isBlankNodeIdentifier(value)
+    || /^urn:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+    || /#property-shape-[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
 
 function blankNodeLabel(value: string): string {

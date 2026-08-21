@@ -27,7 +27,7 @@ import { propertyConstraintSummary, propertyNodeTargets, type NodeShape, type Pr
 import { EDITOR_NODE_COLORS } from '@/presentation/features/editor/editorGraphTheme'
 import { propertyGraphTargetIris, type ShapeEditorNodeData } from '@/presentation/features/editor/inheritanceEditorGraph'
 import { useProfileEditorStore } from '@/application/profiles/profileEditorStore'
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 const props = defineProps<{ data: ShapeEditorNodeData }>()
 const profiles = useProfileEditorStore()
@@ -59,6 +59,10 @@ function propertyKey(property: PropertyShape): string {
 
 function propertyEditKey(shapeIri: string, property: PropertyShape): string {
   return `${shapeIri}::${property.nodeId.value}`
+}
+
+function isDraftProperty(property: PropertyShape): boolean {
+  return props.data.draftPropertyNodeId === property.nodeId.value
 }
 
 function isSelectedShape(): boolean {
@@ -175,12 +179,19 @@ function commitPropertyNameEdit(shapeIri: string, property: PropertyShape): void
   const editKey = propertyEditKey(shapeIri, property)
   if (editingPropertyKey.value !== editKey) return
   props.data.onRenameProperty?.(shapeIri, property.nodeId.value, inlineNameDraft.value)
+  if (isDraftProperty(property)) {
+    if (inlineNameDraft.value.trim()) props.data.onCommitDraftProperty?.(property.nodeId.value)
+    else props.data.onDeleteProperty?.(shapeIri, property.nodeId.value)
+  }
   editingPropertyKey.value = null
 }
 
 function cancelPropertyNameEdit(shapeIri: string, property: PropertyShape): void {
   if (editingPropertyKey.value === propertyEditKey(shapeIri, property)) {
     props.data.onRenameProperty?.(shapeIri, property.nodeId.value, inlineOriginalName.value)
+    if (isDraftProperty(property) && !inlineOriginalName.value.trim()) {
+      props.data.onDeleteProperty?.(shapeIri, property.nodeId.value)
+    }
   }
   editingPropertyKey.value = null
 }
@@ -264,6 +275,23 @@ function flattenInheritedGroupShapes(groups: NonNullable<ShapeEditorNodeData['in
 function hasTermIri(property: PropertyShape): boolean {
   return Boolean(property.path?.value?.trim())
 }
+
+function focusDraftPropertyInNode(): void {
+  const draftPropertyNodeId = props.data.draftPropertyNodeId
+  if (!draftPropertyNodeId) return
+  if (editingPropertyKey.value?.endsWith(`::${draftPropertyNodeId}`)) return
+
+  const property = ownProperties().find(candidate => candidate.nodeId.value === draftPropertyNodeId)
+  if (!property) return
+
+  startPropertyNameEdit(props.data.representedShapeIri, property)
+}
+
+watch(
+  () => props.data.draftPropertyNodeId,
+  () => focusDraftPropertyInNode(),
+  { immediate: true, flush: 'post' },
+)
 
 function propertyDragPayload(property: PropertyShape): PropertyDragPayload {
   return {

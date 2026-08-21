@@ -8,6 +8,7 @@ export const PREFIX_DCTERMS = 'http://purl.org/dc/terms/'
 export const PREFIX_OWL = 'http://www.w3.org/2002/07/owl#'
 export const PREFIX_XSD = 'http://www.w3.org/2001/XMLSchema#'
 export const PREFIX_APS = 'https://w3id.org/nfdi4ing/profiles/'
+export const PREFIX_PROV = 'http://www.w3.org/ns/prov#'
 
 // ─── RDF core ─────────────────────────────────────────────────────────────────
 export const RDF_TYPE = new NamedNode(PREFIX_RDF + 'type')
@@ -61,5 +62,9 @@ export const DCT_SUBJECT = new NamedNode(PREFIX_DCTERMS + 'subject')
 
 export const PREFIX_DASH = 'http://datashapes.org/dash#'
 export const DASH_DEFAULT_VALUE = new NamedNode(PREFIX_DASH + 'defaultValue')
+export const DASH_SINGLE_LINE = new NamedNode(PREFIX_DASH + 'singleLine')
+
+export const PROV_WAS_DERIVED_FROM = new NamedNode(PREFIX_PROV + 'wasDerivedFrom')
+export const PROV_WAS_REVISION_OF = new NamedNode(PREFIX_PROV + 'wasRevisionOf')
 
 

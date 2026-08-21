@@ -29,10 +29,13 @@ interface UseEditorGraphOptions {
   addField?: (shapeIri: string) => void
   renameShape?: (shapeIri: string, label: string) => void
   renameProperty?: (shapeIri: string, propertyNodeId: string, name: string) => void
+  commitDraftProperty?: (propertyNodeId: string) => void
+  deleteProperty?: (shapeIri: string, propertyNodeId: string) => boolean
   removeReferenceEdge?: (shapeIri: string, propertyNodeId: string, targetShapeIri: string) => void
   requestedNodePositions?: Ref<Record<string, Node['position']>>
   selectedShapeIri?: Ref<string | null>
   selectedPropertyKey?: Ref<string | null>
+  draftPropertyNodeId?: Ref<string | null>
   selectShape?: (shape: NodeShape) => void
   selectProperty?: (shape: NodeShape, property: import('@/domain/profiles').PropertyShape) => void
   openShapeHeaderMenu?: (shape: NodeShape, event: MouseEvent, options?: { allowDelete?: boolean }) => void
@@ -88,6 +91,7 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
       node.data.selected = representedShapeIri === selectedShapeIri
       node.data.selectedShapeIri = selectedShapeIri
       node.data.selectedPropertyKey = representedShapeIri === selectedShapeIri ? selectedPropertyKey : null
+      node.data.draftPropertyNodeId = options.draftPropertyNodeId?.value ?? null
       node.data.reviewMode = options.reviewMode?.value ?? false
       node.data.reviewShapeSeverity = representedShapeIri
         ? options.reviewAnnotations?.value.get(representedShapeIri)?.shapeSeverity ?? null
@@ -129,10 +133,13 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
       options.selectProperty,
       options.renameShape,
       options.renameProperty,
+      options.commitDraftProperty,
+      options.deleteProperty,
       options.openShapeHeaderMenu,
       options.moveProperty,
       options.selectedShapeIri?.value,
       options.selectedPropertyKey?.value,
+      options.draftPropertyNodeId?.value,
       options.reviewMode?.value ?? false,
       options.reviewAnnotations?.value,
     )
@@ -177,6 +184,7 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
   watch(options.readOnlyMode ?? ref(false), () => rebuildGraph())
   watch(options.reviewMode ?? ref(false), () => rebuildGraph())
   watch(options.reviewAnnotations ?? ref(new Map<string, EditorShapeReviewAnnotation>()), () => rebuildGraph())
+  watch(options.draftPropertyNodeId ?? ref(null), () => rebuildGraph())
   watch([options.selectedShapeIri ?? ref(null), options.selectedPropertyKey ?? ref(null)], () => {
     updateSelectionState()
     rebuildGraph()

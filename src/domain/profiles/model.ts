@@ -1,14 +1,26 @@
 import type { BlankNode, NamedNode } from 'rdflib'
 import type { PropertyConstraintCarrier } from '@/shared/rdf/propertyConstraints'
 
+export interface RdfLiteralValue {
+  value: string
+  lang?: string
+  datatype?: string
+}
+
 export interface PropertyShape extends PropertyConstraintCarrier {
   nodeId: NamedNode | BlankNode
   name?: string
+  nameLiterals?: RdfLiteralValue[]
   description?: string
+  descriptionLiterals?: RdfLiteralValue[]
+  rdfsLabel?: string
+  rdfsLabelLiterals?: RdfLiteralValue[]
   path?: NamedNode
   order?: number
   editorType?: 'datatype' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'list'
   allowedValues?: string[]
+  allowedValueLabels?: Record<string, RdfLiteralValue[]>
+  dashSingleLine?: boolean
   inherited?: boolean
   inheritedFromShapeIri?: string
   inheritedFromShapeLabel?: string
@@ -17,12 +29,17 @@ export interface PropertyShape extends PropertyConstraintCarrier {
 export interface NodeShape {
   nodeId: NamedNode | BlankNode
   label?: string
+  labelLiterals?: RdfLiteralValue[]
   rdfsLabel?: string
+  rdfsLabelLiterals?: RdfLiteralValue[]
   description?: string
+  descriptionLiterals?: RdfLiteralValue[]
   creator?: string
   created?: string
   license?: string
   subject?: string
+  wasDerivedFrom?: string[]
+  wasRevisionOf?: string[]
   closed?: boolean
   targetClass?: NamedNode
   properties: PropertyShape[]

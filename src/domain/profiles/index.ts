@@ -1,6 +1,7 @@
 export type {
   NodeShape,
   PropertyShape,
+  RdfLiteralValue,
   ShaclProfile,
 } from '@/domain/profiles/model'
 export {

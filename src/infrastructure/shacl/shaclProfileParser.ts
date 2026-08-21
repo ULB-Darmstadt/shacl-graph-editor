@@ -6,7 +6,10 @@ import {
   DCT_LICENSE,
   DCT_SUBJECT,
   DCT_TITLE,
+  DASH_SINGLE_LINE,
   OWL_IMPORTS,
+  PROV_WAS_DERIVED_FROM,
+  PROV_WAS_REVISION_OF,
   RDFS_LABEL,
   SH_DESCRIPTION,
   SH_CLOSED,
@@ -19,7 +22,7 @@ import {
   SH_TARGET_CLASS,
 } from '@/shared/rdf/rdfConstants'
 import { applyConstraintPredicate, inferPropertyEditorType, localName } from '@/shared/rdf/propertyConstraints'
-import type { NodeShape, PropertyShape, ShaclProfile } from '@/domain/profiles'
+import type { NodeShape, PropertyShape, RdfLiteralValue, ShaclProfile } from '@/domain/profiles'
 
 const DEFAULT_BASE_URI = 'http://example.org/'
 
@@ -169,20 +172,30 @@ function extractNodeShape(nodeId: NamedNode, store: Store): NodeShape {
   const preferredLabel = createPreferredLiteralTracker()
   const preferredRdfsLabel = createPreferredLiteralTracker()
   const preferredDescription = createPreferredLiteralTracker()
+  const labelLiterals: RdfLiteralValue[] = []
+  const rdfsLabelLiterals: RdfLiteralValue[] = []
+  const descriptionLiterals: RdfLiteralValue[] = []
 
   store.match(nodeId, null, null, null).forEach(statement => {
     const predicate = statement.predicate.value
     const object = statement.object as Literal | NamedNode | BlankNode
 
     if (predicate === DCT_TITLE.value) {
-      if (object.termType === 'Literal') preferredLabel.consider(object)
+      if (object.termType === 'Literal') {
+        preferredLabel.consider(object)
+        labelLiterals.push(literalValue(object))
+      }
     } else if (predicate === RDFS_LABEL.value) {
       if (object.termType === 'Literal') {
         preferredRdfsLabel.consider(object)
         preferredLabel.consider(object)
+        rdfsLabelLiterals.push(literalValue(object))
       }
     } else if (predicate === DCT_DESCRIPTION.value) {
-      if (object.termType === 'Literal') preferredDescription.consider(object)
+      if (object.termType === 'Literal') {
+        preferredDescription.consider(object)
+        descriptionLiterals.push(literalValue(object))
+      }
     } else if (predicate === DCT_CREATOR.value) {
       if (object.termType === 'Literal') shape.creator = object.value
       else if (object.termType === 'NamedNode') shape.creator = localName(object.value)
@@ -194,6 +207,10 @@ function extractNodeShape(nodeId: NamedNode, store: Store): NodeShape {
     } else if (predicate === DCT_SUBJECT.value) {
       if (object.termType === 'Literal') shape.subject = object.value
       else if (object.termType === 'NamedNode') shape.subject = object.value
+    } else if (predicate === PROV_WAS_DERIVED_FROM.value) {
+      if (object.termType === 'NamedNode') shape.wasDerivedFrom = [...(shape.wasDerivedFrom ?? []), object.value]
+    } else if (predicate === PROV_WAS_REVISION_OF.value) {
+      if (object.termType === 'NamedNode') shape.wasRevisionOf = [...(shape.wasRevisionOf ?? []), object.value]
     } else if (predicate === SH_CLOSED.value) {
       if (object.termType === 'Literal') shape.closed = object.value === 'true'
     } else if (predicate === SH_TARGET_CLASS.value) {
@@ -206,8 +223,11 @@ function extractNodeShape(nodeId: NamedNode, store: Store): NodeShape {
   })
 
   shape.label = preferredLabel.value
+  shape.labelLiterals = labelLiterals.length > 0 ? labelLiterals : undefined
   shape.rdfsLabel = preferredRdfsLabel.value
+  shape.rdfsLabelLiterals = rdfsLabelLiterals.length > 0 ? rdfsLabelLiterals : undefined
   shape.description = preferredDescription.value
+  shape.descriptionLiterals = descriptionLiterals.length > 0 ? descriptionLiterals : undefined
   shape.properties.sort((left, right) => (left.order ?? 999) - (right.order ?? 999))
   return shape
 }
@@ -215,23 +235,54 @@ function extractNodeShape(nodeId: NamedNode, store: Store): NodeShape {
 function extractPropertyShape(nodeId: NamedNode | BlankNode, store: Store): PropertyShape {
   const propertyShape: PropertyShape = { nodeId }
   const preferredName = createPreferredLiteralTracker()
+  const preferredRdfsLabel = createPreferredLiteralTracker()
   const preferredDescription = createPreferredLiteralTracker()
+  const nameLiterals: RdfLiteralValue[] = []
+  const rdfsLabelLiterals: RdfLiteralValue[] = []
+  const descriptionLiterals: RdfLiteralValue[] = []
 
   store.match(nodeId, null, null, null).forEach(statement => {
     const predicate = statement.predicate.value
     const object = statement.object as Literal | NamedNode | BlankNode
-    if (predicate === SH_NAME.value && object.termType === 'Literal') preferredName.consider(object)
-    else if (predicate === SH_DESCRIPTION.value && object.termType === 'Literal') preferredDescription.consider(object)
+    if (predicate === SH_NAME.value && object.termType === 'Literal') {
+      preferredName.consider(object)
+      nameLiterals.push(literalValue(object))
+    } else if (predicate === RDFS_LABEL.value && object.termType === 'Literal') {
+      preferredRdfsLabel.consider(object)
+      rdfsLabelLiterals.push(literalValue(object))
+    } else if (predicate === SH_DESCRIPTION.value && object.termType === 'Literal') {
+      preferredDescription.consider(object)
+      descriptionLiterals.push(literalValue(object))
+    } else if (predicate === DASH_SINGLE_LINE.value && object.termType === 'Literal') propertyShape.dashSingleLine = object.value === 'true'
     else if (predicate === SH_PATH.value && object.termType === 'NamedNode') propertyShape.path = object
     else if (predicate === SH_ORDER.value && object.termType === 'Literal') propertyShape.order = Number(object.value)
     else applyConstraintPredicate(propertyShape, predicate, object, store)
   })
 
   propertyShape.name = preferredName.value
+  propertyShape.nameLiterals = nameLiterals.length > 0 ? nameLiterals : undefined
+  propertyShape.rdfsLabel = preferredRdfsLabel.value
+  propertyShape.rdfsLabelLiterals = rdfsLabelLiterals.length > 0 ? rdfsLabelLiterals : undefined
   propertyShape.description = preferredDescription.value
+  propertyShape.descriptionLiterals = descriptionLiterals.length > 0 ? descriptionLiterals : undefined
+  propertyShape.allowedValueLabels = extractAllowedValueLabels(propertyShape.allowedValues, store)
   propertyShape.editorType = inferPropertyEditorType(propertyShape)
 
   return propertyShape
+}
+
+function extractAllowedValueLabels(values: string[] | undefined, store: Store): Record<string, RdfLiteralValue[]> | undefined {
+  if (!values?.length) return undefined
+  const labels: Record<string, RdfLiteralValue[]> = {}
+  for (const value of values) {
+    const statements = store.match(store.sym(value), RDFS_LABEL, null, null)
+    const valueLabels = statements
+      .map(statement => statement.object)
+      .filter((object): object is Literal => object.termType === 'Literal')
+      .map(literalValue)
+    if (valueLabels.length > 0) labels[value] = valueLabels
+  }
+  return Object.keys(labels).length > 0 ? labels : undefined
 }
 
 function createPreferredLiteralTracker(): {
@@ -263,4 +314,12 @@ function languagePreferenceScore(literal: Literal): number {
   if (language.startsWith('de-')) return 2
   if (!language) return 1
   return 0
+}
+
+function literalValue(literal: Literal): RdfLiteralValue {
+  return {
+    value: literal.value,
+    lang: literal.lang || undefined,
+    datatype: literal.datatype?.value,
+  }
 }

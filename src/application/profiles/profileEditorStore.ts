@@ -186,6 +186,12 @@ export const useProfileEditorStore = defineStore('profiles', () => {
       context.shape.closed = value === 'closed'
     } else {
       context.shape[field] = normalizeString(value)
+      if (field === 'label') {
+        context.shape.labelLiterals = undefined
+        context.shape.rdfsLabelLiterals = undefined
+      } else if (field === 'description') {
+        context.shape.descriptionLiterals = undefined
+      }
     }
 
     syncSerializedProfiles()
@@ -223,7 +229,18 @@ export const useProfileEditorStore = defineStore('profiles', () => {
         property.allowedValues = normalized
           ? normalized.split(/\r?\n|,/).map(entry => entry.trim()).filter(Boolean)
           : []
+        property.allowedValueLabels = filterAllowedValueLabels(property.allowedValueLabels, property.allowedValues)
         break
+      case 'allowedValueLabels': {
+        const entries = parseAllowedValueLabelEntries(normalized)
+        property.allowedValues = entries.map(entry => entry.value)
+        property.allowedValueLabels = entries.reduce<NonNullable<PropertyShape['allowedValueLabels']>>((labels, entry) => {
+          if (entry.label) labels[entry.value] = [{ value: entry.label, lang: 'en' }]
+          return labels
+        }, {})
+        if (Object.keys(property.allowedValueLabels).length === 0) property.allowedValueLabels = undefined
+        break
+      }
       case 'alternativeTargets':
         property.alternatives = normalized
           ? normalized
@@ -235,6 +252,11 @@ export const useProfileEditorStore = defineStore('profiles', () => {
         break
       default:
         property[field] = normalized as never
+        if (field === 'name') {
+          property.nameLiterals = undefined
+        } else if (field === 'description') {
+          property.descriptionLiterals = undefined
+        }
         break
     }
 
@@ -570,6 +592,7 @@ type EditablePropertyField =
   | 'order'
   | 'defaultValue'
   | 'allowedValues'
+  | 'allowedValueLabels'
   | 'alternativeTargets'
   | 'message'
   | 'severity'
@@ -600,6 +623,35 @@ function normalizePropertyOrder(shape: NodeShape): void {
     .forEach((property, index) => {
       property.order = index
     })
+}
+
+function filterAllowedValueLabels(
+  labels: PropertyShape['allowedValueLabels'],
+  allowedValues: string[] | undefined,
+): PropertyShape['allowedValueLabels'] {
+  if (!labels || !allowedValues) return undefined
+  const next: NonNullable<PropertyShape['allowedValueLabels']> = {}
+  const allowed = new Set(allowedValues)
+  for (const [value, valueLabels] of Object.entries(labels)) {
+    if (allowed.has(value)) next[value] = valueLabels
+  }
+  return Object.keys(next).length > 0 ? next : undefined
+}
+
+function parseAllowedValueLabelEntries(value: string | undefined): Array<{ value: string; label?: string }> {
+  if (!value) return []
+  return value
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => {
+      const [iri, ...labelParts] = line.split('|')
+      return {
+        value: iri?.trim() ?? '',
+        label: labelParts.join('|').trim() || undefined,
+      }
+    })
+    .filter(entry => entry.value)
 }
 
 export type PropertyEditorType = 'datatype' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'list'
