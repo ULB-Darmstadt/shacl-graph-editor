@@ -9,6 +9,7 @@ import {
 } from '@/application/profiles/useCases/importShaclProfiles'
 import { serializeProfileAsTurtle } from '@/infrastructure/shacl/shaclProfileSerializer'
 import { PREFIX_APS } from '@/shared/rdf/rdfConstants'
+import { defaultDatatypeLabel } from '@/application/profiles/profileEditorCatalogs'
 
 /**
  * profileEditorStore
@@ -203,6 +204,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     const property = context.property
 
     const normalized = normalizeString(value)
+    const previousName = property.name?.trim()
     switch (field) {
       case 'path':
         property.path = normalized ? new NamedNode(normalized) : undefined
@@ -241,19 +243,28 @@ export const useProfileEditorStore = defineStore('profiles', () => {
         if (Object.keys(property.allowedValueLabels).length === 0) property.allowedValueLabels = undefined
         break
       }
-      case 'alternativeTargets':
-        property.alternatives = normalized
+      case 'alternativeTargets': {
+        const constraints = normalized
           ? normalized
             .split(/\r?\n|,/)
             .map(entry => entry.trim())
             .filter(Boolean)
             .map(value => ({ node: new NamedNode(value) }))
           : []
+        property.alternatives = constraints
+        property.exclusiveAlternatives = undefined
         break
+      }
       default:
         property[field] = normalized as never
         if (field === 'name') {
           property.nameLiterals = undefined
+          if (
+            property.qualifiedValueShape?.inlineNodeShape
+            && (!property.qualifiedValueShape.label || property.qualifiedValueShape.label === previousName)
+          ) {
+            property.qualifiedValueShape.label = normalized
+          }
         } else if (field === 'description') {
           property.descriptionLiterals = undefined
         }
@@ -279,10 +290,14 @@ export const useProfileEditorStore = defineStore('profiles', () => {
 
     if (target) {
       if (property.editorType === 'qualifiedProfile') {
-        property.qualifiedValueShape = { node: new NamedNode(target) }
+        property.qualifiedValueShape = {
+          ...property.qualifiedValueShape,
+          node: new NamedNode(target),
+        }
         property.node = undefined
       } else if (property.editorType === 'oneOfProfiles') {
         property.alternatives = [{ node: new NamedNode(target) }]
+        property.exclusiveAlternatives = undefined
         property.node = undefined
       } else {
         property.node = new NamedNode(target)
@@ -298,6 +313,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     } else {
       property.node = undefined
       property.alternatives = undefined
+      property.exclusiveAlternatives = undefined
       property.qualifiedValueShape = undefined
       property.qualifiedMinCount = undefined
       property.qualifiedMaxCount = undefined
@@ -309,6 +325,32 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     syncSerializedProfiles()
   }
 
+  function setPropertyInlineNodeShape(shapeIri: string, propertyNodeId: string, enabled: boolean): void {
+    const context = findEditablePropertyContext(shapeIri, propertyNodeId)
+    if (!context || context.property.editorType !== 'qualifiedProfile') return
+
+    const constraint = context.property.qualifiedValueShape ?? {}
+    constraint.inlineNodeShape = enabled || undefined
+    if (enabled) {
+      constraint.label ||= context.property.name?.trim() || 'Unnamed field'
+    } else {
+      constraint.label = undefined
+      constraint.description = undefined
+    }
+    context.property.qualifiedValueShape = constraint
+    syncSerializedProfiles()
+  }
+
+  function setPropertyInlineNodeShapeLabel(shapeIri: string, propertyNodeId: string, label: string | null): void {
+    const context = findEditablePropertyContext(shapeIri, propertyNodeId)
+    if (!context?.property.qualifiedValueShape?.inlineNodeShape) return
+
+    context.property.qualifiedValueShape.label = normalizeString(label)
+      ?? context.property.name?.trim()
+      ?? 'Unnamed field'
+    syncSerializedProfiles()
+  }
+
   function setPropertyAlternativeTargets(shapeIri: string, propertyNodeId: string, targetShapeIris: string[]): void {
     const context = findEditablePropertyContext(shapeIri, propertyNodeId)
     if (!context) return
@@ -316,9 +358,12 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     const normalizedTargets = targetShapeIris
       .map(value => value.trim())
 
-    context.property.alternatives = normalizedTargets.map(value =>
+    const constraints = normalizedTargets.map(value =>
       value ? { node: new NamedNode(value) } : {},
     )
+    context.property.alternatives = constraints
+    context.property.exclusiveAlternatives = undefined
+    context.property.editorType = 'oneOfProfiles'
     context.property.node = undefined
     context.property.datatype = undefined
     context.property.nodeKind = undefined
@@ -327,7 +372,37 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     context.property.qualifiedValueShape = undefined
     context.property.qualifiedMinCount = undefined
     context.property.qualifiedMaxCount = undefined
-    context.property.editorType = 'oneOfProfiles'
+    syncSerializedProfiles()
+  }
+
+  function setPropertyExclusiveDatatypeAlternatives(
+    shapeIri: string,
+    propertyNodeId: string,
+    alternatives: Array<{ datatype: string; label?: string }>,
+  ): void {
+    const context = findEditablePropertyContext(shapeIri, propertyNodeId)
+    if (!context) return
+
+    context.property.datatype = undefined
+    context.property.node = undefined
+    context.property.nodeKind = undefined
+    context.property.cls = undefined
+    context.property.allowedValues = undefined
+    context.property.alternatives = undefined
+    context.property.exclusiveAlternatives = alternatives
+      .map(alternative => ({
+        datatype: alternative.datatype.trim(),
+        label: alternative.label?.trim(),
+      }))
+      .filter(alternative => alternative.datatype)
+      .map(alternative => ({
+        datatype: new NamedNode(alternative.datatype),
+        label: alternative.label || defaultDatatypeLabel(alternative.datatype),
+      }))
+    context.property.qualifiedValueShape = undefined
+    context.property.qualifiedMinCount = undefined
+    context.property.qualifiedMaxCount = undefined
+    context.property.editorType = 'exactlyOneOfDatatypes'
     syncSerializedProfiles()
   }
 
@@ -340,8 +415,16 @@ export const useProfileEditorStore = defineStore('profiles', () => {
 
     const property = context.shape.properties.find(candidate => candidate.nodeId.value === propertyNodeId)
     if (!property) return
+    if (property.editorType === 'class' && targetShapeIri?.trim()) {
+      const targetShape = applicationProfile.value.findNodeShape(targetShapeIri.trim())
+      if (!targetShape?.targetClass) return
+      property.cls = new NamedNode(targetShape.targetClass.value)
+      syncSerializedProfiles()
+      return
+    }
     if (property.editorType === 'oneOfProfiles' && targetShapeIri?.trim()) {
-      const existing = property.alternatives?.map(alternative => alternative.node?.value).filter((value): value is string => Boolean(value)) ?? []
+      const alternatives = property.alternatives
+      const existing = alternatives?.map(alternative => alternative.node?.value).filter((value): value is string => Boolean(value)) ?? []
       if (!existing.includes(targetShapeIri.trim())) {
         setPropertyAlternativeTargets(shapeIri, property.nodeId.value, [...existing, targetShapeIri.trim()])
       }
@@ -361,6 +444,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     property.cls = undefined
     property.allowedValues = undefined
     property.alternatives = undefined
+    property.exclusiveAlternatives = undefined
     property.qualifiedValueShape = undefined
     property.qualifiedMinCount = undefined
     property.qualifiedMaxCount = undefined
@@ -378,6 +462,8 @@ export const useProfileEditorStore = defineStore('profiles', () => {
       property.qualifiedValueShape = {}
     } else if (type === 'oneOfProfiles') {
       property.alternatives = []
+    } else if (type === 'exactlyOneOfDatatypes') {
+      property.exclusiveAlternatives = []
     } else if (type === 'list') {
       property.allowedValues = []
     }
@@ -438,15 +524,13 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     }
 
     if (property.editorType === 'oneOfProfiles') {
-      const remaining = property.alternatives
+      const alternatives = property.alternatives
+      const remaining = alternatives
         ?.map(alternative => alternative.node?.value)
         .filter((value): value is string => Boolean(value) && value !== targetShapeIri) ?? []
 
-      if (remaining.length === 0) {
-        property.alternatives = []
-      } else {
-        property.alternatives = remaining.map(value => ({ node: new NamedNode(value) }))
-      }
+      const constraints = remaining.map(value => ({ node: new NamedNode(value) }))
+      property.alternatives = constraints
       syncSerializedProfiles()
       return
     }
@@ -555,7 +639,10 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     updatePropertyField,
     setShapeInheritance,
     setPropertyNodeTarget,
+    setPropertyInlineNodeShape,
+    setPropertyInlineNodeShapeLabel,
     setPropertyAlternativeTargets,
+    setPropertyExclusiveDatatypeAlternatives,
     connectPropertyToShape,
     setPropertyType,
     removePropertyTarget,
@@ -654,4 +741,4 @@ function parseAllowedValueLabelEntries(value: string | undefined): Array<{ value
     .filter(entry => entry.value)
 }
 
-export type PropertyEditorType = 'datatype' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'list'
+export type PropertyEditorType = 'datatype' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'exactlyOneOfDatatypes' | 'list'

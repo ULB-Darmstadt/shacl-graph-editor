@@ -19,13 +19,18 @@ const error = ref<string | null>(null)
 const filteredProfiles = computed(() => {
   const needle = search.value.trim().toLowerCase()
   if (!needle) return profiles.value
-  return profiles.value.filter(profile => {
-    const haystack = [profile.name, profile.description, profile.creator]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase()
-    return haystack.includes(needle)
-  })
+
+  const titleMatches: AimsProfile[] = []
+  const descriptionMatches: AimsProfile[] = []
+  for (const profile of profiles.value) {
+    if (profile.name.toLowerCase().includes(needle)) {
+      titleMatches.push(profile)
+    } else if (profile.description?.toLowerCase().includes(needle)) {
+      descriptionMatches.push(profile)
+    }
+  }
+
+  return [...titleMatches, ...descriptionMatches]
 })
 
 async function loadProfiles(): Promise<void> {

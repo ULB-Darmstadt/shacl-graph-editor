@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useConfirm } from 'primevue/useconfirm'
 import {
   buildProfileLicenseOptions,
+  defaultDatatypeLabel,
   fetchSubjectHeadingOptions,
   PROPERTY_TERM_OPTIONS,
   PROPERTY_TYPE_OPTIONS,
@@ -32,6 +33,10 @@ type InspectorTab = 'basic' | 'advanced'
 type AllowedValueRow = {
   label: string
   iri: string
+}
+type DatatypeAlternativeRow = {
+  datatype: string
+  label: string
 }
 type EditableShapeField =
   | 'label'
@@ -84,7 +89,10 @@ const props = defineProps<{
   updatePropertyField: (shapeIri: string, propertyNodeId: string, field: EditablePropertyField, value: string | null) => void
   setShapeInheritance: (shapeIri: string, inheritedShapeIri: string | null) => void
   setPropertyNodeTarget: (shapeIri: string, propertyNodeId: string, targetShapeIri: string | null) => void
+  setPropertyInlineNodeShape: (shapeIri: string, propertyNodeId: string, enabled: boolean) => void
+  setPropertyInlineNodeShapeLabel: (shapeIri: string, propertyNodeId: string, label: string | null) => void
   setPropertyAlternativeTargets: (shapeIri: string, propertyNodeId: string, targetShapeIris: string[]) => void
+  setPropertyExclusiveDatatypeAlternatives: (shapeIri: string, propertyNodeId: string, alternatives: DatatypeAlternativeRow[]) => void
   setPropertyType: (shapeIri: string, propertyNodeId: string, type: PropertyEditorType) => void
   deleteShape: (shapeIri: string) => { ok: boolean; reason?: string }
   deleteProperty: (shapeIri: string, propertyNodeId: string) => boolean
@@ -105,6 +113,7 @@ const inspectorTitle = computed(() => {
 const profileIdentifier = computed(() => props.profile?.iri ?? props.shape?.sourceProfileIri ?? props.shape?.nodeId.value ?? null)
 const propertyDatatype = computed(() => props.property ? propertyDatatypeTargets(props.property)[0]?.value ?? null : null)
 const propertyNodeTarget = computed(() => props.property ? propertyNodeTargets(props.property)[0]?.value ?? null : null)
+const propertyUsesInlineNodeShape = computed(() => Boolean(props.property?.qualifiedValueShape?.inlineNodeShape))
 const propertyRelations = computed(() => props.property ? propertyRelationshipKinds(props.property) : [])
 const propertyConstraintText = computed(() => props.property ? propertyConstraintSummary(props.property) ?? null : null)
 const propertyAllowedValueRows = computed<AllowedValueRow[]>(() => {
@@ -135,6 +144,18 @@ const propertyAlternativeTargetInputs = computed(() => {
   const targets = propertyAlternativeTargets.value.filter(Boolean)
   return [...targets, '']
 })
+const propertyDatatypeAlternatives = computed<DatatypeAlternativeRow[]>(() =>
+  props.property?.exclusiveAlternatives
+    ?.filter(alternative => alternative.datatype)
+    .map(alternative => ({
+      datatype: alternative.datatype?.value ?? '',
+      label: alternative.label ?? '',
+    })) ?? [],
+)
+const propertyDatatypeAlternativeInputs = computed<DatatypeAlternativeRow[]>(() => [
+  ...propertyDatatypeAlternatives.value,
+  { datatype: '', label: '' },
+])
 const propertyTypeValue = computed<PropertyEditorType>(() =>
   props.property ? (props.property.editorType ?? inferPropertyEditorType(props.property)) as PropertyEditorType : 'datatype',
 )
@@ -207,6 +228,10 @@ const missingAlternativeTargets = computed(() =>
   propertyTypeValue.value === 'oneOfProfiles'
   && propertyAlternativeTargets.value.filter(Boolean).length <= 1,
 )
+const missingDatatypeAlternatives = computed(() =>
+  propertyTypeValue.value === 'exactlyOneOfDatatypes'
+  && propertyDatatypeAlternatives.value.length <= 1,
+)
 const isDraftProperty = computed(() => Boolean(props.property && props.property.nodeId.value === props.draftPropertyNodeId))
 
 onMounted(async () => {
@@ -237,6 +262,20 @@ function onNodeTargetChange(value: string): void {
   props.setPropertyNodeTarget(props.shape.nodeId.value, props.property.nodeId.value, value || null)
 }
 
+function onInlineNodeShapeToggle(): void {
+  if (!props.shape || !props.property) return
+  props.setPropertyInlineNodeShape(
+    props.shape.nodeId.value,
+    props.property.nodeId.value,
+    !propertyUsesInlineNodeShape.value,
+  )
+}
+
+function onInlineNodeShapeLabelChange(value: string): void {
+  if (!props.shape || !props.property) return
+  props.setPropertyInlineNodeShapeLabel(props.shape.nodeId.value, props.property.nodeId.value, value || null)
+}
+
 function onAlternativeTargetChange(index: number, value: string): void {
   if (!props.shape || !props.property) return
   const next = [...propertyAlternativeTargetInputs.value]
@@ -252,6 +291,24 @@ function removeAlternativeTarget(index: number): void {
   if (!props.shape || !props.property) return
   const next = propertyAlternativeTargets.value.filter((_, currentIndex) => currentIndex !== index)
   props.setPropertyAlternativeTargets(props.shape.nodeId.value, props.property.nodeId.value, next)
+}
+
+function onDatatypeAlternativeChange(index: number, field: keyof DatatypeAlternativeRow, value: string): void {
+  if (!props.shape || !props.property) return
+  const next = propertyDatatypeAlternativeInputs.value.map(row => ({ ...row }))
+  next[index] = { ...next[index], [field]: value }
+  if (field === 'datatype') next[index].label = defaultDatatypeLabel(value)
+  props.setPropertyExclusiveDatatypeAlternatives(
+    props.shape.nodeId.value,
+    props.property.nodeId.value,
+    next.filter(row => row.datatype),
+  )
+}
+
+function removeDatatypeAlternative(index: number): void {
+  if (!props.shape || !props.property) return
+  const next = propertyDatatypeAlternatives.value.filter((_, currentIndex) => currentIndex !== index)
+  props.setPropertyExclusiveDatatypeAlternatives(props.shape.nodeId.value, props.property.nodeId.value, next)
 }
 
 function onPropertyTypeChange(value: string): void {
@@ -494,9 +551,33 @@ function requestDeleteProperty(): void {
                 label="Class"
                 :value="property.cls?.value ?? null"
                 placeholder="https://...class"
-                helper-text="Serialized as sh:class without creating a graph link."
                 @update:value="updateProperty('cls', $event)"
               />
+              <div v-else-if="propertyTypeValue === 'exactlyOneOfDatatypes'" class="alternative-targets" :class="{ 'is-invalid': missingDatatypeAlternatives }">
+                <span class="editable-field__label ui-sidepanel-field-label">Exclusive Datatype Alternatives</span>
+                <span class="alternative-targets__helper" :class="{ 'is-invalid': missingDatatypeAlternatives }">
+                  {{ missingDatatypeAlternatives ? 'At least two datatype alternatives are required.' : 'Serialized as sh:xone.' }}
+                </span>
+                <div v-for="(alternative, index) in propertyDatatypeAlternativeInputs" :key="`${property.nodeId.value}:datatype-alt:${index}`" class="datatype-alternative-row">
+                  <InspectorEditableField
+                    :label="`Datatype ${index + 1}`"
+                    :value="alternative.datatype || null"
+                    placeholder=""
+                    :options="SHACL_DATATYPE_OPTIONS"
+                    @update:value="onDatatypeAlternativeChange(index, 'datatype', $event)"
+                  />
+                  <InspectorEditableField
+                    v-if="alternative.datatype"
+                    :label="`Label ${index + 1}`"
+                    :value="alternative.label || null"
+                    placeholder="Optional label"
+                    @update:value="onDatatypeAlternativeChange(index, 'label', $event)"
+                  />
+                  <button v-if="alternative.datatype" type="button" class="alternative-target-remove" :disabled="readOnly" title="Remove datatype alternative" @click="removeDatatypeAlternative(index)">
+                    <i class="pi pi-times" />
+                  </button>
+                </div>
+              </div>
               <InspectorEditableField
                 v-else-if="propertyTypeValue === 'profile' || propertyTypeValue === 'qualifiedProfile'"
                 label="Node Target"
@@ -511,6 +592,30 @@ function requestDeleteProperty(): void {
                   : null"
                 @update:value="onNodeTargetChange"
               />
+              <template v-if="propertyTypeValue === 'qualifiedProfile'">
+                <label class="toggle-field">
+                  <span class="editable-field__label ui-sidepanel-field-label">Blank node</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    class="toggle-field__button"
+                    :disabled="readOnly"
+                    :class="{ 'is-on': propertyUsesInlineNodeShape }"
+                    :aria-checked="propertyUsesInlineNodeShape"
+                    aria-label="Use blank node shape"
+                    @click="onInlineNodeShapeToggle"
+                  >
+                    <span class="toggle-field__thumb" />
+                  </button>
+                </label>
+                <InspectorEditableField
+                  v-if="propertyUsesInlineNodeShape"
+                  label="Shape Label"
+                  :value="property.qualifiedValueShape?.label ?? property.name ?? null"
+                  placeholder="Shape label"
+                  @update:value="onInlineNodeShapeLabelChange"
+                />
+              </template>
               <div v-else-if="propertyTypeValue === 'list'" class="allowed-values-sidebar" :class="{ 'is-invalid': missingAllowedValues }">
                 <span class="editable-field__label ui-sidepanel-field-label">Allowed Values</span>
                 <div v-if="propertyAllowedValueDisplayItems.length > 0" class="allowed-values-sidebar__items">
@@ -534,7 +639,9 @@ function requestDeleteProperty(): void {
               <div v-else-if="propertyTypeValue === 'oneOfProfiles'" class="alternative-targets" :class="{ 'is-invalid': missingAlternativeTargets }">
                 <span class="editable-field__label ui-sidepanel-field-label">Alternative Profile Targets</span>
                 <span class="alternative-targets__helper" :class="{ 'is-invalid': missingAlternativeTargets }">
-                  {{ missingAlternativeTargets ? 'At least two profile targets are required.' : 'Serialized as `sh:or` with one profile dropdown per alternative.' }}
+                  {{ missingAlternativeTargets
+                    ? 'At least two profile targets are required.'
+                    : 'Serialized as sh:or with one profile dropdown per alternative.' }}
                 </span>
                 <div v-for="(targetValue, index) in propertyAlternativeTargetInputs" :key="`${property.nodeId.value}:alt:${index}`" class="alternative-target-row">
                   <InspectorEditableField
@@ -978,6 +1085,13 @@ function requestDeleteProperty(): void {
 .alternative-target-row {
   display: grid;
   grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.datatype-alternative-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 10px;
   align-items: end;
 }

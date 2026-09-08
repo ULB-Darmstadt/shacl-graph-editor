@@ -21,6 +21,7 @@ export interface ShapeEditorNodeData {
   onShapeHeaderContextMenu?: (shape: NodeShape, event: MouseEvent, options?: { allowDelete?: boolean }) => void
   onMoveProperty?: (sourceShapeIri: string, propertyNodeId: string, targetShapeIri: string, targetIndex?: number) => boolean
   selected?: boolean
+  highlighted?: boolean
   selectedShapeIri?: string | null
   selectedPropertyKey?: string | null
   draftPropertyNodeId?: string | null
@@ -31,6 +32,8 @@ export interface ShapeEditorNodeData {
     shapeSeverity?: 'urgent' | 'warning' | null
     propertySeverities?: Record<string, 'urgent' | 'warning'>
   }>
+  showClassRelations?: boolean
+  showBlankNodeRelations?: boolean
 }
 
 export interface InheritedPropertyGroup {
@@ -47,7 +50,12 @@ interface VisibleShapeNodeDescriptor {
   representedShapeIri: string
 }
 
-export function collectReachableShapeIris(rootShapes: NodeShape[], allShapes: NodeShape[]): string[] {
+export function collectReachableShapeIris(
+  rootShapes: NodeShape[],
+  allShapes: NodeShape[],
+  includeClassRelations = false,
+  includeBlankNodeRelations = false,
+): string[] {
   const allShapesByIri = new Map(allShapes.map(shape => [shape.nodeId.value, shape]))
   const queue = rootShapes.map(shape => shape.nodeId.value)
   const visited = new Set<string>()
@@ -64,7 +72,7 @@ export function collectReachableShapeIris(rootShapes: NodeShape[], allShapes: No
     if (!shape) continue
 
     for (const property of shape.properties) {
-      for (const targetIri of propertyGraphTargetIris(property, allShapes)) {
+      for (const targetIri of propertyGraphTargetIris(property, allShapes, includeClassRelations, includeBlankNodeRelations)) {
         if (visited.has(targetIri)) continue
         if (!allShapesByIri.has(targetIri)) continue
         queue.push(targetIri)
@@ -97,8 +105,10 @@ export function collectVisibleShapeNodeDescriptors(
   rootShapes: NodeShape[],
   allShapes: NodeShape[],
   _expandedShapeNodeIds: Set<string>,
+  includeClassRelations = false,
+  includeBlankNodeRelations = false,
 ): VisibleShapeNodeDescriptor[] {
-  const reachableShapeIris = collectReachableShapeIris(rootShapes, allShapes)
+  const reachableShapeIris = collectReachableShapeIris(rootShapes, allShapes, includeClassRelations, includeBlankNodeRelations)
   const rootShapeIris = new Set(rootShapes.map(shape => shape.nodeId.value))
   const allShapesByIri = new Map(allShapes.map(shape => [shape.nodeId.value, shape]))
 
@@ -144,14 +154,28 @@ export function buildOwnProperties(shape: NodeShape, _allShapes: NodeShape[]): P
   return shape.properties.filter(property => !property.inherited)
 }
 
-export function propertyGraphTargetIris(property: PropertyShape, allShapes: NodeShape[]): string[] {
+export function propertyClassTargetIris(property: PropertyShape, allShapes: NodeShape[]): string[] {
+  if (!property.cls?.value) return []
+
+  const matchingShapes = allShapes.filter(shape => shape.targetClass?.value === property.cls?.value)
+  return matchingShapes.length === 1 ? [matchingShapes[0].nodeId.value] : []
+}
+
+export function propertyGraphTargetIris(
+  property: PropertyShape,
+  allShapes: NodeShape[],
+  includeClassRelations = false,
+  includeBlankNodeRelations = false,
+): string[] {
   const targets = new Set(propertyNodeTargets(property).map(target => target.value))
 
-  if (property.cls?.value) {
-    const matchingShapes = allShapes.filter(shape => shape.targetClass?.value === property.cls?.value)
-    if (matchingShapes.length === 1) {
-      targets.add(matchingShapes[0].nodeId.value)
-    }
+  if (property.qualifiedValueShape?.inlineNodeShape && !includeBlankNodeRelations) {
+    const qualifiedTarget = property.qualifiedValueShape.node?.value
+    if (qualifiedTarget && property.node?.value !== qualifiedTarget) targets.delete(qualifiedTarget)
+  }
+
+  if (includeClassRelations) {
+    for (const targetIri of propertyClassTargetIris(property, allShapes)) targets.add(targetIri)
   }
 
   return [...targets]

@@ -220,6 +220,9 @@ function determineProfileImports(profile: ShaclProfile, shapeToProfile: Map<stri
       const owner = property.node?.value ? shapeToProfile.get(property.node.value) : undefined
       if (owner && owner !== profile.iri) imports.add(owner)
 
+      const classOwner = property.cls?.value ? shapeToProfile.get(property.cls.value) : undefined
+      if (classOwner && classOwner !== profile.iri) imports.add(classOwner)
+
       const qualifiedOwner = property.qualifiedValueShape?.node?.value
         ? shapeToProfile.get(property.qualifiedValueShape.node.value)
         : undefined
@@ -229,6 +232,7 @@ function determineProfileImports(profile: ShaclProfile, shapeToProfile: Map<stri
         const alternativeOwner = alternative.node?.value ? shapeToProfile.get(alternative.node.value) : undefined
         if (alternativeOwner && alternativeOwner !== profile.iri) imports.add(alternativeOwner)
       }
+
     }
   }
 
@@ -237,10 +241,19 @@ function determineProfileImports(profile: ShaclProfile, shapeToProfile: Map<stri
 
 function buildShapeToProfileMap(profiles: readonly ShaclProfile[]): Map<string, string> {
   const map = new Map<string, string>()
+  const classOwners = new Map<string, Set<string>>()
   for (const profile of profiles) {
     for (const shape of profile.nodeShapes) {
       map.set(shape.nodeId.value, profile.iri)
+      if (shape.targetClass?.value) {
+        const owners = classOwners.get(shape.targetClass.value) ?? new Set<string>()
+        owners.add(profile.iri)
+        classOwners.set(shape.targetClass.value, owners)
+      }
     }
+  }
+  for (const [classIri, owners] of classOwners) {
+    if (owners.size === 1) map.set(classIri, [...owners][0])
   }
   return map
 }
@@ -297,11 +310,13 @@ function pushConstraintListStatement(
   statements: string[],
   predicate: string,
   constraints: Array<{
-    node?: { value: string }
+    inlineNodeShape?: boolean
+    node?: { value: string; termType?: string }
     datatype?: { value: string }
     nodeKind?: { value: string }
     cls?: { value: string }
     label?: string
+    labelLiterals?: RdfLiteralValue[]
     description?: string
     pattern?: string
   }> | undefined,
@@ -318,11 +333,13 @@ function pushConstraintStatement(
   statements: string[],
   predicate: string,
   constraint: {
-    node?: { value: string }
+    inlineNodeShape?: boolean
+    node?: { value: string; termType?: string }
     datatype?: { value: string }
     nodeKind?: { value: string }
     cls?: { value: string }
     label?: string
+    labelLiterals?: RdfLiteralValue[]
     description?: string
     pattern?: string
   } | undefined,
@@ -334,20 +351,31 @@ function pushConstraintStatement(
 }
 
 function serializeConstraintNode(constraint: {
-  node?: { value: string }
+  inlineNodeShape?: boolean
+  node?: { value: string; termType?: string }
   datatype?: { value: string }
   nodeKind?: { value: string }
   cls?: { value: string }
   label?: string
+  labelLiterals?: RdfLiteralValue[]
   description?: string
   pattern?: string
 }): string {
+  if (constraint.node?.termType === 'BlankNode') return term(constraint.node.value)
+  if (constraint.node && !constraint.inlineNodeShape) return term(constraint.node.value)
+
   const fragments: string[] = []
+  if (constraint.inlineNodeShape) fragments.push('a sh:NodeShape')
   pushNamedNodeStatement(fragments, 'sh:node', constraint.node?.value)
   pushNamedNodeStatement(fragments, 'sh:datatype', constraint.datatype?.value)
   pushNamedNodeStatement(fragments, 'sh:nodeKind', constraint.nodeKind?.value)
   pushNamedNodeStatement(fragments, 'sh:class', constraint.cls?.value)
-  pushLiteralStatement(fragments, 'rdfs:label', constraint.label)
+  pushLiteralStatements(
+    fragments,
+    constraint.inlineNodeShape ? 'dcterms:title' : 'rdfs:label',
+    constraint.labelLiterals,
+    constraint.label,
+  )
   pushLiteralStatement(fragments, 'sh:description', constraint.description)
   pushLiteralStatement(fragments, 'sh:pattern', constraint.pattern)
   if (fragments.length === 0) return ''

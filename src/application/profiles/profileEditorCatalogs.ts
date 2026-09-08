@@ -60,8 +60,9 @@ export function buildProfileLicenseOptions(currentLicense: string | null | undef
 
 export const PROPERTY_TYPE_OPTIONS: SelectOption[] = [
   { label: 'Datatype (sh:datatype)', value: 'datatype' },
+  { label: 'Exactly One Datatype (sh:xone)', value: 'exactlyOneOfDatatypes' },
   { label: 'Node Kind (sh:nodeKind)', value: 'nodeKind' },
-  { label: 'Class (sh:class)', value: 'class', disabled: true },
+  { label: 'Class (sh:class)', value: 'class' },
   { label: 'Satisfies Profile (sh:node)', value: 'profile' },
   { label: 'Satisfies Profile (m-n times) (sh:qualifiedValueShape)', value: 'qualifiedProfile' },
   { label: 'Satisfies One Of Profiles (sh:or)', value: 'oneOfProfiles' },
@@ -75,9 +76,16 @@ export const SHACL_DATATYPE_OPTIONS: SelectOption[] = [
   { label: 'xsd:date', value: 'http://www.w3.org/2001/XMLSchema#date' },
   { label: 'xsd:dateTime', value: 'http://www.w3.org/2001/XMLSchema#dateTime' },
   { label: 'xsd:decimal', value: 'http://www.w3.org/2001/XMLSchema#decimal' },
+  { label: 'xsd:double', value: 'http://www.w3.org/2001/XMLSchema#double' },
+  { label: 'xsd:float', value: 'http://www.w3.org/2001/XMLSchema#float' },
   { label: 'xsd:integer', value: 'http://www.w3.org/2001/XMLSchema#integer' },
   { label: 'xsd:anyURI', value: 'http://www.w3.org/2001/XMLSchema#anyURI' },
 ]
+
+export function defaultDatatypeLabel(datatypeIri: string): string {
+  const localName = datatypeIri.split(/[/#]/).filter(Boolean).pop() ?? datatypeIri
+  return localName ? `${localName.charAt(0).toUpperCase()}${localName.slice(1)}` : ''
+}
 
 export const SHACL_NODE_KIND_OPTIONS: SelectOption[] = [
   { label: 'IRI', value: 'http://www.w3.org/ns/shacl#IRI' },

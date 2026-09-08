@@ -16,7 +16,7 @@ import { useEditorSelection } from '@/presentation/features/editor/useEditorSele
 import EditorDialogs from '@/presentation/features/editor/EditorDialogs.vue'
 import EditorInspector from '@/presentation/features/editor/components/inspector/EditorInspector.vue'
 import { useProfileWorkflowMenu } from '@/presentation/features/profile-workflow/useProfileWorkflowMenu'
-import { buildEditorShapeNodeId, parseEditorShapeNodeTarget } from '@/presentation/features/editor/inheritanceEditorGraph'
+import { buildEditorShapeNodeId, collectReachableShapeIris, parseEditorShapeNodeTarget } from '@/presentation/features/editor/inheritanceEditorGraph'
 import type { EditorShapeReviewAnnotation } from '@/presentation/features/editor/editorGraphBuilders'
 import { estimateEditorShapeHeight } from '@/presentation/features/editor/layoutEditorGraph'
 import { buildEditorReviewItems, type EditorReviewItem, type EditorReviewSeverity } from '@/presentation/features/editor/editorReview'
@@ -26,6 +26,7 @@ import { useConfirm } from 'primevue/useconfirm'
 import { PROFILE_LICENSE_OPTIONS, fetchSubjectHeadingOptions, type SelectOption } from '@/application/profiles/profileEditorCatalogs'
 import { inferPropertyEditorType, propertyNodeTargets } from '@/domain/profiles'
 import type { PropertyEditorType } from '@/application/profiles/profileEditorStore'
+import { loadAimsProfiles } from '@/infrastructure/external/aimsProfileService'
 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -45,6 +46,7 @@ const editorMode = ref<EditorMode>('edit')
 const readOnlyMode = computed(() => editorMode.value === 'view')
 const reviewMode = computed(() => editorMode.value === 'review')
 const draftPropertyNodeId = ref<string | null>(null)
+const profileSearchHoveredShapeIri = ref<string | null>(null)
 const pendingPlacementAnchor = ref<XYPosition | null>(null)
 const pendingPlacementOffset = ref(0)
 const pendingProfilePlacement = ref(false)
@@ -82,6 +84,8 @@ const {
 
 function resetEditorUiState(): void {
   closeImportDialog()
+  profileSearchDialogOpen.value = false
+  profileSearchHoveredShapeIri.value = null
   shapePreviewOpen.value = false
   relationChoiceDialogOpen.value = false
   pendingConnection.value = null
@@ -114,7 +118,17 @@ const {
   resetUiState: resetEditorUiState,
 })
 
-const reviewItems = computed(() => buildEditorReviewItems(nodeShapes.value))
+const showClassRelations = ref(localStorage.getItem('editor.showClassRelations') === 'true')
+const showBlankNodeRelations = ref(localStorage.getItem('editor.showBlankNodeRelations') === 'true')
+const reviewItems = computed(() => {
+  const visibleShapeIris = new Set(collectReachableShapeIris(
+    rootNodeShapes.value,
+    nodeShapes.value,
+    showClassRelations.value,
+    showBlankNodeRelations.value,
+  ))
+  return buildEditorReviewItems(nodeShapes.value.filter(shape => visibleShapeIris.has(shape.nodeId.value)))
+})
 const reviewAnnotations = computed(() => {
   const annotations = new Map<string, EditorShapeReviewAnnotation>()
 
@@ -143,6 +157,8 @@ const { nodes, edges, nodeTypes, edgeTypes } = useEditorGraph({
   },
   readOnlyMode,
   reviewMode,
+  showClassRelations,
+  showBlankNodeRelations,
   reviewAnnotations,
   openShapePreview,
   addField: createProperty,
@@ -153,6 +169,7 @@ const { nodes, edges, nodeTypes, edgeTypes } = useEditorGraph({
   removeReferenceEdge: requestRemoveReferenceEdge,
   requestedNodePositions,
   selectedShapeIri,
+  highlightedShapeIri: profileSearchHoveredShapeIri,
   selectedPropertyKey,
   draftPropertyNodeId,
   selectShape,
@@ -190,7 +207,14 @@ type CanvasNodePosition = {
   }
 }
 
+type CanvasProfileSearchItem = {
+  shapeIri: string
+  label: string
+  description: string | null
+}
+
 type ReviewSeverityFilter = 'all' | 'urgent' | 'warning'
+type EditorSettingsTab = 'defaults' | 'shacl-classes'
 
 const pendingConnection = ref<EditableConnection | null>(null)
 const selectedConnection = ref<EditableConnection | null>(null)
@@ -202,9 +226,12 @@ const settingsFabRef = ref<HTMLElement | null>(null)
 const actionOverlayRef = ref<HTMLElement | null>(null)
 const actionOverlayWidth = ref(0)
 const settingsOpen = ref(false)
+const editorSettingsTab = ref<EditorSettingsTab>('defaults')
 const reviewDialogOpen = ref(false)
 const reviewSeverityFilter = ref<ReviewSeverityFilter>('all')
 const reviewSearch = ref('')
+const profileSearchDialogOpen = ref(false)
+const profileSearch = ref('')
 const subjectHeadingOptions = ref<SelectOption[]>([])
 const defaultCreator = ref(localStorage.getItem('editor.defaultCreator') ?? '')
 const defaultCreated = ref(localStorage.getItem('editor.defaultCreated') ?? '')
@@ -292,6 +319,41 @@ const filteredReviewItems = computed(() => {
 })
 const filteredUrgentReviewItems = computed(() => filteredReviewItems.value.filter(item => item.severity === 'urgent'))
 const filteredWarningReviewItems = computed(() => filteredReviewItems.value.filter(item => item.severity === 'warning'))
+const canvasProfileSearchItems = computed<CanvasProfileSearchItem[]>(() => {
+  const visibleShapeIris = new Set<string>()
+
+  for (const node of nodes.value) {
+    const target = parseEditorShapeNodeTarget(node.id)
+    if (target?.representedShapeIri) visibleShapeIris.add(target.representedShapeIri)
+  }
+
+  return Array.from(visibleShapeIris)
+    .map((shapeIri) => {
+      const shape = profileStore.applicationProfile.findNodeShape(shapeIri)
+      if (!shape) return null
+      return {
+        shapeIri,
+        label: shape.label?.trim() || 'Unnamed profile',
+        description: shape.description?.trim().split(/\r?\n/, 1)[0]?.trim() || null,
+      }
+    })
+    .filter((item): item is CanvasProfileSearchItem => item !== null)
+    .sort((left, right) => left.label.localeCompare(right.label))
+})
+const filteredCanvasProfileSearchItems = computed(() => {
+  const needle = profileSearch.value.trim().toLocaleLowerCase()
+  if (!needle) return canvasProfileSearchItems.value
+
+  return canvasProfileSearchItems.value.filter(item => [
+    item.label,
+    item.description,
+    item.shapeIri,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLocaleLowerCase()
+    .includes(needle))
+})
 
 const isPlacementHintVisible = computed(() => pendingProfilePlacement.value && placementPreviewClientPosition.value !== null)
 const placementHintStyle = computed(() => {
@@ -408,6 +470,8 @@ function closeActionMenus(): void {
 }
 
 function closeActionOverlay(): void {
+  profileSearchHoveredShapeIri.value = null
+  profileSearchDialogOpen.value = false
   reviewDialogOpen.value = false
   closeImportDialog()
 }
@@ -417,6 +481,8 @@ function updateActionOverlayMetrics(): void {
 }
 
 function openImportOverlay(importerId: string): void {
+  profileSearchHoveredShapeIri.value = null
+  profileSearchDialogOpen.value = false
   reviewDialogOpen.value = false
   updateActionOverlayMetrics()
   openImportDialog(importerId)
@@ -430,6 +496,7 @@ function handleGlobalPointerDown(event: PointerEvent): void {
     && !addProfileMenuOpen.value
     && !settingsMenuOpen.value
     && !reviewDialogOpen.value
+    && !profileSearchDialogOpen.value
     && !activeImportDialogVisible.value
   ) return
   const target = event.target as Node | null
@@ -524,6 +591,16 @@ function openDefaultSettings(): void {
   closeActionMenus()
   closeActionOverlay()
   settingsOpen.value = true
+}
+
+function toggleClassRelations(): void {
+  showClassRelations.value = !showClassRelations.value
+  localStorage.setItem('editor.showClassRelations', String(showClassRelations.value))
+}
+
+function toggleBlankNodeRelations(): void {
+  showBlankNodeRelations.value = !showBlankNodeRelations.value
+  localStorage.setItem('editor.showBlankNodeRelations', String(showBlankNodeRelations.value))
 }
 
 function handleShapeHeaderDeleteProfile(): void {
@@ -813,6 +890,8 @@ function propertyForConnection(connection: EditableConnection): (typeof nodeShap
 }
 
 function openReviewDialog(): void {
+  profileSearchHoveredShapeIri.value = null
+  profileSearchDialogOpen.value = false
   closeImportDialog()
   closeCanvasMenu()
   closeShapeHeaderMenu()
@@ -820,6 +899,40 @@ function openReviewDialog(): void {
   updateActionOverlayMetrics()
   reviewDialogOpen.value = true
   void nextTick(updateActionOverlayMetrics)
+}
+
+function openProfileSearchDialog(): void {
+  closeImportDialog()
+  closeCanvasMenu()
+  closeShapeHeaderMenu()
+  closeActionMenus()
+  reviewDialogOpen.value = false
+  profileSearch.value = ''
+  profileSearchHoveredShapeIri.value = null
+  updateActionOverlayMetrics()
+  profileSearchDialogOpen.value = true
+  void nextTick(updateActionOverlayMetrics)
+}
+
+function highlightProfileSearchItem(item: CanvasProfileSearchItem): void {
+  profileSearchHoveredShapeIri.value = item.shapeIri
+}
+
+function clearProfileSearchHighlight(item: CanvasProfileSearchItem): void {
+  if (profileSearchHoveredShapeIri.value !== item.shapeIri) return
+  profileSearchHoveredShapeIri.value = null
+}
+
+async function jumpToProfileSearchItem(item: CanvasProfileSearchItem): Promise<void> {
+  const shape = profileStore.applicationProfile.findNodeShape(item.shapeIri)
+  if (!shape) return
+
+  profileSearchHoveredShapeIri.value = null
+  selectShape(shape)
+  profileSearchDialogOpen.value = false
+  await nextTick()
+  await waitForAnimationFrame()
+  await centerShapeInCanvas(item.shapeIri)
 }
 
 async function jumpToReviewItem(item: EditorReviewItem): Promise<void> {
@@ -1056,6 +1169,7 @@ watch(fitViewRequestTick, (tick) => {
 })
 
 onMounted(() => {
+  void loadAimsProfiles().catch(() => undefined)
   window.addEventListener('pointerdown', handleGlobalPointerDown)
   window.addEventListener('keydown', handleGlobalKeyDown)
   window.addEventListener('resize', updateActionOverlayMetrics)
@@ -1151,7 +1265,7 @@ void fetchSubjectHeadingOptions().then(options => {
           </button>
           <button type="button" class="canvas-menu__item" @click="handleCanvasExistingProfile">
             <i class="pi pi-search canvas-menu__icon" />
-            <span class="canvas-menu__label">Search profiles</span>
+            <span class="canvas-menu__label">Load existing profiles</span>
           </button>
           <button type="button" class="canvas-menu__item" @click="handleCanvasUploadProfiles">
             <i class="pi pi-upload canvas-menu__icon" />
@@ -1224,7 +1338,7 @@ void fetchSubjectHeadingOptions().then(options => {
             </button>
             <button type="button" class="add-profile-menu__item" @click="handleCanvasExistingProfile">
               <i class="pi pi-search" />
-              <span>Search existing profiles</span>
+              <span>Load existing profiles</span>
             </button>
             <button type="button" class="add-profile-menu__item" @click="handleCanvasUploadProfiles">
               <i class="pi pi-upload" />
@@ -1240,6 +1354,10 @@ void fetchSubjectHeadingOptions().then(options => {
           <i class="pi pi-verified action-tile__icon" />
           <span class="action-tile__label">Review</span>
           <span v-if="reviewItems.length > 0" class="review-count" :class="{ 'has-urgent': urgentReviewItems.length > 0 }">{{ reviewItems.length }}</span>
+        </button>
+        <button type="button" class="action-tile" :disabled="nodes.length === 0" @click="openProfileSearchDialog">
+          <i class="pi pi-search action-tile__icon" />
+          <span class="action-tile__label">Search</span>
         </button>
         <div class="action-menu-divider" aria-hidden="true" />
         <div class="mode-segment" aria-label="Editor mode">
@@ -1258,7 +1376,7 @@ void fetchSubjectHeadingOptions().then(options => {
       </div>
 
       <div
-        v-if="reviewDialogOpen || activeImportDialogVisible"
+        v-if="profileSearchDialogOpen || reviewDialogOpen || activeImportDialogVisible"
         ref="actionOverlayRef"
         class="action-menu-overlay"
         :style="actionOverlayStyle"
@@ -1271,6 +1389,47 @@ void fetchSubjectHeadingOptions().then(options => {
           class="action-menu-overlay__body"
           @added="closeImportDialog"
         />
+
+        <div v-else-if="profileSearchDialogOpen" class="review-overlay">
+          <div class="review-overlay__search">
+            <input
+              v-model="profileSearch"
+              class="review-search-input"
+              type="search"
+              placeholder="Search profiles on canvas"
+              aria-label="Search profiles on canvas"
+              autofocus
+            />
+          </div>
+
+          <div v-if="canvasProfileSearchItems.length === 0" class="review-empty">
+            No profiles on the canvas.
+          </div>
+
+          <div v-else-if="filteredCanvasProfileSearchItems.length === 0" class="review-empty">
+            No profiles match your search.
+          </div>
+
+          <div v-else class="review-list" aria-label="Profiles on canvas">
+            <button
+              v-for="item in filteredCanvasProfileSearchItems"
+              :key="item.shapeIri"
+              type="button"
+              class="review-item profile-search-item"
+              @mouseenter="highlightProfileSearchItem(item)"
+              @mouseleave="clearProfileSearchHighlight(item)"
+              @focus="highlightProfileSearchItem(item)"
+              @blur="clearProfileSearchHighlight(item)"
+              @click="jumpToProfileSearchItem(item)"
+            >
+              <span class="review-item__body">
+                <strong class="review-item__title">{{ item.label }}</strong>
+                <span v-if="item.description" class="profile-search-item__description">{{ item.description }}</span>
+              </span>
+              <i class="pi pi-crosshairs review-item__icon" />
+            </button>
+          </div>
+        </div>
 
         <div v-else-if="reviewDialogOpen" class="review-overlay">
           <div class="review-overlay__search">
@@ -1383,7 +1542,10 @@ void fetchSubjectHeadingOptions().then(options => {
           :update-property-field="profileStore.updatePropertyField"
           :set-shape-inheritance="profileStore.setShapeInheritance"
           :set-property-node-target="profileStore.setPropertyNodeTarget"
+          :set-property-inline-node-shape="profileStore.setPropertyInlineNodeShape"
+          :set-property-inline-node-shape-label="profileStore.setPropertyInlineNodeShapeLabel"
           :set-property-alternative-targets="profileStore.setPropertyAlternativeTargets"
+          :set-property-exclusive-datatype-alternatives="profileStore.setPropertyExclusiveDatatypeAlternatives"
           :set-property-type="profileStore.setPropertyType"
           :delete-shape="deleteSelectedShape"
           :delete-property="deleteSelectedProperty"
@@ -1474,7 +1636,30 @@ void fetchSubjectHeadingOptions().then(options => {
       :style="{ width: 'min(560px, 96vw)' }"
       @update:visible="settingsOpen = $event"
     >
-      <div class="settings-form">
+      <div class="settings-tabs" role="tablist" aria-label="Editor settings sections">
+        <button
+          type="button"
+          role="tab"
+          class="settings-tab"
+          :class="{ 'is-active': editorSettingsTab === 'defaults' }"
+          :aria-selected="editorSettingsTab === 'defaults'"
+          @click="editorSettingsTab = 'defaults'"
+        >
+          Defaults
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="settings-tab"
+          :class="{ 'is-active': editorSettingsTab === 'shacl-classes' }"
+          :aria-selected="editorSettingsTab === 'shacl-classes'"
+          @click="editorSettingsTab = 'shacl-classes'"
+        >
+          Display Settings
+        </button>
+      </div>
+
+      <div v-if="editorSettingsTab === 'defaults'" class="settings-form" role="tabpanel">
         <label class="settings-field">
           <span>Default Creator</span>
           <input v-model="defaultCreator" class="settings-input" type="text" placeholder="Creator" />
@@ -1499,6 +1684,37 @@ void fetchSubjectHeadingOptions().then(options => {
         </label>
         <div class="settings-actions">
           <Button label="Save" icon="pi pi-check" size="small" @click="saveSettings" />
+        </div>
+      </div>
+
+      <div v-else class="settings-form" role="tabpanel">
+        <div class="settings-toggle-row">
+          <span>Load and display Class connections (sh:class)</span>
+          <button
+            type="button"
+            role="switch"
+            class="settings-toggle"
+            :class="{ 'is-on': showClassRelations }"
+            :aria-checked="showClassRelations"
+            aria-label="Load and display Class connections (sh:class)"
+            @click="toggleClassRelations"
+          >
+            <span class="settings-toggle__thumb" />
+          </button>
+        </div>
+        <div class="settings-toggle-row">
+          <span>Load and display blank nodes (in sh:qualifiedValueShape)</span>
+          <button
+            type="button"
+            role="switch"
+            class="settings-toggle"
+            :class="{ 'is-on': showBlankNodeRelations }"
+            :aria-checked="showBlankNodeRelations"
+            aria-label="Load and display blank nodes (in sh:qualifiedValueShape)"
+            @click="toggleBlankNodeRelations"
+          >
+            <span class="settings-toggle__thumb" />
+          </button>
         </div>
       </div>
     </Dialog>
@@ -1757,7 +1973,7 @@ void fetchSubjectHeadingOptions().then(options => {
 .action-menu-divider {
   width: 1px;
   align-self: stretch;
-  min-height: 48px;
+  margin-block: -8px;
   background: rgba(15, 23, 42, 0.14);
 }
 
@@ -1893,6 +2109,68 @@ void fetchSubjectHeadingOptions().then(options => {
   gap: var(--space-3);
 }
 
+.settings-tabs {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.settings-tab {
+  padding: 8px 2px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.settings-tab.is-active {
+  border-bottom-color: var(--color-primary);
+  color: var(--color-text);
+}
+
+.settings-toggle-row {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.settings-toggle {
+  position: relative;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 24px;
+  padding: 2px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  background: var(--color-surface-2);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.settings-toggle.is-on {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+
+.settings-toggle__thumb {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.2);
+  transition: transform 0.15s ease;
+}
+
+.settings-toggle.is-on .settings-toggle__thumb {
+  transform: translateX(18px);
+}
+
 .settings-field {
   display: flex;
   flex-direction: column;
@@ -1948,10 +2226,15 @@ void fetchSubjectHeadingOptions().then(options => {
   transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.relation-tile:hover {
+.relation-tile:hover:not(:disabled) {
   border-color: var(--color-primary);
   box-shadow: var(--shadow-md);
   transform: translateY(-1px);
+}
+
+.relation-tile:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .relation-tile.is-selected {
@@ -2101,6 +2384,21 @@ void fetchSubjectHeadingOptions().then(options => {
 .review-item:hover {
   background: var(--color-surface-1);
   box-shadow: var(--shadow-sm);
+}
+
+.profile-search-item {
+  border-left-width: 1px;
+}
+
+.profile-search-item__description {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .review-item.is-urgent {

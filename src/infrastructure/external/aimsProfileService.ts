@@ -1,5 +1,6 @@
 const AIMS_API = 'https://aims-backend.tools.coscine.dev/AIMS'
 const AIMS_PROFILE_SEARCH_LANGUAGES = ['EN', 'DE'] as const
+let aimsProfilesPromise: Promise<AimsProfile[]> | null = null
 
 export interface AimsProfile {
   base_url: string
@@ -35,27 +36,34 @@ async function fetchAimsJson(url: string): Promise<unknown> {
   return response.json() as Promise<unknown>
 }
 
-export async function loadAimsProfiles(): Promise<AimsProfile[]> {
-  const responses = await Promise.all(AIMS_PROFILE_SEARCH_LANGUAGES.map(async language => {
+export function loadAimsProfiles(): Promise<AimsProfile[]> {
+  if (aimsProfilesPromise) return aimsProfilesPromise
+
+  aimsProfilesPromise = Promise.all(AIMS_PROFILE_SEARCH_LANGUAGES.map(async language => {
     const url = `${AIMS_API}/application-profiles/?query=&language=${language}&includeDefinition=false`
     return fetchAimsJson(url)
-  }))
-
-  const profilesByBaseUrl = new Map<string, AimsProfile>()
-  for (const response of responses) {
-    if (!Array.isArray(response)) continue
-    for (const entry of response) {
-      if (!isAimsProfile(entry) || profilesByBaseUrl.has(entry.base_url)) continue
-      profilesByBaseUrl.set(entry.base_url, entry)
+  })).then(responses => {
+    const profilesByBaseUrl = new Map<string, AimsProfile>()
+    for (const response of responses) {
+      if (!Array.isArray(response)) continue
+      for (const entry of response) {
+        if (!isAimsProfile(entry) || profilesByBaseUrl.has(entry.base_url)) continue
+        profilesByBaseUrl.set(entry.base_url, entry)
+      }
     }
-  }
 
-  return Array.from(profilesByBaseUrl.values())
-    .sort((left, right) => left.name.localeCompare(right.name))
+    return Array.from(profilesByBaseUrl.values())
+      .sort((left, right) => left.name.localeCompare(right.name))
+  }).catch(error => {
+    aimsProfilesPromise = null
+    throw error
+  })
+
+  return aimsProfilesPromise
 }
 
-export async function fetchAimsProfileTurtle(profile: AimsProfile): Promise<string> {
-  const encodedBaseUrl = encodeURIComponent(profile.base_url)
+export async function fetchAimsProfileDefinition(baseUrl: string): Promise<{ text: string; mediaType?: string }> {
+  const encodedBaseUrl = encodeURIComponent(baseUrl)
   const url = `${AIMS_API}/application-profiles/${encodedBaseUrl}?includeDefinition=true`
   const data = await fetchAimsJson(url)
 
@@ -63,5 +71,12 @@ export async function fetchAimsProfileTurtle(profile: AimsProfile): Promise<stri
     throw new Error('AIMS profile download failed: missing Turtle definition')
   }
 
-  return data.definition
+  return {
+    text: data.definition,
+    mediaType: data.mimeType,
+  }
+}
+
+export async function fetchAimsProfileTurtle(profile: AimsProfile): Promise<string> {
+  return (await fetchAimsProfileDefinition(profile.base_url)).text
 }

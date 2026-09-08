@@ -24,6 +24,8 @@ interface UseEditorGraphOptions {
   clearRequestedNodePositions?: () => void
   readOnlyMode?: Ref<boolean>
   reviewMode?: Ref<boolean>
+  showClassRelations?: Ref<boolean>
+  showBlankNodeRelations?: Ref<boolean>
   reviewAnnotations?: Ref<Map<string, EditorShapeReviewAnnotation>>
   openShapePreview: (shape: NodeShape) => void | Promise<void>
   addField?: (shapeIri: string) => void
@@ -34,6 +36,7 @@ interface UseEditorGraphOptions {
   removeReferenceEdge?: (shapeIri: string, propertyNodeId: string, targetShapeIri: string) => void
   requestedNodePositions?: Ref<Record<string, Node['position']>>
   selectedShapeIri?: Ref<string | null>
+  highlightedShapeIri?: Ref<string | null>
   selectedPropertyKey?: Ref<string | null>
   draftPropertyNodeId?: Ref<string | null>
   selectShape?: (shape: NodeShape) => void
@@ -89,6 +92,7 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
         : null
 
       node.data.selected = representedShapeIri === selectedShapeIri
+      node.data.highlighted = representedShapeIri === (options.highlightedShapeIri?.value ?? null)
       node.data.selectedShapeIri = selectedShapeIri
       node.data.selectedPropertyKey = representedShapeIri === selectedShapeIri ? selectedPropertyKey : null
       node.data.draftPropertyNodeId = options.draftPropertyNodeId?.value ?? null
@@ -142,6 +146,9 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
       options.draftPropertyNodeId?.value,
       options.reviewMode?.value ?? false,
       options.reviewAnnotations?.value,
+      options.showClassRelations?.value ?? false,
+      options.showBlankNodeRelations?.value ?? false,
+      options.highlightedShapeIri?.value,
     )
 
     const visibleNodeIds = new Set(shapeNodes.map(node => node.id))
@@ -152,6 +159,8 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
       options.removeReferenceEdge,
       options.selectedShapeIri?.value,
       options.selectedPropertyKey?.value,
+      options.showClassRelations?.value ?? false,
+      options.showBlankNodeRelations?.value ?? false,
     ).filter(edge => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target))
 
     const existingNodes = nodes.value as Node[]
@@ -183,12 +192,15 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
   })
   watch(options.readOnlyMode ?? ref(false), () => rebuildGraph())
   watch(options.reviewMode ?? ref(false), () => rebuildGraph())
+  watch(options.showClassRelations ?? ref(false), () => rebuildGraph(true))
+  watch(options.showBlankNodeRelations ?? ref(false), () => rebuildGraph(true))
   watch(options.reviewAnnotations ?? ref(new Map<string, EditorShapeReviewAnnotation>()), () => rebuildGraph())
   watch(options.draftPropertyNodeId ?? ref(null), () => rebuildGraph())
   watch([options.selectedShapeIri ?? ref(null), options.selectedPropertyKey ?? ref(null)], () => {
     updateSelectionState()
     rebuildGraph()
   })
+  watch(options.highlightedShapeIri ?? ref(null), updateSelectionState)
   watch(() => {
     const requestedPositions = (options.requestedNodePositions?.value ?? {}) as Record<string, { x: number; y: number }>
     return Object.entries(requestedPositions)

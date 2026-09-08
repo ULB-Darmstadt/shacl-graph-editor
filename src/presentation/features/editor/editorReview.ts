@@ -48,6 +48,10 @@ export function buildEditorReviewItems(shapes: NodeShape[]): EditorReviewItem[] 
         ?.map(alternative => alternative.node?.value)
         .filter(Boolean)
         .length ?? 0
+      const datatypeAlternativeCount = property.exclusiveAlternatives
+        ?.map(alternative => alternative.datatype?.value)
+        .filter(Boolean)
+        .length ?? 0
       const missingQualifiedCounts = propertyType === 'qualifiedProfile'
         && property.qualifiedMinCount === undefined
         && property.qualifiedMaxCount === undefined
@@ -56,6 +60,7 @@ export function buildEditorReviewItems(shapes: NodeShape[]): EditorReviewItem[] 
       addPropertyIssue(items, shape, property, propertySortPrefix, 'urgent', 'name', !property.name?.trim(), 'Property has no name', 'Add a field name.', shapeLabel, propertyLabel)
       addPropertyIssue(items, shape, property, propertySortPrefix, 'urgent', 'order', property.order === undefined, 'Property has no form position', 'Add a Position On Metadata Form value.', shapeLabel, propertyLabel)
       addPropertyIssue(items, shape, property, propertySortPrefix, 'urgent', 'alternativeTargets', propertyType === 'oneOfProfiles' && alternativeTargetCount <= 1, 'sh:or property needs more targets', 'Add at least two profile targets.', shapeLabel, propertyLabel)
+      addPropertyIssue(items, shape, property, propertySortPrefix, 'urgent', 'exclusiveDatatypeAlternatives', propertyType === 'exactlyOneOfDatatypes' && datatypeAlternativeCount <= 1, 'sh:xone property needs more datatypes', 'Add at least two exclusive datatype alternatives.', shapeLabel, propertyLabel)
       addPropertyIssue(items, shape, property, propertySortPrefix, 'urgent', 'nodeTarget', (propertyType === 'profile' || propertyType === 'qualifiedProfile') && nodeTargetCount === 0, 'Profile connection has no target', 'Select a node target.', shapeLabel, propertyLabel)
       addPropertyIssue(items, shape, property, propertySortPrefix, 'warning', 'qualifiedCount', missingQualifiedCounts, 'Qualified profile has no count', 'Add a qualified min or max count.', shapeLabel, propertyLabel)
       addPropertyIssue(items, shape, property, propertySortPrefix, 'urgent', 'allowedValues', propertyType === 'list' && (!property.allowedValues || property.allowedValues.length === 0), 'sh:in property has no values', 'Add values to choose from.', shapeLabel, propertyLabel)

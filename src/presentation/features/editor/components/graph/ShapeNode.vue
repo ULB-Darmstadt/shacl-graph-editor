@@ -23,9 +23,13 @@ const activePropertyDrag = reactive<{
 
 <script setup lang="ts">
 import { Handle, Position } from '@vue-flow/core'
-import { propertyConstraintSummary, propertyNodeTargets, type NodeShape, type PropertyShape } from '@/domain/profiles'
+import { propertyNodeTargets, type NodeShape, type PropertyShape } from '@/domain/profiles'
 import { EDITOR_NODE_COLORS } from '@/presentation/features/editor/editorGraphTheme'
-import { propertyGraphTargetIris, type ShapeEditorNodeData } from '@/presentation/features/editor/inheritanceEditorGraph'
+import {
+  propertyClassTargetIris,
+  propertyGraphTargetIris,
+  type ShapeEditorNodeData,
+} from '@/presentation/features/editor/inheritanceEditorGraph'
 import { useProfileEditorStore } from '@/application/profiles/profileEditorStore'
 import { computed, nextTick, ref, watch } from 'vue'
 
@@ -70,7 +74,7 @@ function isSelectedShape(): boolean {
 }
 
 function isSelectedProfile(): boolean {
-  return isSelectedShape() && !props.data.selectedPropertyKey
+  return props.data.highlighted === true || (isSelectedShape() && !props.data.selectedPropertyKey)
 }
 
 function isSelectedInheritedProfile(shapeIri: string): boolean {
@@ -223,20 +227,37 @@ function hasRelationshipHandle(_property: PropertyShape): boolean {
 }
 
 function isPropertyHandleOccupied(property: PropertyShape): boolean {
-  return propertyGraphTargetIris(property, profiles.applicationProfile.allNodeShapes()).length > 0
+  return propertyGraphTargetIris(
+    property,
+    profiles.applicationProfile.allNodeShapes(),
+    false,
+    props.data.showBlankNodeRelations,
+  ).length > 0
+}
+
+function isPropertyClassHandleOccupied(property: PropertyShape): boolean {
+  if (isPropertyHandleOccupied(property)) return false
+  return propertyClassTargetIris(property, profiles.applicationProfile.allNodeShapes()).length > 0
+    || Boolean(property.qualifiedValueShape?.inlineNodeShape && property.qualifiedValueShape.node)
 }
 
 function isShapeTargetHandleOccupied(): boolean {
   const allShapes = profiles.applicationProfile.allNodeShapes()
   return allShapes.some(shape =>
     shape.properties.some(property =>
-      propertyGraphTargetIris(property, allShapes).includes(props.data.representedShapeIri),
+      propertyGraphTargetIris(property, allShapes, false, props.data.showBlankNodeRelations).includes(props.data.representedShapeIri),
     ),
   )
 }
 
-function constraintBadgeLabel(property: PropertyShape): string | null {
-  return propertyConstraintSummary(property) ?? null
+function isShapeClassTargetHandleOccupied(): boolean {
+  if (!props.data.showClassRelations || isShapeTargetHandleOccupied()) return false
+  const allShapes = profiles.applicationProfile.allNodeShapes()
+  return allShapes.some(shape =>
+    shape.properties.some(property =>
+      propertyClassTargetIris(property, allShapes).includes(props.data.representedShapeIri),
+    ),
+  )
 }
 
 function isInteractive(): boolean {
@@ -490,9 +511,6 @@ function onShapeDrop(event: DragEvent): void {
       '--shape-preview-border': EDITOR_NODE_COLORS.shape.previewBorderColor,
       '--shape-ref-bg': EDITOR_NODE_COLORS.shape.accentBackground,
       '--shape-ref-hover-bg': EDITOR_NODE_COLORS.shape.accentHoverBackground,
-      '--shape-badge-bg': EDITOR_NODE_COLORS.shape.badgeBackground,
-      '--shape-badge-border': EDITOR_NODE_COLORS.shape.badgeBorderColor,
-      '--shape-badge-color': EDITOR_NODE_COLORS.shape.badgeColor,
       '--shape-handle-color': EDITOR_NODE_COLORS.shape.handleColor,
       '--shape-wire-color': EDITOR_NODE_COLORS.shape.wireColor,
       '--shape-inherited-bg': EDITOR_NODE_COLORS.shape.inheritedBackground,
@@ -513,7 +531,11 @@ function onShapeDrop(event: DragEvent): void {
         :position="Position.Left"
         :connectable="isInteractive()"
         class="handle handle-shape-target"
-        :class="{ 'handle-active': isShapeTargetHandleOccupied(), 'handle-readonly': !isInteractive() }"
+        :class="{
+          'handle-active': isShapeTargetHandleOccupied(),
+          'handle-class-active': isShapeClassTargetHandleOccupied(),
+          'handle-readonly': !isInteractive(),
+        }"
       />
       <i class="pi pi-bookmark" />
       <input
@@ -629,7 +651,11 @@ function onShapeDrop(event: DragEvent): void {
             :position="Position.Right"
             :connectable="isInteractive()"
             class="handle handle-ref-source"
-            :class="{ 'handle-active': isPropertyHandleOccupied(property), 'handle-readonly': !isInteractive() }"
+            :class="{
+              'handle-active': isPropertyHandleOccupied(property),
+              'handle-class-active': isPropertyClassHandleOccupied(property),
+              'handle-readonly': !isInteractive(),
+            }"
           />
         </li>
       </ul>
@@ -716,7 +742,6 @@ function onShapeDrop(event: DragEvent): void {
               @keydown.esc.prevent="cancelPropertyNameEdit(data.representedShapeIri, property)"
             />
             <span v-else class="prop-name">{{ propertyLabel(property) }}</span>
-            <span v-if="constraintBadgeLabel(property)" class="type-badge">{{ constraintBadgeLabel(property) }}</span>
           </template>
 
           <Handle
@@ -726,7 +751,11 @@ function onShapeDrop(event: DragEvent): void {
             :position="Position.Right"
             :connectable="isInteractive()"
             class="handle handle-ref-source"
-            :class="{ 'handle-active': isPropertyHandleOccupied(property), 'handle-readonly': !isInteractive() }"
+            :class="{
+              'handle-active': isPropertyHandleOccupied(property),
+              'handle-class-active': isPropertyClassHandleOccupied(property),
+              'handle-readonly': !isInteractive(),
+            }"
           />
         </li>
       </template>
@@ -1055,16 +1084,6 @@ header {
   color: #c7c9cf;
 }
 
-.type-badge {
-  flex-shrink: 0;
-  border: 1px solid var(--shape-badge-border);
-  background: var(--shape-badge-bg);
-  color: var(--shape-badge-color);
-  border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 0.7rem;
-}
-
 .handle {
   width: 10px;
   height: 10px;
@@ -1090,6 +1109,12 @@ header {
 .handle-active {
   border-color: var(--shape-wire-color);
   background: var(--shape-wire-color);
+  right: 0;
+}
+
+.handle-class-active {
+  border-color: var(--shape-wire-color);
+  background: white;
   right: 0;
 }
 

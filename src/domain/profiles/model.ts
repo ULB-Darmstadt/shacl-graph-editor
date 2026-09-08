@@ -17,7 +17,7 @@ export interface PropertyShape extends PropertyConstraintCarrier {
   rdfsLabelLiterals?: RdfLiteralValue[]
   path?: NamedNode
   order?: number
-  editorType?: 'datatype' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'list'
+  editorType?: 'datatype' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'exactlyOneOfDatatypes' | 'list'
   allowedValues?: string[]
   allowedValueLabels?: Record<string, RdfLiteralValue[]>
   dashSingleLine?: boolean
@@ -150,5 +150,9 @@ export class ApplicationProfile {
 }
 
 function propertyKeyFor(property: PropertyShape): string {
-  return property.path?.value ?? property.nodeId.value
+  if (!property.path?.value) return property.nodeId.value
+  const normalizedName = property.name?.trim().toLocaleLowerCase()
+  return normalizedName
+    ? `${property.path.value}\u0000${normalizedName}`
+    : property.path.value
 }

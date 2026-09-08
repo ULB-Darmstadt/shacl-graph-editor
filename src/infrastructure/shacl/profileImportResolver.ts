@@ -1,5 +1,6 @@
 import localforage from 'localforage'
 import { ApplicationProfile, type ShaclProfile } from '@/domain/profiles'
+import { fetchAimsProfileDefinition } from '@/infrastructure/external/aimsProfileService'
 import { parseShaclProfile } from '@/infrastructure/shacl/shaclProfileParser'
 
 const cache = localforage.createInstance({
@@ -19,6 +20,7 @@ interface CachedProfile {
 }
 
 const RDF_PROXY_URL = 'https://rdf.nfdi4ing.de/kge/api/v1/rdfproxy?url='
+const AIMS_PROFILE_IRI_PREFIX = 'https://w3id.org/nfdi4ing/profiles/'
 
 export interface ResolveResult {
   errors: Array<{ iri: string; error: string }>
@@ -70,26 +72,44 @@ function collectMissingImports(applicationProfile: ApplicationProfile, failedImp
 async function fetchProfile(iri: string): Promise<ShaclProfile> {
   const cached = await cache.getItem<CachedProfile>(iri)
   if (cached?.ttl) {
-    return parseShaclProfile(cached.ttl, iri, 'fetched', iri, cached.mediaType)
+    try {
+      return parseShaclProfile(cached.ttl, iri, 'fetched', iri, cached.mediaType)
+    } catch {
+      await cache.removeItem(iri)
+    }
   }
 
   const legacyCached = await legacyCache.getItem<CachedProfile>(iri)
   if (legacyCached?.ttl) {
-    await cache.setItem<CachedProfile>(iri, legacyCached)
-    return parseShaclProfile(legacyCached.ttl, iri, 'fetched', iri, legacyCached.mediaType)
+    try {
+      const profile = parseShaclProfile(legacyCached.ttl, iri, 'fetched', iri, legacyCached.mediaType)
+      await cache.setItem<CachedProfile>(iri, legacyCached)
+      return profile
+    } catch {
+      await legacyCache.removeItem(iri)
+    }
   }
 
   const fetched = await fetchProfileTextWithFallbacks(iri)
+  const profile = parseShaclProfile(fetched.text, iri, 'fetched', iri, fetched.mediaType)
   await cache.setItem<CachedProfile>(iri, {
     ttl: fetched.text,
     fetchedAt: new Date().toISOString(),
     mediaType: fetched.mediaType,
   })
-  return parseShaclProfile(fetched.text, iri, 'fetched', iri, fetched.mediaType)
+  return profile
 }
 
 async function fetchProfileTextWithFallbacks(iri: string): Promise<{ text: string; mediaType?: string }> {
   let lastError: unknown
+
+  if (iri.startsWith(AIMS_PROFILE_IRI_PREFIX)) {
+    try {
+      return await fetchAimsProfileDefinition(iri)
+    } catch (error) {
+      lastError = error
+    }
+  }
 
   for (const candidate of buildFetchCandidates(iri)) {
     try {

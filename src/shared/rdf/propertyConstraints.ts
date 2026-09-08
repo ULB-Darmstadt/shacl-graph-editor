@@ -41,9 +41,11 @@ const RDF_NIL = new RdfNamedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#nil
 
 export interface PropertyConstraint {
   label?: string
+  labelLiterals?: Array<{ value: string; lang?: string; datatype?: string }>
   description?: string
+  inlineNodeShape?: boolean
   datatype?: NamedNode
-  node?: NamedNode
+  node?: NamedNode | BlankNode
   nodeKind?: NamedNode
   cls?: NamedNode
   pattern?: string
@@ -51,7 +53,7 @@ export interface PropertyConstraint {
 
 export interface PropertyConstraintCarrier {
   datatype?: NamedNode
-  node?: NamedNode
+  node?: NamedNode | BlankNode
   nodeKind?: NamedNode
   cls?: NamedNode
   allowedValues?: string[]
@@ -192,11 +194,11 @@ export function applyConstraintPredicate(
   return false
 }
 
-export function propertyNodeTargets(property: PropertyConstraintCarrier): NamedNode[] {
-  const targets: NamedNode[] = []
+export function propertyNodeTargets(property: PropertyConstraintCarrier): Array<NamedNode | BlankNode> {
+  const targets: Array<NamedNode | BlankNode> = []
   const seen = new Set<string>()
 
-  function push(node: NamedNode | undefined): void {
+  function push(node: NamedNode | BlankNode | undefined): void {
     if (!node || seen.has(node.value)) return
     seen.add(node.value)
     targets.push(node)
@@ -206,7 +208,6 @@ export function propertyNodeTargets(property: PropertyConstraintCarrier): NamedN
   push(property.qualifiedValueShape?.node)
   for (const constraint of property.alternatives ?? []) push(constraint.node)
   for (const constraint of property.conjunctions ?? []) push(constraint.node)
-  for (const constraint of property.exclusiveAlternatives ?? []) push(constraint.node)
 
   return targets
 }
@@ -268,12 +269,13 @@ export function propertyRelationshipKinds(property: PropertyConstraintCarrier): 
   return kinds
 }
 
-export function inferPropertyEditorType(property: PropertyConstraintCarrier): 'datatype' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'list' {
+export function inferPropertyEditorType(property: PropertyConstraintCarrier): 'datatype' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'exactlyOneOfDatatypes' | 'list' {
   if (property.node) return 'profile'
   if (property.qualifiedValueShape || property.qualifiedMinCount !== undefined || property.qualifiedMaxCount !== undefined) {
     return 'qualifiedProfile'
   }
   if (property.alternatives?.length) return 'oneOfProfiles'
+  if (property.exclusiveAlternatives?.some(constraint => constraint.datatype)) return 'exactlyOneOfDatatypes'
   if (property.allowedValues !== undefined) return 'list'
   if (property.nodeKind) return 'nodeKind'
   if (property.cls) return 'class'
@@ -354,11 +356,30 @@ function isConstraintContainer(term: Literal | NamedNode | BlankNode | Collectio
 
 function extractConstraint(nodeId: NamedNode | BlankNode, store: Store): PropertyConstraint {
   const constraint: PropertyConstraint = {}
-  const isNamedNodeShapeReference = nodeId.termType === 'NamedNode' && (
-    store.match(nodeId, RDF_TYPE, SH_NODE_SHAPE, null).length > 0
-    || store.match(nodeId, SH_PROPERTY, null, null).length > 0
+  const hasProperties = store.match(nodeId, SH_PROPERTY, null, null).length > 0
+  const hasNodeReference = store.match(nodeId, SH_NODE, null, null).length > 0
+  const isExplicitNodeShape = store.match(nodeId, RDF_TYPE, SH_NODE_SHAPE, null).length > 0
+  const isSkolemizedInlineNodeShapeReference = nodeId.termType === 'NamedNode'
+    && nodeId.value.startsWith('urn:')
+    && (
+      hasProperties
+      || hasNodeReference
+      || isExplicitNodeShape
+    )
+  const isNamedNodeShapeReference = nodeId.termType === 'NamedNode'
+    && !isSkolemizedInlineNodeShapeReference
+    && (
+    isExplicitNodeShape
+    || hasProperties
   )
+  const isInlineNodeShapeReference = (
+    nodeId.termType === 'BlankNode'
+    && (hasProperties || hasNodeReference || isExplicitNodeShape)
+  ) || isSkolemizedInlineNodeShapeReference
+  const isNodeShapeReference = isNamedNodeShapeReference || isInlineNodeShapeReference
+  constraint.inlineNodeShape = isInlineNodeShapeReference || undefined
   const preferredLabel = createPreferredLiteralTracker()
+  const labelLiterals: Array<{ value: string; lang?: string; datatype?: string }> = []
   const preferredDescription = createPreferredLiteralTracker()
 
   store.match(nodeId, null, null, null).forEach(t => {
@@ -366,16 +387,25 @@ function extractConstraint(nodeId: NamedNode | BlankNode, store: Store): Propert
     const obj = t.object as Literal | NamedNode | BlankNode | Collection
     if (isNamedNodeShapeReference && predicate === SH_NODE.value) return
     if (applyConstraintPredicate(constraint, predicate, obj, store)) return
-    if (predicate === DCT_TITLE.value && obj.termType === 'Literal') preferredLabel.consider(obj)
-    else if (predicate === SH_NAME.value && obj.termType === 'Literal') preferredLabel.consider(obj)
-    else if (predicate === RDFS_LABEL.value && obj.termType === 'Literal') preferredLabel.consider(obj)
+    if (
+      (predicate === DCT_TITLE.value || predicate === SH_NAME.value || predicate === RDFS_LABEL.value)
+      && obj.termType === 'Literal'
+    ) {
+      preferredLabel.consider(obj)
+      labelLiterals.push({
+        value: obj.value,
+        lang: obj.lang || undefined,
+        datatype: obj.datatype?.value,
+      })
+    }
     else if (predicate === SH_DESCRIPTION.value && obj.termType === 'Literal') preferredDescription.consider(obj)
   })
 
   constraint.label = preferredLabel.value
+  constraint.labelLiterals = labelLiterals.length > 0 ? labelLiterals : undefined
   constraint.description = preferredDescription.value
 
-  if (isNamedNodeShapeReference && !constraint.node) {
+  if (isNodeShapeReference && !constraint.node) {
     constraint.node = nodeId
   }
 

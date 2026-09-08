@@ -19,6 +19,7 @@ import {
   SH_ORDER,
   SH_PATH,
   SH_PROPERTY,
+  SH_QUALIFIED_VALUE_SHAPE,
   SH_TARGET_CLASS,
 } from '@/shared/rdf/rdfConstants'
 import { applyConstraintPredicate, inferPropertyEditorType, localName } from '@/shared/rdf/propertyConstraints'
@@ -102,17 +103,19 @@ export function parseShaclProfiles(
   parse(rawTurtle, store, DEFAULT_BASE_URI, normalizeRdfMediaType(mediaType, rawTurtle))
 
   const nodeShapeSubjects = collectNodeShapeSubjects(store)
-  const nodeShapes = nodeShapeSubjects
+  const rootNodeShapes = nodeShapeSubjects
     .map(iri => extractNodeShape(store.sym(iri) as NamedNode, store))
     .filter(shape => shape.nodeId.termType === 'NamedNode')
 
-  if (nodeShapes.length === 0) return []
+  if (rootNodeShapes.length === 0) return []
 
-  const profiles = nodeShapes.map(shape => {
+  const profiles = rootNodeShapes.map(shape => {
     const imports = new Set<string>()
     store.match(shape.nodeId as NamedNode, OWL_IMPORTS, null, null).forEach(statement => {
       if (statement.object.termType === 'NamedNode') imports.add(statement.object.value)
     })
+    const profileShapes = [shape, ...collectInlineQualifiedNodeShapes(shape, store)]
+    for (const profileShape of profileShapes) profileShape.sourceProfileIri = shape.nodeId.value
 
     return {
       iri: shape.nodeId.value,
@@ -120,7 +123,7 @@ export function parseShaclProfiles(
       origin,
       rawTurtle,
       imports: Array.from(imports),
-      nodeShapes: [{ ...shape, sourceProfileIri: shape.nodeId.value }],
+      nodeShapes: profileShapes,
     } satisfies ShaclProfile
   })
 
@@ -167,7 +170,7 @@ function normalizeRdfMediaType(mediaType: string | undefined, content: string): 
   return 'text/turtle'
 }
 
-function extractNodeShape(nodeId: NamedNode, store: Store): NodeShape {
+function extractNodeShape(nodeId: NamedNode | BlankNode, store: Store): NodeShape {
   const shape: NodeShape = { nodeId, properties: [], inheritedShapeIris: [] }
   const preferredLabel = createPreferredLiteralTracker()
   const preferredRdfsLabel = createPreferredLiteralTracker()
@@ -232,6 +235,33 @@ function extractNodeShape(nodeId: NamedNode, store: Store): NodeShape {
   return shape
 }
 
+function collectInlineQualifiedNodeShapes(rootShape: NodeShape, store: Store): NodeShape[] {
+  const inlineShapes: NodeShape[] = []
+  const visited = new Set<string>()
+  const queue = rootShape.properties.map(property => property.nodeId)
+
+  while (queue.length > 0) {
+    const propertyNode = queue.shift()
+    if (!propertyNode) continue
+
+    for (const statement of store.match(propertyNode, SH_QUALIFIED_VALUE_SHAPE, null, null)) {
+      if (statement.object.termType !== 'BlankNode' && statement.object.termType !== 'NamedNode') continue
+      const target = statement.object as NamedNode | BlankNode
+      if (target.termType === 'NamedNode' && !target.value.startsWith('urn:')) continue
+      if (visited.has(target.value)) continue
+      if (store.match(target, SH_PROPERTY, null, null).length === 0) continue
+      if (store.match(target, SH_NODE, null, null).length > 0) continue
+
+      visited.add(target.value)
+      const inlineShape = extractNodeShape(target, store)
+      inlineShapes.push(inlineShape)
+      queue.push(...inlineShape.properties.map(property => property.nodeId))
+    }
+  }
+
+  return inlineShapes
+}
+
 function extractPropertyShape(nodeId: NamedNode | BlankNode, store: Store): PropertyShape {
   const propertyShape: PropertyShape = { nodeId }
   const preferredName = createPreferredLiteralTracker()
@@ -275,6 +305,7 @@ function extractAllowedValueLabels(values: string[] | undefined, store: Store): 
   if (!values?.length) return undefined
   const labels: Record<string, RdfLiteralValue[]> = {}
   for (const value of values) {
+    if (!/^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)) continue
     const statements = store.match(store.sym(value), RDFS_LABEL, null, null)
     const valueLabels = statements
       .map(statement => statement.object)
