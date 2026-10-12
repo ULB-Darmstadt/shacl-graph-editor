@@ -67,13 +67,16 @@ export async function fetchAimsProfileDefinition(baseUrl: string): Promise<{ tex
   const url = `${AIMS_API}/application-profiles/${encodedBaseUrl}?includeDefinition=true`
   const data = await fetchAimsJson(url)
 
-  if (!isAimsProfile(data) || typeof data.definition !== 'string' || data.definition.length === 0) {
+  // Detail responses can have a null name even when the catalog row has one.
+  // Download validity depends on the definition, not display metadata.
+  if (typeof data !== 'object' || data === null || !('definition' in data)
+    || typeof data.definition !== 'string' || data.definition.trim().length === 0) {
     throw new Error('AIMS profile download failed: missing Turtle definition')
   }
 
   return {
     text: data.definition,
-    mediaType: data.mimeType,
+    mediaType: 'mimeType' in data && typeof data.mimeType === 'string' ? data.mimeType : undefined,
   }
 }
 
