@@ -5,6 +5,7 @@ import {
   type PropertyShape,
 } from '@/domain/profiles'
 import { PREFIX_APS } from '@/shared/rdf/rdfConstants'
+import { isPlaceholderTermIri } from '@/shared/rdf/placeholderTermIri'
 
 export type EditorReviewSeverity = 'urgent' | 'warning'
 export type EditorReviewSubject = 'profile' | 'property'
@@ -57,6 +58,7 @@ export function buildEditorReviewItems(shapes: NodeShape[]): EditorReviewItem[] 
         && property.qualifiedMaxCount === undefined
 
       addPropertyIssue(items, shape, property, propertySortPrefix, 'urgent', 'path', !property.path?.value?.trim(), 'Property has no IRI', 'Add a Term IRI.', shapeLabel, propertyLabel)
+      addPropertyIssue(items, shape, property, propertySortPrefix, 'warning', 'path', isPlaceholderTermIri(property.path?.value), 'Placeholder term IRI', 'Replace the placeholder with a term IRI.', shapeLabel, propertyLabel)
       addPropertyIssue(items, shape, property, propertySortPrefix, 'urgent', 'name', !property.name?.trim(), 'Property has no name', 'Add a field name.', shapeLabel, propertyLabel)
       addPropertyIssue(items, shape, property, propertySortPrefix, 'urgent', 'order', property.order === undefined, 'Property has no form position', 'Add a Position On Metadata Form value.', shapeLabel, propertyLabel)
       addPropertyIssue(items, shape, property, propertySortPrefix, 'urgent', 'alternativeTargets', propertyType === 'oneOfProfiles' && alternativeTargetCount <= 1, 'sh:or property needs more targets', 'Add at least two profile targets.', shapeLabel, propertyLabel)

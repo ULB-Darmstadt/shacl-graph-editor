@@ -24,6 +24,7 @@ import {
   type ShaclProfile,
 } from '@/domain/profiles'
 import type { PropertyEditorType } from '@/application/profiles/profileEditorStore'
+import { isPlaceholderTermIri } from '@/shared/rdf/placeholderTermIri'
 import InspectorAutocompleteField from '@/presentation/features/editor/components/inspector/InspectorAutocompleteField.vue'
 import InspectorEditableField from '@/presentation/features/editor/components/inspector/InspectorEditableField.vue'
 import InspectorReadOnlyField from '@/presentation/features/editor/components/inspector/InspectorReadOnlyField.vue'
@@ -209,6 +210,7 @@ const missingCreator = computed(() => !props.property && !props.shape?.creator?.
 const missingCreated = computed(() => !props.property && !props.shape?.created?.trim())
 const missingLicense = computed(() => !props.property && !props.shape?.license?.trim())
 const missingPropertyTerm = computed(() => Boolean(props.property) && !props.property?.path?.value?.trim())
+const placeholderPropertyTerm = computed(() => isPlaceholderTermIri(props.property?.path?.value))
 const missingPropertyName = computed(() => Boolean(props.property) && !props.property?.name?.trim())
 const missingPropertyOrder = computed(() => Boolean(props.property) && props.property?.order === undefined)
 const missingProfileTarget = computed(() =>
@@ -505,7 +507,8 @@ function requestDeleteProperty(): void {
                 placeholder="https://..."
                 :disabled="readOnly"
                 :invalid="missingPropertyTerm"
-                :helper-text="missingPropertyTerm ? 'A Term IRI is required for this field.' : 'Type your own IRI or choose a suggested term while typing.'"
+                :warning="placeholderPropertyTerm"
+                :helper-text="missingPropertyTerm ? 'A Term IRI is required for this field.' : placeholderPropertyTerm ? 'Placeholder term IRI. Replace it with a term IRI.' : 'Type your own IRI or choose a suggested term while typing.'"
                 @update:value="updateProperty('path', $event)"
               />
               <InspectorEditableField

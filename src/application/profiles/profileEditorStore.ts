@@ -9,6 +9,7 @@ import {
 } from '@/application/profiles/useCases/importShaclProfiles'
 import { serializeProfileAsTurtle } from '@/infrastructure/shacl/shaclProfileSerializer'
 import { PREFIX_APS } from '@/shared/rdf/rdfConstants'
+import { PLACEHOLDER_TERM_IRI_PREFIX } from '@/shared/rdf/placeholderTermIri'
 import { defaultDatatypeLabel } from '@/application/profiles/profileEditorCatalogs'
 
 /**
@@ -167,6 +168,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     const propertyNodeIri = `${context.shape.nodeId.value}#property-shape-${uuid}`
     const property: PropertyShape = {
       nodeId: new NamedNode(propertyNodeIri),
+      path: new NamedNode(`${PLACEHOLDER_TERM_IRI_PREFIX}${uuid}`),
       order: context.shape.properties.filter(property => !property.inherited).length,
       datatype: new NamedNode('http://www.w3.org/2001/XMLSchema#string'),
       editorType: 'datatype',
