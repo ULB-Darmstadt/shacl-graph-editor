@@ -541,6 +541,7 @@ function handleGlobalPointerDown(event: PointerEvent): void {
   if (settingsFabRef.value?.contains(target)) return
   if (settingsMenuRef.value?.contains(target)) return
   if (actionOverlayRef.value?.contains(target)) return
+
   if ((target as Element).closest?.('.shape-header-menu')) return
   closeCanvasMenu()
   closeShapeHeaderMenu()
@@ -878,6 +879,7 @@ function handleGraphShellClick(event: MouseEvent): void {
   if (canvasMenuRef.value?.contains(target)) return
   if (canvasActionBarRef.value?.contains(target)) return
   if (actionOverlayRef.value?.contains(target)) return
+  if ((target as Element).closest?.('.empty-state__actions')) return
 
   event.preventDefault()
   event.stopPropagation()
@@ -1384,9 +1386,21 @@ void fetchSubjectHeadingOptions().then(options => {
         </div>
 
         <div v-if="hasNothing" class="empty-state">
-          <i class="pi pi-plus-circle" />
-          <h2 class="section-title">Start with a profile</h2>
-          <p class="helper-text">Use the Add Profile button below or right-click the canvas to create, load, or upload profiles.</p>
+          <h2 class="section-title">Where do you want to start today?</h2>
+          <div class="empty-state__actions">
+            <button type="button" class="empty-state__option" :disabled="readOnlyMode" @click="handleBottomAddNewProfile">
+              <i class="pi pi-plus-circle" aria-hidden="true" />
+              Start with new profile
+            </button>
+            <button type="button" class="empty-state__option" :disabled="readOnlyMode" @click="cancelPendingProfilePlacement(); handleCanvasExistingProfile()">
+              <i class="pi pi-search" aria-hidden="true" />
+              Load profiles from Metadata Profile Service
+            </button>
+            <button type="button" class="empty-state__option" :disabled="readOnlyMode" @click="cancelPendingProfilePlacement(); handleCanvasUploadProfiles()">
+              <i class="pi pi-upload" aria-hidden="true" />
+              Import your own profiles
+            </button>
+          </div>
         </div>
 
         <template v-else>
@@ -2788,9 +2802,40 @@ void fetchSubjectHeadingOptions().then(options => {
   padding: var(--space-5);
   user-select: none;
 
-  .pi-plus-circle { font-size: 3rem; color: var(--color-accent); }
-  .section-title { color: var(--color-text); }
-  .helper-text { max-width: 560px; }
+  .section-title {
+    color: var(--color-text-muted);
+    font-size: 1.35rem;
+    font-weight: 400;
+  }
+}
+
+.empty-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  width: min(100%, 900px);
+  margin-top: var(--space-3);
+}
+
+.empty-state__option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 400;
+  cursor: pointer;
+
+  &:hover:not(:disabled) { background: var(--color-surface-2); color: var(--color-text); }
+  &:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
+  &:disabled { opacity: 0.55; cursor: not-allowed; }
 }
 
 @media (max-width: 1100px) {
