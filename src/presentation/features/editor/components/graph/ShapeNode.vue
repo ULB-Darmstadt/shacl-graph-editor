@@ -710,7 +710,11 @@ function onShapeDrop(event: DragEvent): void {
       </button>
     </template>
 
-    <div v-if="inheritedProperties().length > 0 && ownProperties().length > 0" class="section-label">
+    <div
+      v-if="(inheritedProperties().length > 0 && ownProperties().length > 0)
+        || (isInteractive() && !data.reviewMode && inheritedSections().length > 0)"
+      class="section-label"
+    >
       Own Properties
     </div>
 
