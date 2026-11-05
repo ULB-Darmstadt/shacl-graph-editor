@@ -801,10 +801,39 @@ function openBottomAddMenu(): void {
   closeActionOverlay()
 }
 
-function handleBottomAddNewProfile(): void {
+async function handleBottomAddNewProfile(): Promise<void> {
+  if (readOnlyMode.value) return
+  const shell = graphShellRef.value
+  if (!shell) return
+
+  cancelPendingProfilePlacement()
   resetPendingPlacement()
-  pendingPlacementAnchor.value = null
-  handleCanvasNewProfile()
+  closeCanvasMenu()
+  closeActionMenus()
+  closeActionOverlay()
+
+  const rect = shell.getBoundingClientRect()
+  const center = resolvePlacementPosition(rect.left + rect.width / 2, rect.top + rect.height / 2)
+  const iri = createProfileAt({ x: center.x - 170, y: center.y - 90 })
+  resetPendingPlacement()
+
+  // Use the rendered dimensions and current viewport, including the first
+  // canvas initialization, to center the whole card rather than its corner.
+  await nextTick()
+  await waitForAnimationFrame()
+  const canvasNodes = nodes.value as unknown as CanvasNodePosition[]
+  const node = canvasNodes.find(candidate => candidate.id === buildEditorShapeNodeId(iri))
+  if (!node) return
+  const currentRect = shell.getBoundingClientRect()
+  const currentCenter = screenToFlowCoordinate({
+    x: currentRect.left + currentRect.width / 2,
+    y: currentRect.top + currentRect.height / 2,
+  })
+  node.position = {
+    x: currentCenter.x - (node.dimensions?.width || 340) / 2,
+    y: currentCenter.y - (node.dimensions?.height || 180) / 2,
+  }
+  queueShapePlacementAt(iri, node.position)
 }
 
 function applyProfileDefaults(shapeIri: string): void {
