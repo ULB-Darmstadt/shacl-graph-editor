@@ -296,6 +296,12 @@ const CONNECTABLE_RELATION_OPTIONS: Array<{
     shaclType: 'sh:or',
     description: 'The field may satisfy one of several target profiles.',
   },
+  {
+    type: 'exactlyOneOfProfiles',
+    title: 'Exactly One Profile',
+    shaclType: 'sh:xone',
+    description: 'The field must satisfy exactly one target profile, with no overlapping matches.',
+  },
 ]
 
 const EDITOR_MODE_OPTIONS: Array<{ value: EditorMode; label: string; icon: string }> = [
@@ -968,7 +974,7 @@ function handleConnect(connection: Connection): void {
   const sourceProperty = sourceShape?.properties.find(property => property.nodeId.value === propertyNodeId)
   if (!sourceProperty) return
 
-  if (sourceProperty?.editorType === 'oneOfProfiles') {
+  if (sourceProperty?.editorType === 'oneOfProfiles' || sourceProperty?.editorType === 'exactlyOneOfProfiles') {
     profileStore.connectPropertyToShape(
       source.representedShapeIri,
       sourceHandle,

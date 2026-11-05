@@ -215,6 +215,7 @@ export function propertyNodeTargets(property: PropertyConstraintCarrier): Array<
   push(property.qualifiedValueShape?.node)
   for (const constraint of property.alternatives ?? []) push(constraint.node)
   for (const constraint of property.conjunctions ?? []) push(constraint.node)
+  for (const constraint of property.exclusiveAlternatives ?? []) push(constraint.node)
 
   return targets
 }
@@ -277,13 +278,14 @@ export function propertyRelationshipKinds(property: PropertyConstraintCarrier): 
   return kinds
 }
 
-export function inferPropertyEditorType(property: PropertyConstraintCarrier): 'datatype' | 'value' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'exactlyOneOfDatatypes' | 'list' {
+export function inferPropertyEditorType(property: PropertyConstraintCarrier): 'datatype' | 'value' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'exactlyOneOfProfiles' | 'exactlyOneOfDatatypes' | 'list' {
   if (property.hasValues !== undefined) return 'value'
   if (property.node) return 'profile'
   if (property.qualifiedValueShape || property.qualifiedMinCount !== undefined || property.qualifiedMaxCount !== undefined) {
     return 'qualifiedProfile'
   }
   if (property.alternatives?.length) return 'oneOfProfiles'
+  if (property.exclusiveAlternatives?.some(constraint => constraint.node)) return 'exactlyOneOfProfiles'
   if (property.exclusiveAlternatives?.some(constraint => constraint.datatype)) return 'exactlyOneOfDatatypes'
   if (property.allowedValues !== undefined) return 'list'
   if (property.nodeKind) return 'nodeKind'

@@ -156,7 +156,8 @@ const propertyAllowedValueDisplayItems = computed(() =>
   })),
 )
 const propertyAlternativeTargets = computed(() =>
-  props.property?.alternatives?.map(alternative => alternative.node?.value ?? '') ?? [],
+  (props.property?.editorType === 'exactlyOneOfProfiles' ? props.property.exclusiveAlternatives : props.property?.alternatives)
+    ?.map(alternative => alternative.node?.value ?? '') ?? [],
 )
 const propertyAlternativeTargetInputs = computed(() => {
   const targets = propertyAlternativeTargets.value.filter(Boolean)
@@ -244,7 +245,7 @@ const missingAllowedValues = computed(() =>
   propertyTypeValue.value === 'list' && (!props.property?.allowedValues || props.property.allowedValues.length === 0),
 )
 const missingAlternativeTargets = computed(() =>
-  propertyTypeValue.value === 'oneOfProfiles'
+  (propertyTypeValue.value === 'oneOfProfiles' || propertyTypeValue.value === 'exactlyOneOfProfiles')
   && propertyAlternativeTargets.value.filter(Boolean).length <= 1,
 )
 const missingDatatypeAlternatives = computed(() =>
@@ -670,12 +671,14 @@ function requestDeleteProperty(): void {
                   Edit Values
                 </button>
               </div>
-              <div v-else-if="propertyTypeValue === 'oneOfProfiles'" class="alternative-targets" :class="{ 'is-invalid': missingAlternativeTargets }">
-                <span class="editable-field__label ui-sidepanel-field-label">Alternative Profile Targets</span>
+              <div v-else-if="propertyTypeValue === 'oneOfProfiles' || propertyTypeValue === 'exactlyOneOfProfiles'" class="alternative-targets" :class="{ 'is-invalid': missingAlternativeTargets }">
+                <span class="editable-field__label ui-sidepanel-field-label">{{ propertyTypeValue === 'exactlyOneOfProfiles' ? 'Exactly One Profile Targets' : 'Alternative Profile Targets' }}</span>
                 <span class="alternative-targets__helper" :class="{ 'is-invalid': missingAlternativeTargets }">
                   {{ missingAlternativeTargets
                     ? 'At least two profile targets are required.'
-                    : 'Serialized as sh:or with one profile dropdown per alternative.' }}
+                    : propertyTypeValue === 'exactlyOneOfProfiles'
+                      ? 'The value must satisfy exactly one selected profile. Matching none or more than one fails validation.'
+                      : 'Serialized as sh:or with one profile dropdown per alternative.' }}
                 </span>
                 <div v-for="(targetValue, index) in propertyAlternativeTargetInputs" :key="`${property.nodeId.value}:alt:${index}`" class="alternative-target-row">
                   <InspectorEditableField

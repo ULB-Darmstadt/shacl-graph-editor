@@ -67,6 +67,7 @@ export const PROPERTY_TYPE_OPTIONS: SelectOption[] = [
   { label: 'Satisfies Profile (sh:node)', value: 'profile' },
   { label: 'Satisfies Profile (m-n times) (sh:qualifiedValueShape)', value: 'qualifiedProfile' },
   { label: 'Satisfies One Of Profiles (sh:or)', value: 'oneOfProfiles' },
+  { label: 'Exactly One Profile (sh:xone)', value: 'exactlyOneOfProfiles' },
   { label: 'List (sh:in)', value: 'list' },
 ]
 

@@ -446,8 +446,13 @@ export const useProfileEditorStore = defineStore('profiles', () => {
             .filter(Boolean)
             .map(value => ({ node: new NamedNode(value) }))
           : []
-        property.alternatives = constraints
-        property.exclusiveAlternatives = undefined
+        if (property.editorType === 'exactlyOneOfProfiles') {
+          property.exclusiveAlternatives = constraints
+          property.alternatives = undefined
+        } else {
+          property.alternatives = constraints
+          property.exclusiveAlternatives = undefined
+        }
         break
       }
       default:
@@ -490,6 +495,10 @@ export const useProfileEditorStore = defineStore('profiles', () => {
           node: new NamedNode(target),
         }
         property.node = undefined
+      } else if (property.editorType === 'exactlyOneOfProfiles') {
+        property.exclusiveAlternatives = [{ node: new NamedNode(target) }]
+        property.alternatives = undefined
+        property.node = undefined
       } else if (property.editorType === 'oneOfProfiles') {
         property.alternatives = [{ node: new NamedNode(target) }]
         property.exclusiveAlternatives = undefined
@@ -513,7 +522,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
       property.qualifiedValueShape = undefined
       property.qualifiedMinCount = undefined
       property.qualifiedMaxCount = undefined
-      if (property.editorType === 'profile' || property.editorType === 'qualifiedProfile' || property.editorType === 'oneOfProfiles') {
+      if (property.editorType === 'profile' || property.editorType === 'qualifiedProfile' || property.editorType === 'oneOfProfiles' || property.editorType === 'exactlyOneOfProfiles') {
         property.datatype = new NamedNode('http://www.w3.org/2001/XMLSchema#string')
         property.editorType = 'datatype'
       }
@@ -551,15 +560,15 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     const context = findEditablePropertyContext(shapeIri, propertyNodeId)
     if (!context) return
 
-    const normalizedTargets = targetShapeIris
-      .map(value => value.trim())
+    const normalizedTargets = [...new Set(targetShapeIris.map(value => value.trim()).filter(Boolean))]
 
     const constraints = normalizedTargets.map(value =>
       value ? { node: new NamedNode(value) } : {},
     )
-    context.property.alternatives = constraints
-    context.property.exclusiveAlternatives = undefined
-    context.property.editorType = 'oneOfProfiles'
+    const exclusive = context.property.editorType === 'exactlyOneOfProfiles'
+    context.property.alternatives = exclusive ? undefined : constraints
+    context.property.exclusiveAlternatives = exclusive ? constraints : undefined
+    context.property.editorType = exclusive ? 'exactlyOneOfProfiles' : 'oneOfProfiles'
     context.property.hasValues = undefined
     context.property.node = undefined
     context.property.datatype = undefined
@@ -622,8 +631,8 @@ export const useProfileEditorStore = defineStore('profiles', () => {
       syncSerializedProfiles()
       return
     }
-    if (property.editorType === 'oneOfProfiles' && targetShapeIri?.trim()) {
-      const alternatives = property.alternatives
+    if ((property.editorType === 'oneOfProfiles' || property.editorType === 'exactlyOneOfProfiles') && targetShapeIri?.trim()) {
+      const alternatives = property.editorType === 'exactlyOneOfProfiles' ? property.exclusiveAlternatives : property.alternatives
       const existing = alternatives?.map(alternative => alternative.node?.value).filter((value): value is string => Boolean(value)) ?? []
       if (!existing.includes(targetShapeIri.trim())) {
         setPropertyAlternativeTargets(shapeIri, property.nodeId.value, [...existing, targetShapeIri.trim()])
@@ -665,6 +674,8 @@ export const useProfileEditorStore = defineStore('profiles', () => {
       property.qualifiedValueShape = {}
     } else if (type === 'oneOfProfiles') {
       property.alternatives = []
+    } else if (type === 'exactlyOneOfProfiles') {
+      property.exclusiveAlternatives = []
     } else if (type === 'exactlyOneOfDatatypes') {
       property.exclusiveAlternatives = []
     } else if (type === 'list') {
@@ -726,14 +737,15 @@ export const useProfileEditorStore = defineStore('profiles', () => {
       }
     }
 
-    if (property.editorType === 'oneOfProfiles') {
-      const alternatives = property.alternatives
+    if (property.editorType === 'oneOfProfiles' || property.editorType === 'exactlyOneOfProfiles') {
+      const alternatives = property.editorType === 'exactlyOneOfProfiles' ? property.exclusiveAlternatives : property.alternatives
       const remaining = alternatives
         ?.map(alternative => alternative.node?.value)
         .filter((value): value is string => Boolean(value) && value !== targetShapeIri) ?? []
 
       const constraints = remaining.map(value => ({ node: new NamedNode(value) }))
-      property.alternatives = constraints
+      if (property.editorType === 'exactlyOneOfProfiles') property.exclusiveAlternatives = constraints
+      else property.alternatives = constraints
       syncSerializedProfiles()
       return
     }
@@ -758,7 +770,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
         if (property.qualifiedValueShape?.node?.value === shapeIri) {
           references.add(`${shape.label ?? shape.nodeId.value} / ${property.name ?? property.path?.value ?? property.nodeId.value}`)
         }
-        if (property.alternatives?.some(alternative => alternative.node?.value === shapeIri)) {
+        if ([...property.alternatives ?? [], ...property.exclusiveAlternatives ?? []].some(alternative => alternative.node?.value === shapeIri)) {
           references.add(`${shape.label ?? shape.nodeId.value} / ${property.name ?? property.path?.value ?? property.nodeId.value}`)
         }
       }
@@ -973,4 +985,4 @@ function parseAllowedValueLabelEntries(value: string | undefined): Array<{ value
     .filter(entry => entry.value)
 }
 
-export type PropertyEditorType = 'datatype' | 'value' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'exactlyOneOfDatatypes' | 'list'
+export type PropertyEditorType = 'datatype' | 'value' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'exactlyOneOfProfiles' | 'exactlyOneOfDatatypes' | 'list'

@@ -42,6 +42,101 @@ beforeEach(() => {
   store = useProfileEditorStore()
 })
 
+test('xone profiles round trip with all graph targets, edge labels and imports', async () => {
+  const source = store.createProfile()
+  const first = store.createProfile()
+  const second = store.createProfile()
+  const field = store.createProperty(source)
+  store.setPropertyType(source, field, 'exactlyOneOfProfiles')
+  store.setPropertyAlternativeTargets(source, field, [first, second, first])
+  const property = store.applicationProfile.findNodeShape(source).properties[0]
+  assert.deepEqual(property.exclusiveAlternatives.map(alternative => alternative.node.value), [first, second])
+  assert.equal(property.alternatives, undefined)
+  const { parseShaclProfile } = await server.ssrLoadModule('/src/infrastructure/shacl/shaclProfileParser.ts')
+  const profile = store.profiles.find(profile => profile.iri === source)
+  const imported = parseShaclProfile(profile.rawTurtle, 'xone.ttl', 'uploaded')
+  assert.equal(imported.nodeShapes[0].properties[0].editorType, 'exactlyOneOfProfiles')
+  assert.deepEqual(imported.imports.sort(), [first, second].sort())
+  assert.match(profile.rawTurtle, /sh:xone/)
+  assert.doesNotMatch(profile.rawTurtle, /sh:or /)
+  const { propertyNodeTargets } = await server.ssrLoadModule('/src/domain/profiles/index.ts')
+  assert.deepEqual(propertyNodeTargets(property).map(node => node.value), [first, second])
+  const { buildEditorStructuralEdges } = await server.ssrLoadModule('/src/presentation/features/editor/editorGraphBuilders.ts')
+  const edges = buildEditorStructuralEdges([store.applicationProfile.findNodeShape(source)], store.nodeShapes)
+  assert.equal(edges.length, 2)
+  assert.ok(edges.every(edge => edge.data.relationLabel === 'sh:xone'))
+  assert.equal(store.removeProfile(first).ok, false)
+})
+
+test('xone connections append, remove and undo targets without changing relation type', async () => {
+  const source = store.createProfile()
+  const first = store.createProfile()
+  const second = store.createProfile()
+  const field = store.createProperty(source)
+  store.setPropertyType(source, field, 'exactlyOneOfProfiles')
+  store.connectPropertyToShape(source, `ref:${field}`, first)
+  store.connectPropertyToShape(source, `ref:${field}`, second)
+  store.connectPropertyToShape(source, `ref:${field}`, first)
+  await nextTick()
+  assert.equal(store.applicationProfile.findNodeShape(source).properties[0].exclusiveAlternatives.length, 2)
+  store.removePropertyTarget(source, field, first)
+  await nextTick()
+  assert.equal(store.applicationProfile.findNodeShape(source).properties[0].editorType, 'exactlyOneOfProfiles')
+  assert.deepEqual(store.applicationProfile.findNodeShape(source).properties[0].exclusiveAlternatives.map(alternative => alternative.node.value), [second])
+  assert.equal(store.undo(), true)
+  assert.equal(store.applicationProfile.findNodeShape(source).properties[0].exclusiveAlternatives.length, 2)
+  assert.equal(store.redo(), true)
+  assert.equal(store.applicationProfile.findNodeShape(source).properties[0].exclusiveAlternatives.length, 1)
+  store.removePropertyTarget(source, field, second)
+  assert.deepEqual(store.applicationProfile.findNodeShape(source).properties[0].exclusiveAlternatives, [])
+  const { buildEditorReviewItems } = await server.ssrLoadModule('/src/presentation/features/editor/editorReview.ts')
+  assert.ok(buildEditorReviewItems(store.nodeShapes).some(item => item.field === 'exclusiveProfileTargets'))
+})
+
+test('imported xone profile targets remain locked', async () => {
+  const source = 'https://example.org/exclusive'
+  const field = `${source}/field`
+  const turtle = `@prefix sh: <http://www.w3.org/ns/shacl#> .
+    <${source}> a sh:NodeShape ; sh:property <${field}> .
+    <${field}> sh:path <https://example.org/value> ;
+      sh:xone ( [ sh:node <https://example.org/a> ] [ sh:node <https://example.org/b> ] ) .`
+  await store.addProfileFromTurtle(turtle, 'xone.ttl', source)
+  assert.equal(store.nodeShapes[0].properties[0].editorType, 'exactlyOneOfProfiles')
+  const before = JSON.stringify(store.profiles)
+  store.setPropertyAlternativeTargets(source, field, ['https://example.org/c'])
+  store.connectPropertyToShape(source, `ref:${field}`, 'https://example.org/c')
+  store.removePropertyTarget(source, field, 'https://example.org/a')
+  assert.equal(JSON.stringify(store.profiles), before)
+})
+
+test('exported xone validates exactly one profile and rejects zero or overlapping matches', async () => {
+  const source = store.createProfile()
+  const first = store.createProfile()
+  const second = store.createProfile()
+  for (const [iri, path] of [[first, 'https://example.org/a'], [second, 'https://example.org/b']]) {
+    const field = store.createProperty(iri)
+    store.updatePropertyField(iri, field, 'path', path)
+    store.updatePropertyField(iri, field, 'minCount', '1')
+  }
+  const field = store.createProperty(source)
+  store.updatePropertyField(source, field, 'path', 'https://example.org/value')
+  store.setPropertyType(source, field, 'exactlyOneOfProfiles')
+  store.setPropertyAlternativeTargets(source, field, [first, second])
+  const { Parser } = await import('n3')
+  const { default: factory } = await import('@rdfjs/data-model')
+  const { default: datasets } = await import('@rdfjs/dataset')
+  const { Validator } = await import('shacl-engine')
+  const shapes = datasets.dataset(new Parser().parse(store.profiles.map(profile => profile.rawTurtle).join('\n')))
+  shapes.add(factory.quad(factory.namedNode(source), factory.namedNode('http://www.w3.org/ns/shacl#targetNode'), factory.namedNode('https://example.org/record')))
+  const validator = new Validator(shapes, { factory })
+  for (const [predicates, conforms] of [[[], false], [['a'], true], [['b'], true], [['a', 'b'], false]]) {
+    const data = `<https://example.org/record> <https://example.org/value> <https://example.org/object> .\n`
+      + predicates.map(predicate => `<https://example.org/object> <https://example.org/${predicate}> "value" .`).join('\n')
+    const report = await validator.validate({ dataset: datasets.dataset(new Parser().parse(data)) })
+    assert.equal(report.conforms, conforms, predicates.join(','))
+  }
+})
+
 function updateFixedValue(shapeIri, propertyIri, field, value) {
   const property = store.applicationProfile.findNodeShape(shapeIri).properties.find(candidate => candidate.nodeId.value === propertyIri)
   const rows = (property.hasValues ?? []).map(term => ({

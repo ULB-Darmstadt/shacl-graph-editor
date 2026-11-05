@@ -229,7 +229,7 @@ function determineProfileImports(profile: ShaclProfile, shapeToProfile: Map<stri
         : undefined
       if (qualifiedOwner && qualifiedOwner !== profile.iri) imports.add(qualifiedOwner)
 
-      for (const alternative of property.alternatives ?? []) {
+      for (const alternative of [...property.alternatives ?? [], ...property.exclusiveAlternatives ?? []]) {
         const alternativeOwner = alternative.node?.value ? shapeToProfile.get(alternative.node.value) : undefined
         if (alternativeOwner && alternativeOwner !== profile.iri) imports.add(alternativeOwner)
       }
