@@ -52,6 +52,10 @@ const visibleOwnProperties = computed(() =>
   ownProperties().filter(property => !isSourcePropertyHidden(property)),
 )
 const inheritedSections = () => flattenInheritedGroups(props.data.inheritedGroups ?? [])
+const selectedPropertyIri = computed(() => {
+  if (!isSelectedShape() || !props.data.selectedPropertyKey) return null
+  return props.data.shape.properties.find(property => property.nodeId.value === props.data.selectedPropertyKey)?.path?.value || null
+})
 
 function propertyLabel(property: PropertyShape): string {
   return property.name?.trim() || 'Unnamed field'
@@ -83,6 +87,11 @@ function isSelectedInheritedProfile(shapeIri: string): boolean {
 
 function isSelectedProperty(property: PropertyShape): boolean {
   return props.data.selectedPropertyKey === propertyKey(property)
+}
+
+function sharesSelectedPropertyIri(property: PropertyShape): boolean {
+  return Boolean(selectedPropertyIri.value && !isSelectedProperty(property)
+    && property.path?.value === selectedPropertyIri.value)
 }
 
 function reviewClass(severity: 'urgent' | 'warning' | null | undefined): string | null {
@@ -631,7 +640,7 @@ function onShapeDrop(event: DragEvent): void {
           class="row inherited-row nodrag"
           :class="[
             propertyReviewClass(property, section.shapeIri),
-            { 'is-ref': isObjectRef(property), 'is-selected': isSelectedProperty(property) || isInheritedPropertyHighlighted(section.shapeIri) },
+            { 'is-ref': isObjectRef(property), 'is-selected': isSelectedProperty(property) || isInheritedPropertyHighlighted(section.shapeIri), 'is-shared-iri': sharesSelectedPropertyIri(property) },
           ]"
           @click.stop="selectProperty(property)"
           @dblclick.stop="startPropertyNameEdit(section.shapeIri, property, $event)"
@@ -712,7 +721,7 @@ function onShapeDrop(event: DragEvent): void {
           class="row nodrag"
           :class="[
             propertyReviewClass(property),
-            { 'is-ref': isObjectRef(property), 'is-selected': isSelectedProperty(property) },
+            { 'is-ref': isObjectRef(property), 'is-selected': isSelectedProperty(property), 'is-shared-iri': sharesSelectedPropertyIri(property) },
           ]"
           @click.stop="selectProperty(property)"
           @dblclick.stop="startPropertyNameEdit(data.representedShapeIri, property, $event)"
@@ -1053,6 +1062,13 @@ header {
   &.is-selected {
     background: rgba(90, 62, 155, 0.1);
     box-shadow: inset 3px 0 0 var(--color-primary);
+  }
+
+  &.is-shared-iri {
+    background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface));
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--color-primary) 40%, var(--color-surface));
+    outline: 1px dashed color-mix(in srgb, var(--color-primary) 45%, transparent);
+    outline-offset: -1px;
   }
 }
 
