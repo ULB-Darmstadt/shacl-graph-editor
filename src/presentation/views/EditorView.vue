@@ -1587,7 +1587,7 @@ void fetchSubjectHeadingOptions().then(options => {
               <i class="pi pi-copy canvas-menu__icon" aria-hidden="true" />
               <span class="canvas-menu__label">Create copy</span>
             </button>
-            <button type="button" class="canvas-menu__item" :disabled="profileStore.isPropertyLocked(propertyMenu.shapeIri, propertyMenu.propertyNodeId)" @click="createAndConnectProfileFromField">
+            <button type="button" class="canvas-menu__item" :disabled="!profileStore.canCreateConnectedProfileFromProperty(propertyMenu.shapeIri, propertyMenu.propertyNodeId)" @click="createAndConnectProfileFromField">
               <i class="pi pi-plus-circle canvas-menu__icon" aria-hidden="true" />
               <span class="canvas-menu__label">Create and connect Profile from Field</span>
             </button>

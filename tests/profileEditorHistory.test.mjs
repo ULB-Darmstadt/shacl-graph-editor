@@ -138,14 +138,35 @@ test('creating a profile from a locked or missing field does not create orphan p
   assert.equal(JSON.stringify(store.profiles), before)
 })
 
-test('creating a profile from a qualified or alternative field always makes a direct sh:node link', async () => {
+test('Create and connect is unavailable for existing connections, including targets not shown on the canvas', () => {
   const source = store.createProfile()
   const existing = store.createProfile()
+  for (const type of ['profile', 'qualifiedProfile', 'oneOfProfiles', 'exactlyOneOfProfiles', 'class']) {
+    const field = store.createProperty(source)
+    store.setPropertyType(source, field, type)
+    if (type === 'class') store.updatePropertyField(source, field, 'cls', 'https://example.org/UnloadedClass')
+    else store.connectPropertyToShape(source, `ref:${field}`, existing)
+    const before = JSON.stringify(store.profiles)
+    assert.equal(store.canCreateConnectedProfileFromProperty(source, field), false, type)
+    assert.equal(store.createConnectedProfileFromProperty(source, field), null, type)
+    assert.equal(JSON.stringify(store.profiles), before, type)
+  }
+  const field = store.createProperty(source)
+  assert.equal(store.canCreateConnectedProfileFromProperty(source, field), true)
+  const created = store.createConnectedProfileFromProperty(source, field)
+  assert.ok(created)
+  assert.equal(store.canCreateConnectedProfileFromProperty(source, field), false)
+  assert.equal(store.createConnectedProfileFromProperty(source, field), null)
+  store.removePropertyTarget(source, field, created)
+  assert.equal(store.canCreateConnectedProfileFromProperty(source, field), true)
+})
+
+test('creating a profile from an unconnected qualified or alternative field makes a direct sh:node link', async () => {
+  const source = store.createProfile()
   for (const type of ['qualifiedProfile', 'oneOfProfiles', 'exactlyOneOfProfiles', 'value']) {
     const field = store.createProperty(source)
     store.updatePropertyField(source, field, 'name', type)
     store.setPropertyType(source, field, type)
-    if (type !== 'value') store.connectPropertyToShape(source, `ref:${field}`, existing)
     const target = store.createConnectedProfileFromProperty(source, field)
     const property = store.applicationProfile.findNodeShape(source).properties.find(property => property.nodeId.value === field)
     assert.equal(property.node.value, target)

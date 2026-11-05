@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { BlankNode, Literal, NamedNode } from 'rdflib'
 import { computed, shallowRef, ref, watch } from 'vue'
-import { ApplicationProfile, classifyShape, type NodeShape, type PropertyShape, type ShaclProfile } from '@/domain/profiles'
+import { ApplicationProfile, classifyShape, propertyNodeTargets, type NodeShape, type PropertyShape, type ShaclProfile } from '@/domain/profiles'
 import {
   importProfileFromTurtle,
   importUploadedProfileFile,
@@ -299,7 +299,13 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     return copy.nodeId.value
   }
 
+  function canCreateConnectedProfileFromProperty(shapeIri: string, propertyNodeId: string): boolean {
+    const context = findEditablePropertyContext(shapeIri, propertyNodeId)
+    return Boolean(context && propertyNodeTargets(context.property).length === 0 && !context.property.cls)
+  }
+
   function createConnectedProfileFromProperty(shapeIri: string, propertyNodeId: string): string | null {
+    if (!canCreateConnectedProfileFromProperty(shapeIri, propertyNodeId)) return null
     const context = findEditablePropertyContext(shapeIri, propertyNodeId)
     if (!context) return null
     const label = context.property.name?.trim() ? context.property.name : 'Unnamed field'
@@ -886,6 +892,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     createProperty,
     copyProperty,
     createConnectedProfileFromProperty,
+    canCreateConnectedProfileFromProperty,
     createConnectedPropertyFromProfile,
     removeProperty,
     movePropertyToShape,
