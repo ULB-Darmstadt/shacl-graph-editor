@@ -13,6 +13,7 @@ SHACL Graph Editor is a browser-based editor for the workflow:
 - Start from local Turtle files or search profiles from the NFDI4ING Metadata Profile Service.
 - Work visually on a graph canvas with profiles, inherited profiles, properties, and SHACL relations.
 - Edit profile metadata and property details in the side panel.
+- Use the Value property type (`sh:hasValue`) to require multiple fixed typed values, including language-tagged text.
 - Create and adjust profile connections such as `sh:node`, `sh:or`, and `sh:qualifiedvalueshape`.
 - Move properties between profiles or reorder them within a profile by drag and drop.
 - Right-click a field to delete it or create an own-property copy of its name, description, and IRI for additional constraints.

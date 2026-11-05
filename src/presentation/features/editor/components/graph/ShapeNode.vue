@@ -62,9 +62,9 @@ function propertyLabel(property: PropertyShape): string {
 }
 
 function propertyDatatypeHint(property: PropertyShape): string | null {
-  const iri = property.datatype?.value
-  if (!iri) return null
-  return iri.split(/[/#:]/).filter(Boolean).pop() ?? iri
+  const iris = property.hasValues?.flatMap(value => value.termType === 'Literal' ? [value.datatype.value] : [])
+    ?? (property.datatype ? [property.datatype.value] : [])
+  return [...new Set(iris.map(iri => iri.split(/[/#:]/).filter(Boolean).pop() ?? iri))].join(' | ') || null
 }
 
 function propertyCardinalityHint(property: PropertyShape): string {

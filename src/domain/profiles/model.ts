@@ -17,7 +17,7 @@ export interface PropertyShape extends PropertyConstraintCarrier {
   rdfsLabelLiterals?: RdfLiteralValue[]
   path?: NamedNode
   order?: number
-  editorType?: 'datatype' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'exactlyOneOfDatatypes' | 'list'
+  editorType?: 'datatype' | 'value' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'exactlyOneOfDatatypes' | 'list'
   allowedValues?: string[]
   allowedValueLabels?: Record<string, RdfLiteralValue[]>
   dashSingleLine?: boolean

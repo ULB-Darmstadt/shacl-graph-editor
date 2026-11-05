@@ -157,6 +157,7 @@ function propertyStatements(property: PropertyShape, includeType: boolean): stri
   pushLiteralStatements(statements, 'rdfs:label', property.rdfsLabelLiterals, property.rdfsLabel)
   pushLiteralStatements(statements, 'sh:description', property.descriptionLiterals, property.description)
   pushNamedNodeStatement(statements, 'sh:datatype', property.datatype?.value)
+  for (const value of property.hasValues ?? []) statements.push(`sh:hasValue ${value.toNT()}`)
   pushNamedNodeStatement(statements, 'sh:node', property.node?.value)
   pushConstraintStatement(statements, 'sh:qualifiedValueShape', property.qualifiedValueShape)
   pushNamedNodeStatement(statements, 'sh:nodeKind', property.nodeKind?.value)
@@ -310,6 +311,7 @@ function pushConstraintListStatement(
   statements: string[],
   predicate: string,
   constraints: Array<{
+    hasValues?: PropertyShape['hasValues']
     inlineNodeShape?: boolean
     node?: { value: string; termType?: string }
     datatype?: { value: string }
@@ -333,6 +335,7 @@ function pushConstraintStatement(
   statements: string[],
   predicate: string,
   constraint: {
+    hasValues?: PropertyShape['hasValues']
     inlineNodeShape?: boolean
     node?: { value: string; termType?: string }
     datatype?: { value: string }
@@ -351,6 +354,7 @@ function pushConstraintStatement(
 }
 
 function serializeConstraintNode(constraint: {
+  hasValues?: PropertyShape['hasValues']
   inlineNodeShape?: boolean
   node?: { value: string; termType?: string }
   datatype?: { value: string }
@@ -365,6 +369,7 @@ function serializeConstraintNode(constraint: {
   if (constraint.node && !constraint.inlineNodeShape) return term(constraint.node.value)
 
   const fragments: string[] = []
+  for (const value of constraint.hasValues ?? []) fragments.push(`sh:hasValue ${value.toNT()}`)
   if (constraint.inlineNodeShape) fragments.push('a sh:NodeShape')
   pushNamedNodeStatement(fragments, 'sh:node', constraint.node?.value)
   pushNamedNodeStatement(fragments, 'sh:datatype', constraint.datatype?.value)

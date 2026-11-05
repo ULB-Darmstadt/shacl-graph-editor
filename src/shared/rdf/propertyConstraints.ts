@@ -7,6 +7,7 @@ import {
   SH_AND,
   SH_CLASS,
   SH_DATATYPE,
+  SH_HAS_VALUE,
   SH_DESCRIPTION,
   SH_DISJOINT,
   SH_EQUALS,
@@ -40,6 +41,7 @@ const RDF_REST = new RdfNamedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#re
 const RDF_NIL = new RdfNamedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#nil')
 
 export interface PropertyConstraint {
+  hasValues?: Array<Literal | NamedNode | BlankNode>
   label?: string
   labelLiterals?: Array<{ value: string; lang?: string; datatype?: string }>
   description?: string
@@ -52,6 +54,7 @@ export interface PropertyConstraint {
 }
 
 export interface PropertyConstraintCarrier {
+  hasValues?: Array<Literal | NamedNode | BlankNode>
   datatype?: NamedNode
   node?: NamedNode | BlankNode
   nodeKind?: NamedNode
@@ -86,6 +89,10 @@ export function applyConstraintPredicate(
   obj: Literal | NamedNode | BlankNode | Collection,
   store: Store,
 ): boolean {
+  if (predicate === SH_HAS_VALUE.value && (obj.termType === 'Literal' || obj.termType === 'NamedNode' || obj.termType === 'BlankNode')) {
+    (target.hasValues ??= []).push(obj)
+    return true
+  }
   if (predicate === SH_DATATYPE.value && obj.termType === 'NamedNode') {
     target.datatype = obj
     return true
@@ -223,6 +230,7 @@ export function propertyDatatypeTargets(property: PropertyConstraintCarrier): Na
   }
 
   push(property.datatype)
+  for (const value of property.hasValues ?? []) if (value.termType === 'Literal') push(value.datatype)
   push(property.qualifiedValueShape?.datatype)
   for (const constraint of property.alternatives ?? []) push(constraint.datatype)
   for (const constraint of property.conjunctions ?? []) push(constraint.datatype)
@@ -269,7 +277,8 @@ export function propertyRelationshipKinds(property: PropertyConstraintCarrier): 
   return kinds
 }
 
-export function inferPropertyEditorType(property: PropertyConstraintCarrier): 'datatype' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'exactlyOneOfDatatypes' | 'list' {
+export function inferPropertyEditorType(property: PropertyConstraintCarrier): 'datatype' | 'value' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'exactlyOneOfDatatypes' | 'list' {
+  if (property.hasValues !== undefined) return 'value'
   if (property.node) return 'profile'
   if (property.qualifiedValueShape || property.qualifiedMinCount !== undefined || property.qualifiedMaxCount !== undefined) {
     return 'qualifiedProfile'
@@ -416,6 +425,7 @@ function extractConstraint(nodeId: NamedNode | BlankNode, store: Store): Propert
     nodeId.termType === 'NamedNode'
     && !constraint.node
     && !constraint.datatype
+    && !constraint.hasValues?.length
     && !constraint.cls
     && !constraint.nodeKind
     && !constraint.pattern
@@ -463,7 +473,8 @@ function languagePreferenceScore(literal: Literal): number {
 
 function propertyHasDirectConstraint(property: PropertyConstraintCarrier): boolean {
   return Boolean(
-    property.datatype
+    property.hasValues?.length
+    || property.datatype
     || property.pattern
     || property.minInclusive
     || property.minExclusive
@@ -475,7 +486,7 @@ function propertyHasDirectConstraint(property: PropertyConstraintCarrier): boole
 }
 
 function constraintHasDirectValueSemantics(constraint: PropertyConstraint): boolean {
-  return Boolean(constraint.datatype || constraint.pattern || (constraint.nodeKind && !constraint.node) || (constraint.cls && !constraint.node))
+  return Boolean(constraint.hasValues?.length || constraint.datatype || constraint.pattern || (constraint.nodeKind && !constraint.node) || (constraint.cls && !constraint.node))
 }
 
 function formatQualifiedRange(property: PropertyConstraintCarrier): string | undefined {

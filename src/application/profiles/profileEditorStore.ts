@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { BlankNode, NamedNode } from 'rdflib'
+import { BlankNode, Literal, NamedNode } from 'rdflib'
 import { computed, shallowRef, ref, watch } from 'vue'
 import { ApplicationProfile, classifyShape, type NodeShape, type PropertyShape, type ShaclProfile } from '@/domain/profiles'
 import {
@@ -392,6 +392,15 @@ export const useProfileEditorStore = defineStore('profiles', () => {
       : normalizeString(value)
     const previousName = property.name
     switch (field) {
+      case 'hasValues': {
+        const rows = JSON.parse(value || '[]') as Array<{ value: string; datatype: string; language?: string }>
+        property.hasValues = rows.map(row => row.datatype === '@iri' ? new NamedNode(row.value)
+          : row.datatype === '@blank' ? new BlankNode(row.value)
+            : row.datatype === 'http://www.w3.org/1999/02/22-rdf-syntax-ns#langString'
+              ? new Literal(row.value, row.language || 'en')
+              : new Literal(row.value, '', new NamedNode(row.datatype)))
+        break
+      }
       case 'path':
         property.path = normalized ? new NamedNode(normalized) : undefined
         break
@@ -493,6 +502,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
         property.editorType = 'profile'
       }
       property.datatype = undefined
+      property.hasValues = undefined
       property.nodeKind = undefined
       property.cls = undefined
       property.allowedValues = undefined
@@ -550,6 +560,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     context.property.alternatives = constraints
     context.property.exclusiveAlternatives = undefined
     context.property.editorType = 'oneOfProfiles'
+    context.property.hasValues = undefined
     context.property.node = undefined
     context.property.datatype = undefined
     context.property.nodeKind = undefined
@@ -569,6 +580,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     const context = findEditablePropertyContext(shapeIri, propertyNodeId)
     if (!context) return
 
+    context.property.hasValues = undefined
     context.property.datatype = undefined
     context.property.node = undefined
     context.property.nodeKind = undefined
@@ -626,6 +638,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     if (!context) return
 
     const property = context.property
+    property.hasValues = undefined
     property.datatype = undefined
     property.node = undefined
     property.nodeKind = undefined
@@ -638,7 +651,9 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     property.qualifiedMaxCount = undefined
     property.editorType = type
 
-    if (type === 'datatype') {
+    if (type === 'value') {
+      property.hasValues = []
+    } else if (type === 'datatype') {
       property.datatype = new NamedNode('http://www.w3.org/2001/XMLSchema#string')
     } else if (type === 'nodeKind') {
       property.nodeKind = new NamedNode('http://www.w3.org/ns/shacl#IRI')
@@ -861,6 +876,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
 // Copy editable data without losing RDF term prototypes or sharing nested
 // constraints with a saved history entry.
 function cloneProfileValue<T>(value: T): T {
+  if (value instanceof Literal) return new Literal(value.value, value.language, new NamedNode(value.datatype.value)) as T
   if (value instanceof NamedNode) return new NamedNode(value.value) as T
   if (value instanceof BlankNode) return new BlankNode(value.value) as T
   if (Array.isArray(value)) return value.map(entry => cloneProfileValue(entry)) as T
@@ -881,6 +897,7 @@ type EditableShapeField =
   | 'targetClass'
 
 type EditablePropertyField =
+  | 'hasValues'
   | 'name'
   | 'description'
   | 'path'
@@ -956,4 +973,4 @@ function parseAllowedValueLabelEntries(value: string | undefined): Array<{ value
     .filter(entry => entry.value)
 }
 
-export type PropertyEditorType = 'datatype' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'exactlyOneOfDatatypes' | 'list'
+export type PropertyEditorType = 'datatype' | 'value' | 'nodeKind' | 'class' | 'profile' | 'qualifiedProfile' | 'oneOfProfiles' | 'exactlyOneOfDatatypes' | 'list'

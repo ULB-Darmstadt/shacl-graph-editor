@@ -60,6 +60,7 @@ export function buildProfileLicenseOptions(currentLicense: string | null | undef
 
 export const PROPERTY_TYPE_OPTIONS: SelectOption[] = [
   { label: 'Datatype (sh:datatype)', value: 'datatype' },
+  { label: 'Value (sh:hasValue)', value: 'value' },
   { label: 'Exactly One Datatype (sh:xone)', value: 'exactlyOneOfDatatypes' },
   { label: 'Node Kind (sh:nodeKind)', value: 'nodeKind' },
   { label: 'Class (sh:class)', value: 'class' },
@@ -80,6 +81,15 @@ export const SHACL_DATATYPE_OPTIONS: SelectOption[] = [
   { label: 'xsd:float', value: 'http://www.w3.org/2001/XMLSchema#float' },
   { label: 'xsd:integer', value: 'http://www.w3.org/2001/XMLSchema#integer' },
   { label: 'xsd:anyURI', value: 'http://www.w3.org/2001/XMLSchema#anyURI' },
+  ...[
+    'time', 'dateTimeStamp', 'gYear', 'gMonth', 'gDay', 'gYearMonth', 'gMonthDay',
+    'duration', 'yearMonthDuration', 'dayTimeDuration',
+    'byte', 'short', 'int', 'long', 'unsignedByte', 'unsignedShort', 'unsignedInt', 'unsignedLong',
+    'positiveInteger', 'nonNegativeInteger', 'negativeInteger', 'nonPositiveInteger',
+    'hexBinary', 'base64Binary', 'language', 'normalizedString', 'token', 'NMTOKEN', 'Name', 'NCName',
+  ].map(name => ({ label: `xsd:${name}`, value: `http://www.w3.org/2001/XMLSchema#${name}` })),
+  { label: 'rdf:HTML', value: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#HTML' },
+  { label: 'rdf:XMLLiteral', value: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral' },
 ]
 
 export function defaultDatatypeLabel(datatypeIri: string): string {

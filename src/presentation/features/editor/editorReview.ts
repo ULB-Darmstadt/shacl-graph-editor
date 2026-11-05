@@ -66,6 +66,7 @@ export function buildEditorReviewItems(shapes: NodeShape[]): EditorReviewItem[] 
       addPropertyIssue(items, shape, property, propertySortPrefix, 'urgent', 'nodeTarget', (propertyType === 'profile' || propertyType === 'qualifiedProfile') && nodeTargetCount === 0, 'Profile connection has no target', 'Select a node target.', shapeLabel, propertyLabel)
       addPropertyIssue(items, shape, property, propertySortPrefix, 'warning', 'qualifiedCount', missingQualifiedCounts, 'Qualified profile has no count', 'Add a qualified min or max count.', shapeLabel, propertyLabel)
       addPropertyIssue(items, shape, property, propertySortPrefix, 'urgent', 'allowedValues', propertyType === 'list' && (!property.allowedValues || property.allowedValues.length === 0), 'sh:in property has no values', 'Add values to choose from.', shapeLabel, propertyLabel)
+      addPropertyIssue(items, shape, property, propertySortPrefix, 'urgent', 'hasValues', propertyType === 'value' && !property.hasValues?.length, 'Value property has no required values', 'Add at least one required value.', shapeLabel, propertyLabel)
       addPropertyIssue(items, shape, property, propertySortPrefix, 'warning', 'description', !property.description?.trim(), 'Property has no description', 'Add a property description.', shapeLabel, propertyLabel)
     })
   })

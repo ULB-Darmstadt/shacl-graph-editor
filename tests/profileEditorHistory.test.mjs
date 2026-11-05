@@ -42,6 +42,133 @@ beforeEach(() => {
   store = useProfileEditorStore()
 })
 
+function updateFixedValue(shapeIri, propertyIri, field, value) {
+  const property = store.applicationProfile.findNodeShape(shapeIri).properties.find(candidate => candidate.nodeId.value === propertyIri)
+  const rows = (property.hasValues ?? []).map(term => ({
+    value: term.value,
+    datatype: term.termType === 'Literal' ? term.datatype.value : term.termType === 'NamedNode' ? '@iri' : '@blank',
+    language: term.termType === 'Literal' ? term.language : '',
+  }))
+  if (!rows.length) rows.push({ value: '', datatype: 'http://www.w3.org/2001/XMLSchema#string', language: '' })
+  rows[0][field === 'hasValue' ? 'value' : field === 'hasValueDatatype' ? 'datatype' : 'language'] = value
+  store.updatePropertyField(shapeIri, propertyIri, 'hasValues', JSON.stringify(rows))
+}
+
+test('Value property type serializes typed fixed values and survives import and undo', async () => {
+  const iri = store.createProfile()
+  const field = store.createProperty(iri)
+  store.setPropertyType(iri, field, 'value')
+  updateFixedValue(iri, field, 'hasValue', '42')
+  updateFixedValue(iri, field, 'hasValueDatatype', 'http://www.w3.org/2001/XMLSchema#integer')
+  await nextTick()
+  const { parseShaclProfile } = await server.ssrLoadModule('/src/infrastructure/shacl/shaclProfileParser.ts')
+  const parsed = parseShaclProfile(store.profiles[0].rawTurtle, 'value.ttl', 'uploaded')
+  assert.equal(parsed.nodeShapes[0].properties[0].editorType, 'value')
+  assert.equal(parsed.nodeShapes[0].properties[0].hasValues[0].value, '42')
+  assert.equal(parsed.nodeShapes[0].properties[0].hasValues[0].datatype.value, 'http://www.w3.org/2001/XMLSchema#integer')
+  assert.equal(parsed.nodeShapes[0].properties[0].datatype, undefined)
+  updateFixedValue(iri, field, 'hasValue', '0')
+  await nextTick()
+  assert.equal(store.undo(), true)
+  assert.equal(store.nodeShapes[0].properties[0].hasValues[0].value, '42')
+  assert.match(store.nodeShapes[0].properties[0].hasValues[0].toNT(), /integer/)
+  assert.equal(store.redo(), true)
+  assert.equal(store.nodeShapes[0].properties[0].hasValues[0].value, '0')
+})
+
+test('fixed strings retain empty values, whitespace, escaped text, and language tags', async () => {
+  const iri = store.createProfile()
+  const field = store.createProperty(iri)
+  store.setPropertyType(iri, field, 'value')
+  updateFixedValue(iri, field, 'hasValue', '')
+  assert.match(store.profiles[0].rawTurtle, /sh:hasValue ""/)
+  updateFixedValue(iri, field, 'hasValue', '  A "quoted" value\nnext line  ')
+  updateFixedValue(iri, field, 'hasValueDatatype', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#langString')
+  updateFixedValue(iri, field, 'hasValueLanguage', 'de')
+  const { parseShaclProfile } = await server.ssrLoadModule('/src/infrastructure/shacl/shaclProfileParser.ts')
+  const fieldValue = parseShaclProfile(store.profiles[0].rawTurtle, 'lang.ttl', 'uploaded').nodeShapes[0].properties[0].hasValues[0]
+  assert.equal(fieldValue.value, '  A "quoted" value\nnext line  ')
+  assert.equal(fieldValue.language, 'de')
+  store.setPropertyType(iri, field, 'datatype')
+  assert.equal(store.nodeShapes[0].properties[0].hasValues, undefined)
+  assert.doesNotMatch(store.profiles[0].rawTurtle, /sh:hasValue/)
+})
+
+test('all datatype options serialize as typed fixed values without losing their datatype', async () => {
+  const { SHACL_DATATYPE_OPTIONS } = await server.ssrLoadModule('/src/application/profiles/profileEditorCatalogs.ts')
+  const { Parser, Store } = await import('n3')
+  assert.equal(new Set(SHACL_DATATYPE_OPTIONS.map(option => option.value)).size, SHACL_DATATYPE_OPTIONS.length)
+  assert.equal(SHACL_DATATYPE_OPTIONS.length, 42)
+  const iri = store.createProfile()
+  const field = store.createProperty(iri)
+  store.setPropertyType(iri, field, 'value')
+  for (const option of SHACL_DATATYPE_OPTIONS) {
+    updateFixedValue(iri, field, 'hasValueDatatype', option.value)
+    updateFixedValue(iri, field, 'hasValue', '42')
+    const graph = new Store(new Parser().parse(store.profiles[0].rawTurtle))
+    const [value] = graph.getObjects(null, 'http://www.w3.org/ns/shacl#hasValue', null)
+    assert.equal(value.datatype.value, option.value, option.label)
+    assert.equal(value.value, '42', option.label)
+  }
+})
+
+test('imported fixed values stay locked and preserve resource values', async () => {
+  const iri = 'https://example.org/fixed'
+  const turtle = `@prefix sh: <http://www.w3.org/ns/shacl#> .
+    <${iri}> a sh:NodeShape ; sh:property <${iri}/value> .
+    <${iri}/value> sh:path <https://example.org/type> ; sh:hasValue <https://example.org/required> .`
+  await store.addProfileFromTurtle(turtle, 'fixed.ttl', iri)
+  assert.equal(store.nodeShapes[0].properties[0].editorType, 'value')
+  const before = JSON.stringify(store.profiles)
+  updateFixedValue(iri, `${iri}/value`, 'hasValue', 'https://example.org/changed')
+  updateFixedValue(iri, `${iri}/value`, 'hasValueDatatype', 'http://www.w3.org/2001/XMLSchema#string')
+  assert.equal(JSON.stringify(store.profiles), before)
+  assert.match(store.profiles[0].rawTurtle, /sh:hasValue <https:\/\/example.org\/required>/)
+  store.lockImportedProfiles = false
+  updateFixedValue(iri, `${iri}/value`, 'hasValue', 'https://example.org/changed')
+  assert.equal(store.nodeShapes[0].properties[0].hasValues[0].termType, 'NamedNode')
+  assert.equal(store.nodeShapes[0].properties[0].hasValues[0].value, 'https://example.org/changed')
+})
+
+test('multiple required values retain individual datatypes through save, import, removal and undo', async () => {
+  const iri = store.createProfile()
+  const field = store.createProperty(iri)
+  store.setPropertyType(iri, field, 'value')
+  const rows = [
+    { value: '0', datatype: 'http://www.w3.org/2001/XMLSchema#integer' },
+    { value: 'false', datatype: 'http://www.w3.org/2001/XMLSchema#boolean' },
+    { value: 'Hallo', datatype: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#langString', language: 'de' },
+    { value: 'https://example.org/required', datatype: '@iri' },
+  ]
+  store.updatePropertyField(iri, field, 'hasValues', JSON.stringify(rows))
+  await nextTick()
+  const original = store.nodeShapes[0].properties[0].hasValues.map(value => value.toNT())
+  const { parseShaclProfile } = await server.ssrLoadModule('/src/infrastructure/shacl/shaclProfileParser.ts')
+  const imported = parseShaclProfile(store.profiles[0].rawTurtle, 'multiple.ttl', 'uploaded').nodeShapes[0].properties[0]
+  assert.equal(imported.editorType, 'value')
+  assert.deepEqual(imported.hasValues.map(value => value.toNT()).sort(), [...original].sort())
+  const { serializeProfilesForPreview } = await server.ssrLoadModule('/src/infrastructure/shacl/profilePreviewSerializer.ts')
+  const { Parser, Store } = await import('n3')
+  const preview = new Store(new Parser().parse(serializeProfilesForPreview(store.profiles)))
+  const previewFields = preview.getObjects(iri, 'http://www.w3.org/ns/shacl#property', null)
+  assert.equal(previewFields.length, rows.length)
+  for (const previewField of previewFields) {
+    assert.equal(preview.countQuads(previewField, 'http://www.w3.org/ns/shacl#hasValue', null, null), 1)
+  }
+  assert.equal(parseShaclProfile(store.profiles[0].rawTurtle, 'export.ttl', 'uploaded').nodeShapes[0].properties.length, 1)
+  store.updatePropertyField(iri, field, 'hasValues', JSON.stringify(rows.slice(1)))
+  await nextTick()
+  assert.equal(store.nodeShapes[0].properties[0].hasValues.length, 3)
+  assert.equal(store.undo(), true)
+  assert.deepEqual(store.nodeShapes[0].properties[0].hasValues.map(value => value.toNT()), original)
+  assert.equal(store.redo(), true)
+  assert.equal(store.nodeShapes[0].properties[0].hasValues.length, 3)
+  store.updatePropertyField(iri, field, 'hasValues', '[]')
+  assert.equal(store.nodeShapes[0].properties[0].editorType, 'value')
+  assert.deepEqual(store.nodeShapes[0].properties[0].hasValues, [])
+  assert.doesNotMatch(store.profiles[0].rawTurtle, /sh:hasValue/)
+})
+
 test('profile URL edits update identity, references and Turtle, and support undo and redo', async () => {
   const original = store.createProfile()
   const child = store.createProfile()
