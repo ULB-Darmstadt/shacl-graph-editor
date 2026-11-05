@@ -20,6 +20,8 @@ SHACL Graph Editor is a browser-based editor for the workflow:
 - Hide or show outgoing connections from a field or an entire profile using its right-click menu. Hidden branches leave a fading connector; profiles still reached by other fields stay visible.
 - Search visible canvas profiles in the left sidebar, grouped into Drafts and Existing, and select an entry to focus its node.
 - Move properties between profiles or reorder them within a profile by drag and drop.
+- Move fields between editable parent and child sections within a node using their drag handles. Locked imported profiles stay protected.
+- Right-click a profile on the canvas or in the sidebar and choose Preview to open its form and Turtle code.
 - Right-click a field to delete it or create an own-property copy of its name, description, and IRI for additional constraints.
 - Right-click an editable field to create a new profile with the same name and connect it directly using `sh:node`.
 - Drag a profile's header connector to another profile's Add Field connector to create a field named after the referenced profile with a `sh:node` link.

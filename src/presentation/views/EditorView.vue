@@ -552,7 +552,6 @@ function handleShellContextMenu(event: MouseEvent): void {
 }
 
 function openShapeHeaderMenu(shape: (typeof nodeShapes.value)[number], event: MouseEvent, options: { allowDelete?: boolean; connectionShapeIri?: string } = {}): void {
-  if (readOnlyMode.value) return
   event.preventDefault()
   event.stopPropagation()
   closeCanvasMenu()
@@ -567,7 +566,7 @@ function openShapeHeaderMenu(shape: (typeof nodeShapes.value)[number], event: Mo
     shapeIri: shape.nodeId.value,
     connectionShapeIri: options.connectionShapeIri ?? shape.nodeId.value,
     label: shape.label ?? shape.nodeId.value,
-    allowDelete: (options.allowDelete ?? true) && !profileStore.isShapeLocked(shape.nodeId.value),
+    allowDelete: !readOnlyMode.value && (options.allowDelete ?? true) && !profileStore.isShapeLocked(shape.nodeId.value),
   }
 }
 
@@ -825,6 +824,13 @@ function handleShapeHeaderDeleteProfile(): void {
       if (!result.ok) window.alert(result.reason ?? 'Profile cannot be deleted.')
     },
   })
+}
+
+function handleShapeHeaderPreview(): void {
+  const shapeIri = shapeHeaderMenu.value.shapeIri
+  closeShapeHeaderMenu()
+  const shape = shapeIri ? profileStore.applicationProfile.findNodeShape(shapeIri) : null
+  if (shape) void openShapePreview(shape)
 }
 
 function handleShapeHeaderCreateInheritedProfile(): void {
@@ -1548,6 +1554,10 @@ void fetchSubjectHeadingOptions().then(options => {
             :style="{ left: `${shapeHeaderMenu.x}px`, top: `${shapeHeaderMenu.y}px` }"
           >
             <div class="shape-header-menu__title">{{ shapeHeaderMenu.label ?? 'Profile' }}</div>
+            <button type="button" class="canvas-menu__item" @click="handleShapeHeaderPreview">
+              <i class="pi pi-code canvas-menu__icon" aria-hidden="true" />
+              <span class="canvas-menu__label">Preview</span>
+            </button>
             <button v-if="profileMenuConnectionKeys().length" type="button" class="canvas-menu__item" :disabled="reviewMode || profileMenuConnectionKeys().every(key => collapsedPropertyConnections.has(key))" :title="reviewMode ? 'All connections are shown in Review mode.' : undefined" @click="setProfileConnectionsHidden(true)">
               <i class="pi pi-eye-slash canvas-menu__icon" aria-hidden="true" />
               <span class="canvas-menu__label">Hide all connections</span>
@@ -1556,7 +1566,7 @@ void fetchSubjectHeadingOptions().then(options => {
               <i class="pi pi-eye canvas-menu__icon" aria-hidden="true" />
               <span class="canvas-menu__label">Show all connections</span>
             </button>
-            <button type="button" class="canvas-menu__item" @click="handleShapeHeaderCreateInheritedProfile">
+            <button v-if="!readOnlyMode" type="button" class="canvas-menu__item" @click="handleShapeHeaderCreateInheritedProfile">
               <i class="pi pi-sitemap canvas-menu__icon" />
               <span class="canvas-menu__label">Create inherited profile</span>
             </button>
@@ -1585,7 +1595,7 @@ void fetchSubjectHeadingOptions().then(options => {
             </button>
             <button type="button" class="canvas-menu__item" @click="handleCopyProperty">
               <i class="pi pi-copy canvas-menu__icon" aria-hidden="true" />
-              <span class="canvas-menu__label">Create copy</span>
+              <span class="canvas-menu__label">Add profile specific constraint</span>
             </button>
             <button type="button" class="canvas-menu__item" :disabled="!profileStore.canCreateConnectedProfileFromProperty(propertyMenu.shapeIri, propertyMenu.propertyNodeId)" @click="createAndConnectProfileFromField">
               <i class="pi pi-plus-circle canvas-menu__icon" aria-hidden="true" />

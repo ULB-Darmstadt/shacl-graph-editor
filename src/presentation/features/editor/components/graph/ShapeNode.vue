@@ -13,11 +13,13 @@ const activePropertyDrag = reactive<{
   x: number
   y: number
   hasLeftSource: boolean
+  originShapeIri: string | null
 }>({
   payload: null,
   x: 0,
   y: 0,
   hasLeftSource: false,
+  originShapeIri: null,
 })
 </script>
 
@@ -39,7 +41,7 @@ const profiles = useProfileEditorStore()
 const dragOverAllowed = ref(false)
 const dragOverBlocked = ref(false)
 const dropPreviewIndex = ref<number | null>(null)
-const ownPropertiesListRef = ref<HTMLElement | null>(null)
+const dropTargetShapeIri = ref<string | null>(null)
 const shapeNodeRef = ref<HTMLElement | null>(null)
 const editingShapeIri = ref<string | null>(null)
 const editingPropertyKey = ref<string | null>(null)
@@ -350,22 +352,21 @@ watch(
   { immediate: true, flush: 'post' },
 )
 
-function propertyDragPayload(property: PropertyShape): PropertyDragPayload {
+function propertyDragPayload(property: PropertyShape, sourceShapeIri: string): PropertyDragPayload {
   return {
-    sourceShapeIri: props.data.representedShapeIri,
+    sourceShapeIri,
     propertyNodeId: property.nodeId.value,
     label: propertyLabel(property),
   }
 }
 
-function isSourceShape(payload: PropertyDragPayload): boolean {
-  return payload.sourceShapeIri === props.data.representedShapeIri
+function isSourceShape(payload: PropertyDragPayload, targetShapeIri = props.data.representedShapeIri): boolean {
+  return payload.sourceShapeIri === targetShapeIri
 }
 
-function canMovePropertyToThisShape(payload: PropertyDragPayload): boolean {
-  if (!isEditable() || profiles.isPropertyLocked(payload.sourceShapeIri, payload.propertyNodeId)) return false
+function canMovePropertyToThisShape(payload: PropertyDragPayload, targetShapeIri: string): boolean {
+  if (!isEditable(targetShapeIri) || profiles.isPropertyLocked(payload.sourceShapeIri, payload.propertyNodeId)) return false
   if (!props.data.onMoveProperty) return false
-  if (isSourceShape(payload)) return true
 
   const sourceShape = profiles.applicationProfile.findNodeShape(payload.sourceShapeIri)
   const property = sourceShape?.properties.find(candidate => candidate.nodeId.value === payload.propertyNodeId)
@@ -403,6 +404,7 @@ function resetDropPreview(): void {
   dragOverAllowed.value = false
   dragOverBlocked.value = false
   dropPreviewIndex.value = null
+  dropTargetShapeIri.value = null
 }
 
 function resetPropertyDragState(): void {
@@ -410,22 +412,31 @@ function resetPropertyDragState(): void {
   activePropertyDrag.x = 0
   activePropertyDrag.y = 0
   activePropertyDrag.hasLeftSource = false
+  activePropertyDrag.originShapeIri = null
   resetDropPreview()
 }
 
-function insertionIndexForPointer(event: DragEvent): number {
-  const rows = Array.from(ownPropertiesListRef.value?.querySelectorAll<HTMLElement>('.row') ?? [])
-  if (rows.length === 0) return 0
+function targetShapeForDrop(event: DragEvent): string {
+  const target = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-property-owner]') : null
+  return target?.dataset.propertyOwner ?? props.data.representedShapeIri
+}
 
-  const index = rows.findIndex(row => {
+function insertionIndexForPointer(event: DragEvent, targetShapeIri: string): number {
+  const list = Array.from(shapeNodeRef.value?.querySelectorAll<HTMLElement>('[data-property-list]') ?? [])
+    .find(element => element.dataset.propertyOwner === targetShapeIri)
+  const rows = Array.from(list?.querySelectorAll<HTMLElement>('.row') ?? [])
+  const properties = profiles.applicationProfile.findNodeShape(targetShapeIri)?.properties.filter(property => !property.inherited) ?? []
+
+  const row = rows.find(row => {
     const rect = row.getBoundingClientRect()
-    return event.clientY < rect.top + (rect.height / 2)
+    return rect.height > 0 && event.clientY < rect.top + (rect.height / 2)
   })
-  return index >= 0 ? index : rows.length
+  return row ? properties.findIndex(property => property.nodeId.value === row.dataset.propertyId) : properties.length
 }
 
 function sourcePropertyIndex(payload: PropertyDragPayload): number {
-  return ownProperties().findIndex(property => property.nodeId.value === payload.propertyNodeId)
+  return profiles.applicationProfile.findNodeShape(payload.sourceShapeIri)?.properties
+    .filter(property => !property.inherited).findIndex(property => property.nodeId.value === payload.propertyNodeId) ?? -1
 }
 
 function isNoopSourceReorder(payload: PropertyDragPayload, targetIndex: number): boolean {
@@ -433,18 +444,18 @@ function isNoopSourceReorder(payload: PropertyDragPayload, targetIndex: number):
   return sourceIndex >= 0 && (targetIndex === sourceIndex || targetIndex === sourceIndex + 1)
 }
 
-function isSourcePropertyHidden(property: PropertyShape): boolean {
+function isSourcePropertyHidden(property: PropertyShape, shapeIri = props.data.representedShapeIri): boolean {
   const payload = activePropertyDrag.payload
   return Boolean(
     payload
     && activePropertyDrag.hasLeftSource
-    && payload.sourceShapeIri === props.data.representedShapeIri
+    && payload.sourceShapeIri === shapeIri
     && payload.propertyNodeId === property.nodeId.value,
   )
 }
 
 function isDragPreviewOwner(): boolean {
-  return activePropertyDrag.payload?.sourceShapeIri === props.data.representedShapeIri
+  return activePropertyDrag.originShapeIri === props.data.representedShapeIri
 }
 
 function dragPreviewStyle(): Record<string, string> {
@@ -454,12 +465,15 @@ function dragPreviewStyle(): Record<string, string> {
   }
 }
 
-function onPropertyDragStart(property: PropertyShape, event: DragEvent): void {
-  if (!isPropertyEditable(property) || property.inherited || !event.dataTransfer) return
+function onPropertyDragStart(property: PropertyShape, event: DragEvent, sourceShapeIri = props.data.representedShapeIri): void {
+  const sourceProperty = profiles.applicationProfile.findNodeShape(sourceShapeIri)?.properties
+    .find(candidate => candidate.nodeId.value === property.nodeId.value && !candidate.inherited)
+  if (!isPropertyEditable(property, sourceShapeIri) || !sourceProperty || !event.dataTransfer) return
 
   updateDragPosition(event)
   event.dataTransfer.effectAllowed = 'move'
-  activePropertyDrag.payload = propertyDragPayload(property)
+  activePropertyDrag.payload = propertyDragPayload(property, sourceShapeIri)
+  activePropertyDrag.originShapeIri = props.data.representedShapeIri
   activePropertyDrag.hasLeftSource = false
   event.dataTransfer.setData(PROPERTY_DRAG_MIME_TYPE, JSON.stringify(activePropertyDrag.payload))
   const dragImage = document.createElement('canvas')
@@ -479,8 +493,10 @@ function onPropertyDragEnd(): void {
 function onShapeDragOver(event: DragEvent): void {
   const payload = parsePropertyDragPayload(event)
   if (!payload) return
-  if (!canMovePropertyToThisShape(payload)) {
+  const targetShapeIri = targetShapeForDrop(event)
+  if (!canMovePropertyToThisShape(payload, targetShapeIri)) {
     event.preventDefault()
+    resetDropPreview()
     dragOverBlocked.value = true
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'none'
     return
@@ -488,10 +504,11 @@ function onShapeDragOver(event: DragEvent): void {
 
   event.preventDefault()
   updateDragPosition(event)
+  dropTargetShapeIri.value = targetShapeIri
+  activePropertyDrag.hasLeftSource = !isSourceShape(payload, targetShapeIri)
 
-  if (isSourceShape(payload)) {
-    activePropertyDrag.hasLeftSource = false
-    const targetIndex = insertionIndexForPointer(event)
+  if (isSourceShape(payload, targetShapeIri)) {
+    const targetIndex = insertionIndexForPointer(event, targetShapeIri)
     dragOverAllowed.value = !isNoopSourceReorder(payload, targetIndex)
     dragOverBlocked.value = false
     dropPreviewIndex.value = targetIndex
@@ -499,10 +516,10 @@ function onShapeDragOver(event: DragEvent): void {
     return
   }
 
-  const allowed = canMovePropertyToThisShape(payload)
+  const allowed = canMovePropertyToThisShape(payload, targetShapeIri)
   dragOverAllowed.value = allowed
   dragOverBlocked.value = !allowed
-  dropPreviewIndex.value = allowed ? insertionIndexForPointer(event) : null
+  dropPreviewIndex.value = allowed ? insertionIndexForPointer(event, targetShapeIri) : null
   if (event.dataTransfer) event.dataTransfer.dropEffect = allowed ? 'move' : 'none'
 }
 
@@ -521,7 +538,8 @@ function onShapeDragLeave(event: DragEvent): void {
 function onShapeDrop(event: DragEvent): void {
   const payload = parsePropertyDragPayload(event)
   if (!payload) return
-  if (!canMovePropertyToThisShape(payload)) {
+  const targetShapeIri = targetShapeForDrop(event)
+  if (!canMovePropertyToThisShape(payload, targetShapeIri)) {
     event.preventDefault()
     resetPropertyDragState()
     return
@@ -530,20 +548,21 @@ function onShapeDrop(event: DragEvent): void {
   event.preventDefault()
   updateDragPosition(event)
 
-  if (isSourceShape(payload)) {
-    const targetIndex = dropPreviewIndex.value ?? insertionIndexForPointer(event)
+  const targetIndex = dropTargetShapeIri.value === targetShapeIri
+    ? dropPreviewIndex.value ?? insertionIndexForPointer(event, targetShapeIri)
+    : insertionIndexForPointer(event, targetShapeIri)
+  if (isSourceShape(payload, targetShapeIri)) {
     if (!isNoopSourceReorder(payload, targetIndex)) {
-      props.data.onMoveProperty?.(payload.sourceShapeIri, payload.propertyNodeId, props.data.representedShapeIri, targetIndex)
+      props.data.onMoveProperty?.(payload.sourceShapeIri, payload.propertyNodeId, targetShapeIri, targetIndex)
     }
     resetPropertyDragState()
     return
   }
 
-  const targetIndex = dropPreviewIndex.value ?? insertionIndexForPointer(event)
   resetDropPreview()
-  if (!canMovePropertyToThisShape(payload)) return
+  if (!canMovePropertyToThisShape(payload, targetShapeIri)) return
 
-  props.data.onMoveProperty?.(payload.sourceShapeIri, payload.propertyNodeId, props.data.representedShapeIri, targetIndex)
+  props.data.onMoveProperty?.(payload.sourceShapeIri, payload.propertyNodeId, targetShapeIri, targetIndex)
   resetPropertyDragState()
 }
 </script>
@@ -609,13 +628,14 @@ function onShapeDrop(event: DragEvent): void {
         aria-label="Preview shape"
         @click.stop="data.onPreview?.()"
       >
-        <i class="pi pi-eye" />
+        <i class="pi pi-code" aria-hidden="true" />
       </button>
     </header>
 
     <template v-for="section in inheritedSections()" :key="`${section.depth}:${section.title}`">
       <div
         class="section-label inherited-section-label inherited-section-button"
+        :data-property-owner="section.shapeIri"
         :class="[
           inheritedShapeReviewClass(section.shapeIri),
           { 'is-selected': isSelectedInheritedProfile(section.shapeIri) },
@@ -645,86 +665,101 @@ function onShapeDrop(event: DragEvent): void {
         </span>
       </div>
 
-      <ul class="properties">
-        <li
-          v-for="property in section.properties"
-          :key="`inh:${section.shapeIri}:${property.nodeId.value}`"
-          class="row inherited-row nodrag"
-          :class="[
-            propertyReviewClass(property, section.shapeIri),
-            { 'is-ref': isObjectRef(property), 'is-selected': isSelectedProperty(property) || isInheritedPropertyHighlighted(section.shapeIri), 'is-shared-iri': sharesSelectedPropertyIri(property) },
-          ]"
-          @click.stop="selectProperty(property)"
-          @dblclick.stop="startPropertyNameEdit(section.shapeIri, property, $event)"
-          @contextmenu.stop.prevent="openPropertyContextMenu(property, $event)"
-        >
-          <template v-if="isObjectRef(property)">
-            <i class="pi pi-book field-icon" :class="{ 'field-icon--muted': !hasTermIri(property) }" />
-            <input
-              v-if="editingPropertyKey === propertyEditKey(section.shapeIri, property)"
-              data-inline-name-editor="active"
-              v-model="inlineNameDraft"
-              class="inline-name-editor prop-name"
-              aria-label="Property name"
+      <ul class="properties" data-property-list :data-property-owner="section.shapeIri">
+        <template v-for="(property, index) in section.properties" :key="`inh:${section.shapeIri}:${property.nodeId.value}`">
+          <li v-if="dropTargetShapeIri === section.shapeIri && dropPreviewIndex === index" class="property-drop-line" />
+          <li
+            v-show="!isSourcePropertyHidden(property, section.shapeIri)"
+            :data-property-id="property.nodeId.value"
+            class="row inherited-row nodrag"
+            :class="[
+              propertyReviewClass(property, section.shapeIri),
+              { 'is-ref': isObjectRef(property), 'is-selected': isSelectedProperty(property) || isInheritedPropertyHighlighted(section.shapeIri), 'is-shared-iri': sharesSelectedPropertyIri(property) },
+            ]"
+            @click.stop="selectProperty(property)"
+            @dblclick.stop="startPropertyNameEdit(section.shapeIri, property, $event)"
+            @contextmenu.stop.prevent="openPropertyContextMenu(property, $event)"
+          >
+            <i
+              v-if="isPropertyEditable(property, section.shapeIri)"
+              class="pi pi-bars property-drag-grip"
+              draggable="true"
+              title="Move field"
               @click.stop
-              @dblclick.stop
-              @input="onPropertyNameInput(section.shapeIri, property, $event)"
-              @blur="commitPropertyNameEdit(section.shapeIri, property)"
-              @keydown.enter.prevent="commitPropertyNameEdit(section.shapeIri, property)"
-              @keydown.esc.prevent="cancelPropertyNameEdit(section.shapeIri, property)"
+              @dragstart.stop="onPropertyDragStart(property, $event, section.shapeIri)"
+              @drag.stop="onPropertyDrag"
+              @dragend="onPropertyDragEnd"
             />
-            <span v-else class="prop-name">{{ propertyLabel(property) }}</span>
-          </template>
+            <template v-if="isObjectRef(property)">
+              <i class="pi pi-book field-icon" :class="{ 'field-icon--muted': !hasTermIri(property) }" />
+              <input
+                v-if="editingPropertyKey === propertyEditKey(section.shapeIri, property)"
+                data-inline-name-editor="active"
+                v-model="inlineNameDraft"
+                class="inline-name-editor prop-name"
+                aria-label="Property name"
+                @click.stop
+                @dblclick.stop
+                @input="onPropertyNameInput(section.shapeIri, property, $event)"
+                @blur="commitPropertyNameEdit(section.shapeIri, property)"
+                @keydown.enter.prevent="commitPropertyNameEdit(section.shapeIri, property)"
+                @keydown.esc.prevent="cancelPropertyNameEdit(section.shapeIri, property)"
+              />
+              <span v-else class="prop-name">{{ propertyLabel(property) }}</span>
+            </template>
 
-          <template v-else>
-            <i class="pi pi-book field-icon" :class="{ 'field-icon--muted': !hasTermIri(property) }" />
-            <input
-              v-if="editingPropertyKey === propertyEditKey(section.shapeIri, property)"
-              data-inline-name-editor="active"
-              v-model="inlineNameDraft"
-              class="inline-name-editor prop-name"
-              aria-label="Property name"
-              @click.stop
-              @dblclick.stop
-              @input="onPropertyNameInput(section.shapeIri, property, $event)"
-              @blur="commitPropertyNameEdit(section.shapeIri, property)"
-              @keydown.enter.prevent="commitPropertyNameEdit(section.shapeIri, property)"
-              @keydown.esc.prevent="cancelPropertyNameEdit(section.shapeIri, property)"
+            <template v-else>
+              <i class="pi pi-book field-icon" :class="{ 'field-icon--muted': !hasTermIri(property) }" />
+              <input
+                v-if="editingPropertyKey === propertyEditKey(section.shapeIri, property)"
+                data-inline-name-editor="active"
+                v-model="inlineNameDraft"
+                class="inline-name-editor prop-name"
+                aria-label="Property name"
+                @click.stop
+                @dblclick.stop
+                @input="onPropertyNameInput(section.shapeIri, property, $event)"
+                @blur="commitPropertyNameEdit(section.shapeIri, property)"
+                @keydown.enter.prevent="commitPropertyNameEdit(section.shapeIri, property)"
+                @keydown.esc.prevent="cancelPropertyNameEdit(section.shapeIri, property)"
+              />
+              <span v-else class="prop-name">{{ propertyLabel(property) }}</span>
+            </template>
+
+            <span class="field-hints">
+              <span v-if="propertyDatatypeHint(property)" class="field-hints__datatype" :title="property.datatype?.value">{{ propertyDatatypeHint(property) }}</span>
+              <span class="field-hints__cardinality" title="Minimum...maximum count">{{ propertyCardinalityHint(property) }}</span>
+            </span>
+
+            <span
+              v-if="data.collapsedPropertyKeys?.includes(property.nodeId.value)"
+              class="connection-fade"
+              aria-hidden="true"
             />
-            <span v-else class="prop-name">{{ propertyLabel(property) }}</span>
-          </template>
 
-          <span class="field-hints">
-            <span v-if="propertyDatatypeHint(property)" class="field-hints__datatype" :title="property.datatype?.value">{{ propertyDatatypeHint(property) }}</span>
-            <span class="field-hints__cardinality" title="Minimum...maximum count">{{ propertyCardinalityHint(property) }}</span>
-          </span>
-
-          <span
-            v-if="data.collapsedPropertyKeys?.includes(property.nodeId.value)"
-            class="connection-fade"
-            aria-hidden="true"
-          />
-
-          <Handle
-            v-if="hasRelationshipHandle(property)"
-            :id="`ref:${property.nodeId.value}`"
-            type="source"
-            :position="Position.Right"
-            :connectable="isPropertyEditable(property)"
-            class="handle handle-ref-source"
-            :class="{
-              'handle-active': isPropertyHandleOccupied(property),
-              'handle-class-active': isPropertyClassHandleOccupied(property),
-              'handle-readonly': !isPropertyEditable(property),
-            }"
-          />
-        </li>
+            <Handle
+              v-if="hasRelationshipHandle(property)"
+              :id="`ref:${property.nodeId.value}`"
+              type="source"
+              :position="Position.Right"
+              :connectable="isPropertyEditable(property)"
+              class="handle handle-ref-source"
+              :class="{
+                'handle-active': isPropertyHandleOccupied(property),
+                'handle-class-active': isPropertyClassHandleOccupied(property),
+                'handle-readonly': !isPropertyEditable(property),
+              }"
+            />
+          </li>
+        </template>
+        <li v-if="dropTargetShapeIri === section.shapeIri && dropPreviewIndex === section.properties.length" class="property-drop-line" />
       </ul>
 
       <button
         v-if="data.onAddField && isEditable(section.shapeIri) && isSelectedInheritedProfile(section.shapeIri)"
         type="button"
         class="add-field-row add-field-row--inherited nodrag"
+        :data-property-owner="section.shapeIri"
         :style="{ paddingLeft: `${12 + (section.depth * 18)}px` }"
         @click.stop="addField(section.shapeIri)"
       >
@@ -737,14 +772,16 @@ function onShapeDrop(event: DragEvent): void {
       v-if="(inheritedProperties().length > 0 && ownProperties().length > 0)
         || (isInteractive() && !data.reviewMode && inheritedSections().length > 0)"
       class="section-label"
+      :data-property-owner="data.representedShapeIri"
     >
       Own Properties
     </div>
 
-    <ul v-if="ownProperties().length > 0 || dropPreviewIndex !== null" ref="ownPropertiesListRef" class="properties properties--own">
+    <ul v-if="ownProperties().length > 0 || (dropTargetShapeIri === data.representedShapeIri && dropPreviewIndex !== null)" class="properties properties--own" data-property-list :data-property-owner="data.representedShapeIri">
       <template v-for="(property, index) in visibleOwnProperties" :key="`own:${property.nodeId.value}`">
-        <li v-if="dropPreviewIndex === index" :key="`drop:${index}`" class="property-drop-line" />
+        <li v-if="dropTargetShapeIri === data.representedShapeIri && dropPreviewIndex === index" :key="`drop:${index}`" class="property-drop-line" />
         <li
+          :data-property-id="property.nodeId.value"
           class="row nodrag"
           :class="[
             propertyReviewClass(property),
@@ -836,7 +873,7 @@ function onShapeDrop(event: DragEvent): void {
           />
         </li>
       </template>
-      <li v-if="dropPreviewIndex === visibleOwnProperties.length" class="property-drop-line" />
+      <li v-if="dropTargetShapeIri === data.representedShapeIri && dropPreviewIndex === visibleOwnProperties.length" class="property-drop-line" />
     </ul>
 
     <div v-if="data.onAddField && isEditable()" class="add-field-connection-row">
@@ -1307,5 +1344,17 @@ header {
 
 .add-field-row__icon {
   font-size: 0.8rem;
+}
+
+/* Round the final surface itself: clipping the node would also clip its connection handles. */
+.shape-node > :nth-last-child(1 of :not(.properties:empty)),
+.shape-node > .properties:nth-last-child(1 of :not(.properties:empty)) > .row:last-child {
+  border-bottom-left-radius: calc(var(--radius-md) - 1px);
+  border-bottom-right-radius: calc(var(--radius-md) - 1px);
+}
+
+.shape-node > .add-field-row--inherited {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 </style>

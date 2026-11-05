@@ -79,7 +79,7 @@ export function buildEditorShapeNodes(
       onRenameProperty: interactive ? renameProperty : undefined,
       onCommitDraftProperty: interactive ? commitDraftProperty : undefined,
       onDeleteProperty: interactive ? deleteProperty : undefined,
-      onShapeHeaderContextMenu: interactive ? openShapeHeaderMenu : undefined,
+      onShapeHeaderContextMenu: openShapeHeaderMenu,
       onPropertyContextMenu: interactive ? openPropertyMenu : undefined,
       onMoveProperty: interactive ? moveProperty : undefined,
       selected: descriptor.representedShapeIri === selectedShapeIri,
