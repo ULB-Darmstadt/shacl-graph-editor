@@ -20,6 +20,8 @@ SHACL Graph Editor is a browser-based editor for the workflow:
 - Search visible canvas profiles in the left sidebar, grouped into Drafts and Existing, and select an entry to focus its node.
 - Move properties between profiles or reorder them within a profile by drag and drop.
 - Right-click a field to delete it or create an own-property copy of its name, description, and IRI for additional constraints.
+- Right-click an editable field to create a new profile with the same name and connect it directly using `sh:node`.
+- Drag a profile's header connector to another profile's Add Field connector to create a field named after the referenced profile with a `sh:node` link.
 - Imported profiles are locked for editing by default. Change this in Settings → Display Settings; locked profiles can still be inherited and their fields copied into editable profiles.
 - Profiles referenced by imports stay loaded for previews and export. Display Settings controls whether profiles linked by `sh:class` and `sh:qualifiedValueShape` appear on the canvas.
 - Class references also discover matching `sh:targetClass` profiles from MPS when no matching profile is loaded, including references without `owl:imports`.

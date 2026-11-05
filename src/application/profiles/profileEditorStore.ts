@@ -299,6 +299,29 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     return copy.nodeId.value
   }
 
+  function createConnectedProfileFromProperty(shapeIri: string, propertyNodeId: string): string | null {
+    const context = findEditablePropertyContext(shapeIri, propertyNodeId)
+    if (!context) return null
+    const label = context.property.name?.trim() ? context.property.name : 'Unnamed field'
+    const iri = createProfile()
+    updateShapeField(iri, 'label', label)
+    setPropertyType(shapeIri, propertyNodeId, 'profile')
+    setPropertyNodeTarget(shapeIri, propertyNodeId, iri)
+    return iri
+  }
+
+  function createConnectedPropertyFromProfile(shapeIri: string, targetShapeIri: string): string | null {
+    const context = findEditableShapeContext(shapeIri)
+    const target = applicationProfile.value.findNodeShape(targetShapeIri)
+    if (!context || !target) return null
+    const propertyNodeId = createProperty(shapeIri)
+    if (!propertyNodeId) return null
+    updatePropertyField(shapeIri, propertyNodeId, 'name', target.label?.trim() ? target.label : 'Unnamed profile')
+    setPropertyType(shapeIri, propertyNodeId, 'profile')
+    setPropertyNodeTarget(shapeIri, propertyNodeId, targetShapeIri)
+    return propertyNodeId
+  }
+
   function updateShapeField(shapeIri: string, field: EditableShapeField, value: string | null): void {
     const context = findEditableShapeContext(shapeIri)
     if (!context) return
@@ -862,6 +885,8 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     createProfile,
     createProperty,
     copyProperty,
+    createConnectedProfileFromProperty,
+    createConnectedPropertyFromProfile,
     removeProperty,
     movePropertyToShape,
     updateShapeField,

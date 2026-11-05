@@ -575,6 +575,7 @@ function onShapeDrop(event: DragEvent): void {
     >
       <Handle
         id="shape-header"
+        title="Drag to Add Field to create a linked field"
         type="target"
         :position="Position.Left"
         :connectable="isInteractive()"
@@ -838,15 +839,25 @@ function onShapeDrop(event: DragEvent): void {
       <li v-if="dropPreviewIndex === visibleOwnProperties.length" class="property-drop-line" />
     </ul>
 
-    <button
-      v-if="data.onAddField && isEditable()"
-      type="button"
-      class="add-field-row nodrag"
-      @click.stop="addField(data.representedShapeIri)"
-    >
-      <i class="pi pi-plus add-field-row__icon" />
-      <span class="prop-name">Add Field</span>
-    </button>
+    <div v-if="data.onAddField && isEditable()" class="add-field-connection-row">
+      <button
+        type="button"
+        class="add-field-row nodrag"
+        @click.stop="addField(data.representedShapeIri)"
+      >
+        <i class="pi pi-plus add-field-row__icon" />
+        <span class="prop-name">Add Field</span>
+      </button>
+      <Handle
+        id="add-field"
+        type="source"
+        :position="Position.Right"
+        :connectable="isEditable()"
+        class="handle handle-ref-source"
+        title="Connect a profile to create a linked field"
+        @click.stop
+      />
+    </div>
 
     <Teleport to="body">
       <div
@@ -1264,6 +1275,10 @@ header {
 .handle-readonly {
   cursor: default;
   opacity: 0.75;
+}
+
+.add-field-connection-row {
+  position: relative;
 }
 
 .add-field-row {

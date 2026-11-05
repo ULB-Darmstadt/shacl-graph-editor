@@ -584,7 +584,7 @@ function openPropertyMenu(shape: NodeShape, property: PropertyShape, event: Mous
   selectProperty(shape, property)
   propertyMenu.value = {
     x: Math.max(8, Math.min(event.clientX, window.innerWidth - 248)),
-    y: Math.max(8, Math.min(event.clientY, window.innerHeight - 200)),
+    y: Math.max(8, Math.min(event.clientY, window.innerHeight - 260)),
     shapeIri: shape.nodeId.value,
     propertyNodeId: property.nodeId.value,
     label: property.name?.trim() || 'Unnamed field',
@@ -641,6 +641,30 @@ function setProfileConnectionsHidden(hidden: boolean): void {
 function showAllHiddenConnections(): void {
   collapsedPropertyConnections.value = new Set()
   closeCanvasMenu()
+}
+
+async function createAndConnectProfileFromField(): Promise<void> {
+  const menu = propertyMenu.value
+  if (!menu || readOnlyMode.value || profileStore.isPropertyLocked(menu.shapeIri, menu.propertyNodeId)) return
+  profileStore.endHistoryGroup()
+  const canvasNodes = nodes.value as unknown as CanvasNodePosition[]
+  const sourceNode = canvasNodes.find(node => parseEditorShapeNodeTarget(node.id)?.representedShapeIri === menu.shapeIri)
+  const anchor = sourceNode?.position ?? resolvePlacementPosition(menu.x, menu.y)
+  const iri = profileStore.createConnectedProfileFromProperty(menu.shapeIri, menu.propertyNodeId)
+  if (!iri) return
+  applyProfileDefaults(iri)
+  queueShapePlacementAt(iri, { x: anchor.x + IMPORT_HORIZONTAL_OFFSET, y: anchor.y })
+  const collapsed = new Set(collapsedPropertyConnections.value)
+  collapsed.delete(propertyConnectionKey(menu.shapeIri, menu.propertyNodeId))
+  collapsedPropertyConnections.value = collapsed
+  closeActionMenus()
+  closeActionOverlay()
+  resetPendingPlacement()
+  const shape = profileStore.applicationProfile.findNodeShape(iri)
+  if (shape) selectShape(shape)
+  await nextTick()
+  await waitForAnimationFrame()
+  await centerShapeInCanvas(iri)
 }
 
 function handleCopyProperty(): void {
@@ -984,6 +1008,18 @@ function handleConnect(connection: Connection): void {
   const source = connection.source ? parseEditorShapeNodeTarget(connection.source) : null
   const target = connection.target ? parseEditorShapeNodeTarget(connection.target) : null
   if (!source?.representedShapeIri || !target?.representedShapeIri) return
+  if (connection.sourceHandle === 'add-field') {
+    profileStore.endHistoryGroup()
+    const propertyNodeId = profileStore.createConnectedPropertyFromProfile(source.representedShapeIri, target.representedShapeIri)
+    if (!propertyNodeId) return
+    const shape = profileStore.applicationProfile.findNodeShape(source.representedShapeIri)
+    const property = shape?.properties.find(property => property.nodeId.value === propertyNodeId)
+    if (shape && property) {
+      draftPropertyNodeId.value = null
+      selectProperty(shape, property)
+    }
+    return
+  }
   const sourceHandle = connection.sourceHandle
   const propertyNodeId = propertyNodeIdFromReferenceHandle(sourceHandle)
   if (!propertyNodeId || !sourceHandle) return
@@ -1550,6 +1586,10 @@ void fetchSubjectHeadingOptions().then(options => {
             <button type="button" class="canvas-menu__item" @click="handleCopyProperty">
               <i class="pi pi-copy canvas-menu__icon" aria-hidden="true" />
               <span class="canvas-menu__label">Create copy</span>
+            </button>
+            <button type="button" class="canvas-menu__item" :disabled="profileStore.isPropertyLocked(propertyMenu.shapeIri, propertyMenu.propertyNodeId)" @click="createAndConnectProfileFromField">
+              <i class="pi pi-plus-circle canvas-menu__icon" aria-hidden="true" />
+              <span class="canvas-menu__label">Create and connect Profile from Field</span>
             </button>
           </div>
         </div>
@@ -2772,6 +2812,11 @@ void fetchSubjectHeadingOptions().then(options => {
 .property-menu .shape-header-menu__title {
   max-height: 52px;
   overflow: hidden;
+}
+
+.property-menu .canvas-menu__label {
+  white-space: normal;
+  line-height: 1.35;
 }
 
 .canvas-menu__item:hover:not(:disabled) {
