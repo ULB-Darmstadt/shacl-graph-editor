@@ -1498,6 +1498,10 @@ void fetchSubjectHeadingOptions().then(options => {
           <i class="pi pi-upload" />
           <span>Import Profiles</span>
         </button>
+        <button type="button" class="settings-menu__item" @click="handleConfirmResetAll">
+          <i class="pi pi-refresh" />
+          <span>Reset Editor</span>
+        </button>
       </div>
 
       <div ref="canvasActionBarRef" class="canvas-action-bar">
@@ -1554,10 +1558,6 @@ void fetchSubjectHeadingOptions().then(options => {
         >
           <i class="pi pi-undo action-tile__icon action-tile__icon--redo" aria-hidden="true" />
           <span class="action-tile__label">Redo</span>
-        </button>
-        <button type="button" class="action-tile" @click="handleConfirmResetAll">
-          <i class="pi pi-refresh action-tile__icon" />
-          <span class="action-tile__label">Reset Editor</span>
         </button>
         <button type="button" class="action-tile action-tile--review" :disabled="profiles.length === 0" @click="openReviewDialog">
           <i class="pi pi-verified action-tile__icon" />
