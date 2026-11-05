@@ -18,13 +18,14 @@ export interface ShapeEditorNodeData {
   onRenameProperty?: (shapeIri: string, propertyNodeId: string, name: string) => void
   onCommitDraftProperty?: (propertyNodeId: string) => void
   onDeleteProperty?: (shapeIri: string, propertyNodeId: string) => boolean
-  onShapeHeaderContextMenu?: (shape: NodeShape, event: MouseEvent, options?: { allowDelete?: boolean }) => void
+  onShapeHeaderContextMenu?: (shape: NodeShape, event: MouseEvent, options?: { allowDelete?: boolean; connectionShapeIri?: string }) => void
   onPropertyContextMenu?: (shape: NodeShape, property: PropertyShape, event: MouseEvent) => void
   onMoveProperty?: (sourceShapeIri: string, propertyNodeId: string, targetShapeIri: string, targetIndex?: number) => boolean
   selected?: boolean
   highlighted?: boolean
   selectedShapeIri?: string | null
   selectedPropertyKey?: string | null
+  collapsedPropertyKeys?: string[]
   draftPropertyNodeId?: string | null
   reviewMode?: boolean
   reviewShapeSeverity?: 'urgent' | 'warning' | null

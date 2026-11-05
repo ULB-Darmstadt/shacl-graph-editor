@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { createServer as createHttpServer } from 'node:http'
 import { createServer } from 'vite'
 import { createPinia, setActivePinia } from 'pinia'
-import { computed, nextTick } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { BlankNode, NamedNode } from 'rdflib'
 
 let server
@@ -40,6 +40,171 @@ after(async () => {
 beforeEach(() => {
   setActivePinia(createPinia())
   store = useProfileEditorStore()
+})
+
+async function collapsedGraph(links, collapsed) {
+  const { collapsePropertyConnections, propertyConnectionKey } = await server.ssrLoadModule('/src/presentation/features/editor/collapsedPropertyConnections.ts')
+  const ids = [...new Set(links.flatMap(([source, target]) => [source, target]))]
+  const nodes = ids.map(id => ({
+    id, position: { x: 100, y: 200 },
+    data: {
+      representedShapeIri: id, ownerShapeIri: id,
+      shape: { nodeId: new NamedNode(`https://example.org/${id}`), properties: [...new Set(links.filter(([source]) => source === id).map(([, , field]) => field))].map(field => ({ nodeId: new BlankNode(field) })) },
+    },
+  }))
+  const edges = links.map(([source, target, field], index) => ({ id: String(index), source, target, sourceHandle: `ref:${field}` }))
+  const before = JSON.stringify({ nodes, edges })
+  const result = collapsePropertyConnections(nodes, edges, new Set(collapsed.map(([source, field]) => propertyConnectionKey(source, field))))
+  assert.equal(JSON.stringify({ nodes, edges }), before)
+  return result
+}
+
+test('collapsing a field hides its private branch and adds a fading connector marker', async () => {
+  const result = await collapsedGraph([['a', 'b', 'field-a'], ['b', 'c', 'field-b']], [['a', 'field-a']])
+  assert.deepEqual(result.nodes.map(node => node.id), ['a'])
+  assert.deepEqual(result.edges, [])
+  assert.deepEqual(result.nodes[0].data.collapsedPropertyKeys, ['field-a'])
+})
+
+test('shared targets and their descendants stay visible through other incoming fields', async () => {
+  const result = await collapsedGraph([['a', 'b', 'field-a'], ['b', 'c', 'field-b'], ['d', 'b', 'field-d']], [['a', 'field-a']])
+  assert.deepEqual(new Set(result.nodes.map(node => node.id)), new Set(['a', 'b', 'c', 'd']))
+  assert.deepEqual(result.edges.map(edge => [edge.source, edge.target]), [['b', 'c'], ['d', 'b']])
+})
+
+test('a shared descendant remains visible when its private parent is hidden', async () => {
+  const result = await collapsedGraph([['a', 'b', 'field-a'], ['b', 'c', 'field-b'], ['d', 'c', 'field-d']], [['a', 'field-a']])
+  assert.deepEqual(new Set(result.nodes.map(node => node.id)), new Set(['a', 'c', 'd']))
+  assert.deepEqual(result.edges.map(edge => [edge.source, edge.target]), [['d', 'c']])
+})
+
+test('private cycles collapse without hiding the source node', async () => {
+  const result = await collapsedGraph([['a', 'b', 'field-a'], ['b', 'c', 'field-b'], ['c', 'b', 'field-c'], ['c', 'a', 'field-c']], [['a', 'field-a']])
+  assert.deepEqual(result.nodes.map(node => node.id), ['a'])
+})
+
+test('collapse is scoped to the source node even when field identifiers are shared', async () => {
+  const result = await collapsedGraph([['a', 'b', 'shared-field'], ['d', 'c', 'shared-field']], [['a', 'shared-field']])
+  assert.deepEqual(new Set(result.nodes.map(node => node.id)), new Set(['a', 'd', 'c']))
+  assert.deepEqual(result.edges.map(edge => [edge.source, edge.target]), [['d', 'c']])
+})
+
+test('collapsing a parent also hides a previously collapsed child', async () => {
+  const result = await collapsedGraph([['a', 'b', 'field-a'], ['b', 'c', 'field-b']], [['b', 'field-b'], ['a', 'field-a']])
+  assert.deepEqual(result.nodes.map(node => node.id), ['a'])
+})
+
+test('a shared target disappears only after both incoming fields are collapsed', async () => {
+  const links = [['a', 'b', 'field-a'], ['d', 'b', 'field-d'], ['b', 'c', 'field-b']]
+  const result = await collapsedGraph(links, [['a', 'field-a'], ['d', 'field-d']])
+  assert.deepEqual(new Set(result.nodes.map(node => node.id)), new Set(['a', 'd']))
+  const expanded = await collapsedGraph(links, [['a', 'field-a']])
+  assert.deepEqual(new Set(expanded.nodes.map(node => node.id)), new Set(['a', 'b', 'c', 'd']))
+})
+
+test('hiding every field on a profile hides all private branches and marks every field', async () => {
+  const links = [['a', 'b', 'field-one'], ['a', 'c', 'field-two'], ['b', 'd', 'field-b']]
+  const hidden = await collapsedGraph(links, [['a', 'field-one'], ['a', 'field-two']])
+  assert.deepEqual(hidden.nodes.map(node => node.id), ['a'])
+  assert.deepEqual(hidden.nodes[0].data.collapsedPropertyKeys, ['field-one', 'field-two'])
+  const shown = await collapsedGraph(links, [])
+  assert.equal(shown.nodes.length, 4)
+  assert.equal(shown.edges.length, 3)
+  assert.ok(shown.nodes.every(node => !node.data.collapsedPropertyKeys.length))
+})
+
+test('a multi-target field keeps shared profiles when its private targets collapse', async () => {
+  const result = await collapsedGraph([['a', 'b', 'choice'], ['a', 'c', 'choice'], ['d', 'c', 'other']], [['a', 'choice']])
+  assert.deepEqual(new Set(result.nodes.map(node => node.id)), new Set(['a', 'c', 'd']))
+  assert.deepEqual(result.edges.map(edge => [edge.source, edge.target]), [['d', 'c']])
+})
+
+test('showing collapsed connections restores node positions without changing profiles', async () => {
+  const source = store.createProfile()
+  const target = store.createProfile()
+  const field = store.createProperty(source)
+  store.setPropertyNodeTarget(source, field, target)
+  const { useEditorGraph } = await server.ssrLoadModule('/src/presentation/features/editor/useEditorGraph.ts')
+  const { propertyConnectionKey } = await server.ssrLoadModule('/src/presentation/features/editor/collapsedPropertyConnections.ts')
+  const collapsed = ref(new Set())
+  const positions = ref({ [`shape:${source}`]: { x: 50, y: 60 }, [`shape:${target}`]: { x: 700, y: 400 } })
+  const graph = useEditorGraph({ allShapes: computed(() => store.nodeShapes), canvasShapes: computed(() => store.nodeShapes), requestedNodePositions: positions, collapsedPropertyConnections: collapsed, openShapePreview() {} })
+  const before = JSON.stringify(store.profiles)
+  graph.nodes.value.find(node => node.id === `shape:${target}`).position = { x: 900, y: 500 }
+  collapsed.value = new Set([propertyConnectionKey(source, field)])
+  await nextTick()
+  assert.equal(graph.nodes.value.length, 1)
+  assert.equal(graph.hiddenProfileCount.value, 1)
+  positions.value = Object.fromEntries(graph.nodes.value.map(node => [node.id, node.position]))
+  await nextTick()
+  collapsed.value = new Set()
+  await nextTick()
+  assert.deepEqual(graph.nodes.value.find(node => node.id === `shape:${target}`).position, { x: 900, y: 500 })
+  assert.deepEqual(graph.nodes.value.find(node => node.id === `shape:${source}`).data.collapsedPropertyKeys, [])
+  assert.equal(graph.hiddenProfileCount.value, 0)
+  assert.equal(JSON.stringify(store.profiles), before)
+})
+
+test('Review mode reveals collapsed branches, clears the hidden count, and restores hiding on exit', async () => {
+  const source = store.createProfile()
+  const target = store.createProfile()
+  const descendant = store.createProfile()
+  const field = store.createProperty(source)
+  const childField = store.createProperty(target)
+  store.setPropertyNodeTarget(source, field, target)
+  store.setPropertyNodeTarget(target, childField, descendant)
+  const { useEditorGraph } = await server.ssrLoadModule('/src/presentation/features/editor/useEditorGraph.ts')
+  const { propertyConnectionKey } = await server.ssrLoadModule('/src/presentation/features/editor/collapsedPropertyConnections.ts')
+  const collapsed = ref(new Set([propertyConnectionKey(source, field)]))
+  const reviewMode = ref(false)
+  const graph = useEditorGraph({
+    allShapes: computed(() => store.nodeShapes), canvasShapes: computed(() => [store.applicationProfile.findNodeShape(source)]),
+    requestedNodePositions: ref(Object.fromEntries([source, target, descendant].map((iri, index) => [`shape:${iri}`, { x: index * 500, y: 100 }]))),
+    collapsedPropertyConnections: collapsed, reviewMode, openShapePreview() {},
+  })
+  assert.equal(graph.hiddenProfileCount.value, 2)
+  assert.equal(graph.nodes.value.length, 1)
+  reviewMode.value = true
+  await nextTick()
+  assert.equal(graph.nodes.value.length, 3)
+  assert.equal(graph.edges.value.length, 2)
+  assert.equal(graph.hiddenProfileCount.value, 0)
+  assert.ok(graph.nodes.value.every(node => !node.data.collapsedPropertyKeys.length))
+  assert.equal(collapsed.value.size, 1)
+  reviewMode.value = false
+  await nextTick()
+  assert.equal(graph.nodes.value.length, 1)
+  assert.equal(graph.hiddenProfileCount.value, 2)
+})
+
+test('Review mode reveals class and qualified profiles even when their display switches are off', async () => {
+  const source = store.createProfile()
+  const classProfile = store.createProfile()
+  const qualifiedProfile = store.createProfile()
+  store.updateShapeField(classProfile, 'targetClass', 'https://example.org/Kind')
+  const classField = store.createProperty(source)
+  store.setPropertyType(source, classField, 'class')
+  store.updatePropertyField(source, classField, 'cls', 'https://example.org/Kind')
+  const qualifiedField = store.createProperty(source)
+  store.setPropertyType(source, qualifiedField, 'qualifiedProfile')
+  store.setPropertyNodeTarget(source, qualifiedField, qualifiedProfile)
+  const { useEditorGraph } = await server.ssrLoadModule('/src/presentation/features/editor/useEditorGraph.ts')
+  const reviewMode = ref(false)
+  const graph = useEditorGraph({
+    allShapes: computed(() => store.nodeShapes), canvasShapes: computed(() => [store.applicationProfile.findNodeShape(source)]),
+    requestedNodePositions: ref(Object.fromEntries([source, classProfile, qualifiedProfile].flatMap((iri, index) => [
+      [`shape:${iri}`, { x: index * 500, y: 100 }], [`shape-proxy:${iri}`, { x: index * 500, y: 100 }],
+    ]))),
+    showClassRelations: ref(false), showQualifiedValueShapes: ref(false), reviewMode, openShapePreview() {},
+  })
+  assert.equal(graph.nodes.value.length, 1)
+  reviewMode.value = true
+  await nextTick()
+  assert.equal(graph.nodes.value.length, 3)
+  assert.equal(graph.edges.value.length, 2)
+  reviewMode.value = false
+  await nextTick()
+  assert.equal(graph.nodes.value.length, 1)
 })
 
 test('xone profiles round trip with all graph targets, edge labels and imports', async () => {

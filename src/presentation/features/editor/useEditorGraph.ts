@@ -17,6 +17,7 @@ import {
 import { layoutEditorGraph } from '@/presentation/features/editor/layoutEditorGraph'
 import { resolveRenderedNodeOverlaps } from '@/presentation/features/editor/layoutEditorGraph'
 import type { ShapeEditorNodeData } from '@/presentation/features/editor/inheritanceEditorGraph'
+import { collapsePropertyConnections } from '@/presentation/features/editor/collapsedPropertyConnections'
 
 interface UseEditorGraphOptions {
   allShapes: Ref<NodeShape[]>
@@ -29,6 +30,7 @@ interface UseEditorGraphOptions {
   reviewMode?: Ref<boolean>
   showClassRelations?: Ref<boolean>
   showQualifiedValueShapes?: Ref<boolean>
+  collapsedPropertyConnections?: Ref<Set<string>>
   reviewAnnotations?: Ref<Map<string, EditorShapeReviewAnnotation>>
   openShapePreview: (shape: NodeShape) => void | Promise<void>
   addField?: (shapeIri: string) => void
@@ -44,7 +46,7 @@ interface UseEditorGraphOptions {
   draftPropertyNodeId?: Ref<string | null>
   selectShape?: (shape: NodeShape) => void
   selectProperty?: (shape: NodeShape, property: import('@/domain/profiles').PropertyShape) => void
-  openShapeHeaderMenu?: (shape: NodeShape, event: MouseEvent, options?: { allowDelete?: boolean }) => void
+  openShapeHeaderMenu?: (shape: NodeShape, event: MouseEvent, options?: { allowDelete?: boolean; connectionShapeIri?: string }) => void
   openPropertyMenu?: ShapeEditorNodeData['onPropertyContextMenu']
   moveProperty?: (sourceShapeIri: string, propertyNodeId: string, targetShapeIri: string, targetIndex?: number) => boolean
 }
@@ -52,6 +54,8 @@ interface UseEditorGraphOptions {
 export function useEditorGraph(options: UseEditorGraphOptions) {
   const nodes = ref<Node[]>([])
   const edges = ref<Edge[]>([])
+  const hiddenProfileCount = ref(0)
+  const rememberedPositions = new Map<string, Node['position']>()
   let pendingRenderedLayoutPass = 0
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -62,6 +66,8 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
   function positionForNewNode(node: Node, index: number): Node['position'] {
     const requestedPosition = options.requestedNodePositions?.value[node.id]
     if (requestedPosition) return requestedPosition
+    const remembered = rememberedPositions.get(node.id)
+    if (remembered) return remembered
     return defaultPositionForEditorNodeType(node.type, index)
   }
 
@@ -129,8 +135,11 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
     })
   }
 
-  function rebuildGraph(forceAutoLayout = false): void {
-    const shapeNodes: Node[] = buildEditorShapeNodes(
+  function rebuildGraph(forceAutoLayout = false, preserveLayout = false): void {
+    const reviewMode = options.reviewMode?.value ?? false
+    const showClassRelations = reviewMode || (options.showClassRelations?.value ?? false)
+    const showQualifiedValueShapes = reviewMode || (options.showQualifiedValueShapes?.value ?? false)
+    let shapeNodes: Node[] = buildEditorShapeNodes(
       options.canvasShapes.value,
       options.allShapes.value,
       new Set(),
@@ -150,26 +159,33 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
       options.draftPropertyNodeId?.value,
       options.reviewMode?.value ?? false,
       options.reviewAnnotations?.value,
-      options.showClassRelations?.value ?? false,
-      options.showQualifiedValueShapes?.value ?? false,
+      showClassRelations,
+      showQualifiedValueShapes,
       options.highlightedShapeIri?.value,
       options.openPropertyMenu,
     )
 
     const visibleNodeIds = new Set(shapeNodes.map(node => node.id))
-    const nextEdges = buildEditorStructuralEdges(
+    let nextEdges = buildEditorStructuralEdges(
       options.canvasShapes.value,
       options.allShapes.value,
       visibleNodeIds,
       options.removeReferenceEdge,
       options.selectedShapeIri?.value,
       options.selectedPropertyKey?.value,
-      options.showClassRelations?.value ?? false,
-      options.showQualifiedValueShapes?.value ?? false,
+      showClassRelations,
+      showQualifiedValueShapes,
       options.canEditProperty,
     ).filter(edge => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target))
 
+    const collapsed = collapsePropertyConnections(shapeNodes, nextEdges, reviewMode ? new Set() : options.collapsedPropertyConnections?.value ?? new Set())
+    hiddenProfileCount.value = shapeNodes.length - collapsed.nodes.length
+    shapeNodes = collapsed.nodes
+    nextEdges = collapsed.edges
+
     const existingNodes = nodes.value as Node[]
+    for (const node of existingNodes) rememberedPositions.set(node.id, { ...node.position })
+    if (!options.allShapes.value.length) rememberedPositions.clear()
     const existingIds = new Set(existingNodes.map(node => node.id))
     const newNodes = shapeNodes.filter(node => !existingIds.has(node.id))
     const existingShapeIris = new Set(existingNodes.map(representedShapeIriFromNode).filter((value): value is string => Boolean(value)))
@@ -178,8 +194,8 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
       return !representedShapeIri || !existingShapeIris.has(representedShapeIri)
     })
     const allNewNodesHaveRequestedPositions = newNodes.length > 0 && newNodes.every(node => Boolean(options.requestedNodePositions?.value[node.id]))
-    const shouldRunAutoLayout = (shouldAutoLayoutEditorGraph(existingNodes, shapeNodes) || forceAutoLayout) && !allNewNodesHaveRequestedPositions
-    const shouldRunRenderedLayoutPass = forceAutoLayout || (hasNewRepresentedShapes && !allNewNodesHaveRequestedPositions)
+    const shouldRunAutoLayout = !preserveLayout && (shouldAutoLayoutEditorGraph(existingNodes, shapeNodes) || forceAutoLayout) && !allNewNodesHaveRequestedPositions
+    const shouldRunRenderedLayoutPass = !preserveLayout && (forceAutoLayout || (hasNewRepresentedShapes && !allNewNodesHaveRequestedPositions))
 
     nodes.value = shouldRunAutoLayout
       ? autoLayoutNodes(shapeNodes, nextEdges)
@@ -197,8 +213,9 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
     rebuildGraph(true)
   })
   watch(options.readOnlyMode ?? ref(false), () => rebuildGraph())
+  watch(options.collapsedPropertyConnections ?? ref(new Set<string>()), () => rebuildGraph(false, true))
   watch(options.lockedShapeIris ?? ref(new Set<string>()), () => rebuildGraph())
-  watch(options.reviewMode ?? ref(false), () => rebuildGraph())
+  watch(options.reviewMode ?? ref(false), () => rebuildGraph(false, true))
   watch(options.showClassRelations ?? ref(false), () => rebuildGraph(true))
   watch(options.showQualifiedValueShapes ?? ref(false), () => rebuildGraph(true))
   watch(options.reviewAnnotations ?? ref(new Map<string, EditorShapeReviewAnnotation>()), () => rebuildGraph())
@@ -232,5 +249,6 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
     edges,
     nodeTypes,
     edgeTypes,
+    hiddenProfileCount,
   }
 }

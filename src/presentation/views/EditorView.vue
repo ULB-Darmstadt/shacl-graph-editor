@@ -11,12 +11,13 @@ import { MiniMap } from '@vue-flow/minimap'
 import Dialog from 'primevue/dialog'
 import { useProfileEditorStore } from '@/application/profiles/profileEditorStore'
 import { useEditorGraph } from '@/presentation/features/editor/useEditorGraph'
+import { propertyConnectionKey } from '@/presentation/features/editor/collapsedPropertyConnections'
 import { useEditorPreviews } from '@/presentation/features/editor/useEditorPreviews'
 import { useEditorSelection } from '@/presentation/features/editor/useEditorSelection'
 import EditorDialogs from '@/presentation/features/editor/EditorDialogs.vue'
 import EditorInspector from '@/presentation/features/editor/components/inspector/EditorInspector.vue'
 import { useProfileWorkflowMenu } from '@/presentation/features/profile-workflow/useProfileWorkflowMenu'
-import { buildEditorShapeNodeId, collectReachableShapeIris, parseEditorShapeNodeTarget } from '@/presentation/features/editor/inheritanceEditorGraph'
+import { buildEditorShapeNodeId, collectReachableShapeIris, parseEditorShapeNodeTarget, propertyGraphTargetIris } from '@/presentation/features/editor/inheritanceEditorGraph'
 import type { EditorShapeReviewAnnotation } from '@/presentation/features/editor/editorGraphBuilders'
 import { estimateEditorShapeHeight } from '@/presentation/features/editor/layoutEditorGraph'
 import { buildEditorReviewItems, type EditorReviewItem, type EditorReviewSeverity } from '@/presentation/features/editor/editorReview'
@@ -42,6 +43,7 @@ const { nodeShapes, profiles, isResolvingImports, rootNodeShapes, fitViewRequest
 type EditorMode = 'edit' | 'review' | 'view'
 
 const requestedNodePositions = ref<Record<string, XYPosition>>({})
+const collapsedPropertyConnections = ref(new Set<string>())
 const editorMode = ref<EditorMode>('edit')
 const readOnlyMode = computed(() => editorMode.value === 'view')
 const reviewMode = computed(() => editorMode.value === 'review')
@@ -113,6 +115,7 @@ function resetEditorUiState(): void {
   cancelPendingProfilePlacement()
   resetPendingPlacement()
   requestedNodePositions.value = {}
+  collapsedPropertyConnections.value = new Set()
   draftPropertyNodeId.value = null
 }
 
@@ -166,7 +169,7 @@ const reviewAnnotations = computed(() => {
   return annotations
 })
 
-const { nodes, edges, nodeTypes, edgeTypes } = useEditorGraph({
+const { nodes, edges, nodeTypes, edgeTypes, hiddenProfileCount } = useEditorGraph({
   allShapes: nodeShapes,
   canvasShapes: rootNodeShapes,
   relayoutRequestTick: fitViewRequestTick,
@@ -179,6 +182,7 @@ const { nodes, edges, nodeTypes, edgeTypes } = useEditorGraph({
   reviewMode,
   showClassRelations,
   showQualifiedValueShapes,
+  collapsedPropertyConnections,
   reviewAnnotations,
   openShapePreview,
   addField: createProperty,
@@ -204,7 +208,7 @@ const hasInspectorSelection = computed(() => selectedShape.value !== null)
 const addProfileMenuOpen = ref(false)
 const settingsMenuOpen = ref(false)
 const canvasMenu = ref<{ x: number; y: number; open: boolean }>({ x: 0, y: 0, open: false })
-const shapeHeaderMenu = ref<{ x: number; y: number; open: boolean; shapeIri: string | null; label: string | null; allowDelete: boolean }>({
+const shapeHeaderMenu = ref<{ x: number; y: number; open: boolean; shapeIri: string | null; label: string | null; allowDelete: boolean; connectionShapeIri?: string }>({
   x: 0,
   y: 0,
   open: false,
@@ -572,7 +576,7 @@ function handleShellContextMenu(event: MouseEvent): void {
   openCanvasMenu(event)
 }
 
-function openShapeHeaderMenu(shape: (typeof nodeShapes.value)[number], event: MouseEvent, options: { allowDelete?: boolean } = {}): void {
+function openShapeHeaderMenu(shape: (typeof nodeShapes.value)[number], event: MouseEvent, options: { allowDelete?: boolean; connectionShapeIri?: string } = {}): void {
   if (readOnlyMode.value) return
   event.preventDefault()
   event.stopPropagation()
@@ -586,6 +590,7 @@ function openShapeHeaderMenu(shape: (typeof nodeShapes.value)[number], event: Mo
     y: event.clientY,
     open: true,
     shapeIri: shape.nodeId.value,
+    connectionShapeIri: options.connectionShapeIri ?? shape.nodeId.value,
     label: shape.label ?? shape.nodeId.value,
     allowDelete: (options.allowDelete ?? true) && !profileStore.isShapeLocked(shape.nodeId.value),
   }
@@ -604,12 +609,63 @@ function openPropertyMenu(shape: NodeShape, property: PropertyShape, event: Mous
   selectProperty(shape, property)
   propertyMenu.value = {
     x: Math.max(8, Math.min(event.clientX, window.innerWidth - 248)),
-    y: Math.max(8, Math.min(event.clientY, window.innerHeight - 160)),
+    y: Math.max(8, Math.min(event.clientY, window.innerHeight - 200)),
     shapeIri: shape.nodeId.value,
     propertyNodeId: property.nodeId.value,
     label: property.name?.trim() || 'Unnamed field',
   }
   void nextTick(() => propertyMenuRef.value?.querySelector<HTMLButtonElement>('button')?.focus())
+}
+
+function propertyMenuConnectionsCollapsed(): boolean {
+  const menu = propertyMenu.value
+  return Boolean(menu && collapsedPropertyConnections.value.has(propertyConnectionKey(menu.shapeIri, menu.propertyNodeId)))
+}
+
+function propertyMenuHasConnections(): boolean {
+  const menu = propertyMenu.value
+  if (!menu) return false
+  if (propertyMenuConnectionsCollapsed()) return true
+  const property = profileStore.applicationProfile.findNodeShape(menu.shapeIri)?.properties
+    .find(candidate => candidate.nodeId.value === menu.propertyNodeId)
+  return Boolean(property && propertyGraphTargetIris(property, nodeShapes.value, showClassRelations.value, showQualifiedValueShapes.value).length)
+}
+
+function togglePropertyConnections(): void {
+  const menu = propertyMenu.value
+  if (!menu) return
+  const key = propertyConnectionKey(menu.shapeIri, menu.propertyNodeId)
+  const collapsed = new Set(collapsedPropertyConnections.value)
+  if (collapsed.has(key)) collapsed.delete(key)
+  else collapsed.add(key)
+  collapsedPropertyConnections.value = collapsed
+  propertyMenu.value = null
+}
+
+function profileMenuConnectionKeys(): string[] {
+  const menu = shapeHeaderMenu.value
+  const shapeIri = menu.shapeIri
+  if (!shapeIri) return []
+  const shape = profileStore.applicationProfile.findNodeShape(shapeIri)
+  return (shape?.properties ?? [])
+    .filter(property => propertyGraphTargetIris(property, nodeShapes.value, showClassRelations.value, showQualifiedValueShapes.value).length > 0)
+    .map(property => propertyConnectionKey(menu.connectionShapeIri ?? shapeIri, property.nodeId.value))
+}
+
+function setProfileConnectionsHidden(hidden: boolean): void {
+  const keys = profileMenuConnectionKeys()
+  const collapsed = new Set(collapsedPropertyConnections.value)
+  for (const key of keys) {
+    if (hidden) collapsed.add(key)
+    else collapsed.delete(key)
+  }
+  collapsedPropertyConnections.value = collapsed
+  closeShapeHeaderMenu()
+}
+
+function showAllHiddenConnections(): void {
+  collapsedPropertyConnections.value = new Set()
+  closeCanvasMenu()
 }
 
 function handleCopyProperty(): void {
@@ -1474,6 +1530,10 @@ void fetchSubjectHeadingOptions().then(options => {
             <i class="pi pi-upload canvas-menu__icon" />
             <span class="canvas-menu__label">Import profiles</span>
           </button>
+          <button type="button" class="canvas-menu__item" :disabled="collapsedPropertyConnections.size === 0" @click="showAllHiddenConnections">
+            <i class="pi pi-eye canvas-menu__icon" aria-hidden="true" />
+            <span class="canvas-menu__label">Show all hidden connections</span>
+          </button>
         </div>
 
         <div
@@ -1482,6 +1542,14 @@ void fetchSubjectHeadingOptions().then(options => {
           :style="{ left: `${shapeHeaderMenu.x}px`, top: `${shapeHeaderMenu.y}px` }"
         >
           <div class="shape-header-menu__title">{{ shapeHeaderMenu.label ?? 'Profile' }}</div>
+          <button v-if="profileMenuConnectionKeys().length" type="button" class="canvas-menu__item" :disabled="reviewMode || profileMenuConnectionKeys().every(key => collapsedPropertyConnections.has(key))" :title="reviewMode ? 'All connections are shown in Review mode.' : undefined" @click="setProfileConnectionsHidden(true)">
+            <i class="pi pi-eye-slash canvas-menu__icon" aria-hidden="true" />
+            <span class="canvas-menu__label">Hide all connections</span>
+          </button>
+          <button v-if="profileMenuConnectionKeys().length" type="button" class="canvas-menu__item" :disabled="!profileMenuConnectionKeys().some(key => collapsedPropertyConnections.has(key))" @click="setProfileConnectionsHidden(false)">
+            <i class="pi pi-eye canvas-menu__icon" aria-hidden="true" />
+            <span class="canvas-menu__label">Show all connections</span>
+          </button>
           <button type="button" class="canvas-menu__item" @click="handleShapeHeaderCreateInheritedProfile">
             <i class="pi pi-sitemap canvas-menu__icon" />
             <span class="canvas-menu__label">Create inherited profile</span>
@@ -1501,6 +1569,10 @@ void fetchSubjectHeadingOptions().then(options => {
           @keydown.esc.stop.prevent="propertyMenu = null"
         >
           <div class="shape-header-menu__title">{{ propertyMenu.label }}</div>
+          <button v-if="propertyMenuHasConnections()" type="button" class="canvas-menu__item" :disabled="reviewMode && !propertyMenuConnectionsCollapsed()" :title="reviewMode ? 'All connections are shown in Review mode.' : undefined" @click="togglePropertyConnections">
+            <i :class="propertyMenuConnectionsCollapsed() ? 'pi pi-eye canvas-menu__icon' : 'pi pi-eye-slash canvas-menu__icon'" aria-hidden="true" />
+            <span class="canvas-menu__label">{{ propertyMenuConnectionsCollapsed() ? 'Show connections' : 'Hide connections' }}</span>
+          </button>
           <button type="button" class="canvas-menu__item canvas-menu__item--danger" :disabled="profileStore.isPropertyLocked(propertyMenu.shapeIri, propertyMenu.propertyNodeId)" @click="handleDeleteProperty">
             <i class="pi pi-trash canvas-menu__icon" aria-hidden="true" />
             <span class="canvas-menu__label">Delete</span>
@@ -1542,6 +1614,9 @@ void fetchSubjectHeadingOptions().then(options => {
       </div>
 
       <div ref="canvasActionBarRef" class="canvas-action-bar">
+        <p v-if="hiddenProfileCount > 0" class="canvas-action-bar__hidden-profiles" role="status">
+          {{ hiddenProfileCount }} {{ hiddenProfileCount === 1 ? 'profile hidden' : 'profiles hidden' }}
+        </p>
         <div class="add-profile-control">
           <button type="button" class="action-tile action-tile--primary add-profile-main" :disabled="readOnlyMode" @click="handleBottomAddNewProfile">
             <i class="pi pi-plus-circle action-tile__icon" />
@@ -2064,6 +2139,21 @@ void fetchSubjectHeadingOptions().then(options => {
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.95);
   box-shadow: var(--shadow-md);
+}
+
+.canvas-action-bar__hidden-profiles {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .settings-fab {

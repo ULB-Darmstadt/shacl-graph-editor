@@ -243,7 +243,7 @@ function selectInheritedShape(shapeIri: string): void {
 
 function openInheritedShapeContextMenu(shapeIri: string, event: MouseEvent): void {
   const inheritedShape = flattenInheritedGroupShapes(props.data.inheritedGroups ?? []).find(shape => shape.nodeId.value === shapeIri)
-  if (inheritedShape) props.data.onShapeHeaderContextMenu?.(inheritedShape, event, { allowDelete: false })
+  if (inheritedShape) props.data.onShapeHeaderContextMenu?.(inheritedShape, event, { allowDelete: false, connectionShapeIri: props.data.representedShapeIri })
 }
 
 function isObjectRef(property: PropertyShape): boolean {
@@ -698,6 +698,12 @@ function onShapeDrop(event: DragEvent): void {
             <span class="field-hints__cardinality" title="Minimum...maximum count">{{ propertyCardinalityHint(property) }}</span>
           </span>
 
+          <span
+            v-if="data.collapsedPropertyKeys?.includes(property.nodeId.value)"
+            class="connection-fade"
+            aria-hidden="true"
+          />
+
           <Handle
             v-if="hasRelationshipHandle(property)"
             :id="`ref:${property.nodeId.value}`"
@@ -807,6 +813,12 @@ function onShapeDrop(event: DragEvent): void {
             <span v-if="propertyDatatypeHint(property)" class="field-hints__datatype" :title="property.datatype?.value">{{ propertyDatatypeHint(property) }}</span>
             <span class="field-hints__cardinality" title="Minimum...maximum count">{{ propertyCardinalityHint(property) }}</span>
           </span>
+
+          <span
+            v-if="data.collapsedPropertyKeys?.includes(property.nodeId.value)"
+            class="connection-fade"
+            aria-hidden="true"
+          />
 
           <Handle
             v-if="hasRelationshipHandle(property)"
@@ -1182,6 +1194,20 @@ header {
 
 .field-icon--muted {
   color: #c7c9cf;
+}
+
+.connection-fade {
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  width: 76px;
+  height: 2px;
+  background: linear-gradient(to right, #94a3b8, transparent);
+  pointer-events: none;
+}
+
+.row.is-selected .connection-fade {
+  background: linear-gradient(to right, var(--color-primary), transparent);
 }
 
 .handle {
