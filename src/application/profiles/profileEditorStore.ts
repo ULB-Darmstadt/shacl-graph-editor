@@ -322,6 +322,64 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     syncSerializedProfiles()
   }
 
+  function updateProfileUrl(profileIri: string, value: string): { ok: boolean; reason?: string } {
+    const profile = applicationProfile.value.profiles.get(profileIri)
+    if (!profile) return { ok: false, reason: 'Profile not found.' }
+    if (lockImportedProfiles.value && profile.origin !== 'created') {
+      return { ok: false, reason: 'Imported profiles are locked for editing in Settings.' }
+    }
+    const iri = value.trim()
+    if (!/^[a-z][a-z0-9+.-]*:[^\s<>"{}|^`\\]+$/i.test(iri)) {
+      return { ok: false, reason: 'Enter a valid absolute URL or IRI.' }
+    }
+    try {
+      new URL(iri)
+    } catch {
+      return { ok: false, reason: 'Enter a valid absolute URL or IRI.' }
+    }
+    if (iri === profileIri) return { ok: true }
+    if (applicationProfile.value.profiles.has(iri)
+      || applicationProfile.value.rawNodeShapes().some(shape => shape.nodeId.value === iri)
+      || applicationProfile.value.rawNodeShapes().some(shape => shape.properties.some(property => property.nodeId.value === iri))) {
+      return { ok: false, reason: 'This URL is already used by a profile or shape.' }
+    }
+
+    // Rename identities and shape references, preserving vocabulary terms,
+    // field identifiers, literals, and the original import source.
+    function renameReferences(candidate: ShaclProfile): ShaclProfile {
+      const next = cloneProfileValue(candidate)
+      next.imports = next.imports.map(reference => reference === profileIri ? iri : reference)
+      for (const shape of next.nodeShapes) {
+        if (shape.sourceProfileIri === profileIri) shape.sourceProfileIri = iri
+        if (shape.nodeId.value === profileIri) shape.nodeId = new NamedNode(iri)
+        shape.inheritedShapeIris = shape.inheritedShapeIris?.map(reference => reference === profileIri ? iri : reference)
+        for (const property of shape.properties) {
+          const constraints = [property, property.qualifiedValueShape, property.negatedConstraint,
+            ...property.alternatives ?? [], ...property.conjunctions ?? [], ...property.exclusiveAlternatives ?? []]
+          for (const constraint of constraints) {
+            if (constraint?.node?.value === profileIri) constraint.node = new NamedNode(iri)
+          }
+        }
+      }
+      if (candidate.iri === profileIri) next.iri = iri
+      return next
+    }
+
+    const renamed = applicationProfile.value.list().map(renameReferences)
+    const lockedReference = renamed.some(candidate => {
+      const original = applicationProfile.value.profiles.get(candidate.iri)
+      return original && lockImportedProfiles.value && original.origin !== 'created'
+        && JSON.stringify(original) !== JSON.stringify(candidate)
+    })
+    if (lockedReference) return { ok: false, reason: 'A locked profile references this URL. Unlock imported profiles in Settings before changing it.' }
+
+    const next = new ApplicationProfile()
+    for (const candidate of renamed) next.upsert(candidate)
+    applicationProfile.value = next
+    syncSerializedProfiles()
+    return { ok: true }
+  }
+
   function updatePropertyField(shapeIri: string, propertyNodeId: string, field: EditablePropertyField, value: string | null): void {
     const context = findEditablePropertyContext(shapeIri, propertyNodeId)
     if (!context) return
@@ -780,6 +838,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     removeProperty,
     movePropertyToShape,
     updateShapeField,
+    updateProfileUrl,
     updatePropertyField,
     setShapeInheritance,
     setPropertyNodeTarget,

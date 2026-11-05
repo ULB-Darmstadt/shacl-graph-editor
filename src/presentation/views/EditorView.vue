@@ -90,6 +90,13 @@ const selectionImportedLocked = computed(() => Boolean(selectedShapeIri.value &&
 )))
 const selectionReadOnly = computed(() => readOnlyMode.value || selectionImportedLocked.value)
 
+function updateProfileUrl(profileIri: string, value: string): { ok: boolean; reason?: string } {
+  if (readOnlyMode.value) return { ok: false, reason: 'Switch to Edit mode to change the Metadata Profile URL.' }
+  const result = profileStore.updateProfileUrl(profileIri, value)
+  if (result.ok && selectedShapeIri.value === profileIri) selectedShapeIri.value = value.trim()
+  return result
+}
+
 function resetEditorUiState(): void {
   closeImportDialog()
   profileSearchDialogOpen.value = false
@@ -1742,6 +1749,7 @@ void fetchSubjectHeadingOptions().then(options => {
           :create-property="createProperty"
           :commit-draft-property="commitDraftProperty"
           :update-shape-field="profileStore.updateShapeField"
+          :update-profile-url="updateProfileUrl"
           :update-property-field="profileStore.updatePropertyField"
           :set-shape-inheritance="profileStore.setShapeInheritance"
           :set-property-node-target="profileStore.setPropertyNodeTarget"

@@ -42,6 +42,91 @@ beforeEach(() => {
   store = useProfileEditorStore()
 })
 
+test('profile URL edits update identity, references and Turtle, and support undo and redo', async () => {
+  const original = store.createProfile()
+  const child = store.createProfile()
+  const field = store.createProperty(child)
+  store.setShapeInheritance(child, original)
+  store.setPropertyNodeTarget(child, field, original)
+  const renamed = 'https://example.org/renamed-profile'
+  await nextTick()
+
+  assert.deepEqual(store.updateProfileUrl(original, ` ${renamed} `), { ok: true })
+  await nextTick()
+  assert.equal(store.applicationProfile.profiles.has(original), false)
+  assert.equal(store.applicationProfile.profiles.has(renamed), true)
+  assert.equal(store.applicationProfile.findNodeShape(original), undefined)
+  assert.equal(store.applicationProfile.findNodeShape(renamed).sourceProfileIri, renamed)
+  assert.equal(store.applicationProfile.findNodeShape(child).properties[0].node.value, renamed)
+  assert.deepEqual(store.applicationProfile.findNodeShape(child).inheritedShapeIris, [renamed])
+  assert.ok(store.profiles.every(profile => !profile.rawTurtle.includes(original)))
+  assert.ok(store.rootNodeShapes.some(shape => shape.nodeId.value === child))
+
+  assert.equal(store.undo(), true)
+  assert.ok(store.applicationProfile.findNodeShape(original))
+  assert.equal(store.applicationProfile.findNodeShape(child).properties[0].node.value, original)
+  assert.equal(store.redo(), true)
+  assert.ok(store.applicationProfile.findNodeShape(renamed))
+})
+
+test('profile URL rejects empty, malformed and duplicate identities without changing data', async () => {
+  const original = store.createProfile()
+  const other = store.createProfile()
+  const field = store.createProperty(other)
+  await nextTick()
+  const before = JSON.stringify(store.profiles)
+  for (const value of ['', 'relative/path', 'https://', 'https://example.org/a b', 'https://example.org/<bad>', other, field]) {
+    assert.equal(store.updateProfileUrl(original, value).ok, false, value)
+    assert.equal(JSON.stringify(store.profiles), before)
+  }
+})
+
+test('profile URL stays locked for imports and becomes editable when unlocked', async () => {
+  await store.addProfileFromTurtle(importedTurtle, 'mps.ttl', importedProfileIri)
+  const renamed = 'https://example.org/renamed-import'
+  const before = JSON.stringify(store.profiles)
+  assert.equal(store.updateProfileUrl(importedProfileIri, renamed).ok, false)
+  assert.equal(JSON.stringify(store.profiles), before)
+  store.lockImportedProfiles = false
+  assert.equal(store.updateProfileUrl(importedProfileIri, renamed).ok, true)
+  assert.equal(store.applicationProfile.findNodeShape(renamed).properties[0].node.value, renamed)
+  assert.equal(store.profiles[0].source, 'mps.ttl')
+  store.lockImportedProfiles = true
+  assert.equal(store.isShapeLocked(renamed), true)
+})
+
+test('profile URL preserves field identities and vocabulary terms while updating nested shape references', async () => {
+  const original = store.createProfile()
+  const field = store.createProperty(original)
+  const property = store.applicationProfile.profiles.get(original).nodeShapes[0].properties[0]
+  property.path = new NamedNode(original)
+  property.cls = new NamedNode(original)
+  property.alternatives = [{ node: new NamedNode(original) }]
+  property.conjunctions = [{ node: new NamedNode(original) }]
+  property.exclusiveAlternatives = [{ node: new NamedNode(original) }]
+  property.negatedConstraint = { node: new NamedNode(original) }
+  property.qualifiedValueShape = { node: new NamedNode(original) }
+  const renamed = 'https://example.org/new-identity'
+
+  assert.equal(store.updateProfileUrl(original, renamed).ok, true)
+  const next = store.applicationProfile.findNodeShape(renamed).properties[0]
+  assert.equal(next.nodeId.value, field)
+  assert.equal(next.path.value, original)
+  assert.equal(next.cls.value, original)
+  for (const constraint of [next.alternatives[0], next.conjunctions[0], next.exclusiveAlternatives[0], next.negatedConstraint, next.qualifiedValueShape]) {
+    assert.equal(constraint.node.value, renamed)
+  }
+})
+
+test('profile URL cannot rewrite references inside a locked profile', async () => {
+  const original = store.createProfile()
+  const turtle = importedTurtle.replace(`sh:node <${importedProfileIri}>`, `sh:node <${original}>`)
+  await store.addProfileFromTurtle(turtle, 'mps.ttl', importedProfileIri)
+  const before = JSON.stringify(store.profiles)
+  assert.equal(store.updateProfileUrl(original, 'https://example.org/new-identity').ok, false)
+  assert.equal(JSON.stringify(store.profiles), before)
+})
+
 test('creation and synchronous defaults form one undo step', async () => {
   assert.equal(store.canUndo, false)
   assert.equal(store.canRedo, false)

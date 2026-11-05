@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useConfirm } from 'primevue/useconfirm'
 import {
   buildProfileLicenseOptions,
@@ -88,6 +88,7 @@ const props = defineProps<{
   createProperty: (shapeIri: string) => void
   commitDraftProperty: (propertyNodeId: string) => void
   updateShapeField: (shapeIri: string, field: EditableShapeField, value: string | null) => void
+  updateProfileUrl: (profileIri: string, value: string) => { ok: boolean; reason?: string }
   updatePropertyField: (shapeIri: string, propertyNodeId: string, field: EditablePropertyField, value: string | null) => void
   setShapeInheritance: (shapeIri: string, inheritedShapeIri: string | null) => void
   setPropertyNodeTarget: (shapeIri: string, propertyNodeId: string, targetShapeIri: string | null) => void
@@ -113,6 +114,19 @@ const inspectorTitle = computed(() => {
   return 'Inspector'
 })
 const profileIdentifier = computed(() => props.profile?.iri ?? props.shape?.sourceProfileIri ?? props.shape?.nodeId.value ?? null)
+const profileUrlDraft = ref('')
+const profileUrlError = ref<string | null>(null)
+watch([profileIdentifier, () => props.readOnly], () => {
+  profileUrlDraft.value = profileIdentifier.value ?? ''
+  profileUrlError.value = null
+}, { immediate: true })
+
+function saveProfileUrl(): void {
+  if (props.readOnly || !props.profile) return
+  const result = props.updateProfileUrl(props.profile.iri, profileUrlDraft.value)
+  profileUrlError.value = result.ok ? null : result.reason ?? 'Could not update the Metadata Profile URL.'
+  if (result.ok) profileUrlDraft.value = profileUrlDraft.value.trim()
+}
 const propertyDatatype = computed(() => props.property ? propertyDatatypeTargets(props.property)[0]?.value ?? null : null)
 const propertyNodeTarget = computed(() => props.property ? propertyNodeTargets(props.property)[0]?.value ?? null : null)
 const propertyUsesInlineNodeShape = computed(() => Boolean(props.property?.qualifiedValueShape?.inlineNodeShape))
@@ -707,7 +721,18 @@ function requestDeleteProperty(): void {
 
           <template v-else>
             <section class="inspector-section">
-              <InspectorReadOnlyField label="Profile Identifier" :value="profileIdentifier" link trailing-icon="pi pi-copy" />
+              <InspectorReadOnlyField v-if="readOnly" label="Metadata Profile URL" :value="profileIdentifier" link trailing-icon="pi pi-copy" />
+              <InspectorEditableField
+                v-else
+                label="Metadata Profile URL"
+                :value="profileUrlDraft"
+                placeholder="https://example.org/profile"
+                :invalid="Boolean(profileUrlError)"
+                :helper-text="profileUrlError"
+                @update:value="profileUrlDraft = $event; profileUrlError = null"
+                @blur="saveProfileUrl"
+                @submit="saveProfileUrl"
+              />
             </section>
 
             <section class="inspector-section">
