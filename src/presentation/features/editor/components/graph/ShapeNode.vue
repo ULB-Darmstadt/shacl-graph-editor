@@ -31,6 +31,7 @@ import {
   type ShapeEditorNodeData,
 } from '@/presentation/features/editor/inheritanceEditorGraph'
 import { useProfileEditorStore } from '@/application/profiles/profileEditorStore'
+import { isPlaceholderTermIri } from '@/shared/rdf/placeholderTermIri'
 import { computed, nextTick, ref, watch } from 'vue'
 
 const props = defineProps<{ data: ShapeEditorNodeData }>()
@@ -329,7 +330,7 @@ function flattenInheritedGroupShapes(groups: NonNullable<ShapeEditorNodeData['in
 }
 
 function hasTermIri(property: PropertyShape): boolean {
-  return Boolean(property.path?.value?.trim())
+  return Boolean(property.path?.value?.trim()) && !isPlaceholderTermIri(property.path?.value)
 }
 
 function focusDraftPropertyInNode(): void {
