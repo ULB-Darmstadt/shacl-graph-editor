@@ -61,6 +61,16 @@ function propertyLabel(property: PropertyShape): string {
   return property.name?.trim() || 'Unnamed field'
 }
 
+function propertyDatatypeHint(property: PropertyShape): string | null {
+  const iri = property.datatype?.value
+  if (!iri) return null
+  return iri.split(/[/#:]/).filter(Boolean).pop() ?? iri
+}
+
+function propertyCardinalityHint(property: PropertyShape): string {
+  return `${property.minCount ?? 0}...${property.maxCount ?? '*'}`
+}
+
 function propertyKey(property: PropertyShape): string {
   return property.nodeId.value
 }
@@ -682,6 +692,11 @@ function onShapeDrop(event: DragEvent): void {
             <span v-else class="prop-name">{{ propertyLabel(property) }}</span>
           </template>
 
+          <span class="field-hints">
+            <span v-if="propertyDatatypeHint(property)" class="field-hints__datatype" :title="property.datatype?.value">{{ propertyDatatypeHint(property) }}</span>
+            <span class="field-hints__cardinality" title="Minimum...maximum count">{{ propertyCardinalityHint(property) }}</span>
+          </span>
+
           <Handle
             v-if="hasRelationshipHandle(property)"
             :id="`ref:${property.nodeId.value}`"
@@ -786,6 +801,11 @@ function onShapeDrop(event: DragEvent): void {
             />
             <span v-else class="prop-name">{{ propertyLabel(property) }}</span>
           </template>
+
+          <span class="field-hints">
+            <span v-if="propertyDatatypeHint(property)" class="field-hints__datatype" :title="property.datatype?.value">{{ propertyDatatypeHint(property) }}</span>
+            <span class="field-hints__cardinality" title="Minimum...maximum count">{{ propertyCardinalityHint(property) }}</span>
+          </span>
 
           <Handle
             v-if="hasRelationshipHandle(property)"
@@ -1088,6 +1108,35 @@ header {
   min-width: 0;
   flex: 1;
   overflow-wrap: anywhere;
+}
+
+.field-hints {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 48%;
+  margin-left: auto;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.field-hints__datatype {
+  min-width: 0;
+  padding: 1px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-hints__cardinality {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .property-drag-grip {
