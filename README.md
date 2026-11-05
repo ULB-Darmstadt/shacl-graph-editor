@@ -17,6 +17,7 @@ SHACL Graph Editor is a browser-based editor for the workflow:
 - Create and adjust profile connections such as `sh:node`, `sh:or`, and `sh:qualifiedvalueshape`.
 - Use Exactly One Profile (`sh:xone`) when a field must satisfy exactly one of several target profiles.
 - Hide or show outgoing connections from a field or an entire profile using its right-click menu. Hidden branches leave a fading connector; profiles still reached by other fields stay visible.
+- Search visible canvas profiles in the left sidebar, grouped into Drafts and Existing, and select an entry to focus its node.
 - Move properties between profiles or reorder them within a profile by drag and drop.
 - Right-click a field to delete it or create an own-property copy of its name, description, and IRI for additional constraints.
 - Imported profiles are locked for editing by default. Change this in Settings → Display Settings; locked profiles can still be inherited and their fields copied into editable profiles.

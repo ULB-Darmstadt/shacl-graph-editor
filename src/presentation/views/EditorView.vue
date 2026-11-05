@@ -14,6 +14,7 @@ import { useEditorGraph } from '@/presentation/features/editor/useEditorGraph'
 import { propertyConnectionKey } from '@/presentation/features/editor/collapsedPropertyConnections'
 import { useEditorPreviews } from '@/presentation/features/editor/useEditorPreviews'
 import { useEditorSelection } from '@/presentation/features/editor/useEditorSelection'
+import EditorProfileSidebar, { type CanvasProfileSidebarItem } from '@/presentation/features/editor/components/EditorProfileSidebar.vue'
 import EditorDialogs from '@/presentation/features/editor/EditorDialogs.vue'
 import EditorInspector from '@/presentation/features/editor/components/inspector/EditorInspector.vue'
 import { useProfileWorkflowMenu } from '@/presentation/features/profile-workflow/useProfileWorkflowMenu'
@@ -48,7 +49,7 @@ const editorMode = ref<EditorMode>('edit')
 const readOnlyMode = computed(() => editorMode.value === 'view')
 const reviewMode = computed(() => editorMode.value === 'review')
 const draftPropertyNodeId = ref<string | null>(null)
-const profileSearchHoveredShapeIri = ref<string | null>(null)
+const sidebarHoveredShapeIri = ref<string | null>(null)
 const pendingPlacementAnchor = ref<XYPosition | null>(null)
 const pendingPlacementOffset = ref(0)
 const pendingProfilePlacement = ref(false)
@@ -101,8 +102,7 @@ function updateProfileUrl(profileIri: string, value: string): { ok: boolean; rea
 
 function resetEditorUiState(): void {
   closeImportDialog()
-  profileSearchDialogOpen.value = false
-  profileSearchHoveredShapeIri.value = null
+  sidebarHoveredShapeIri.value = null
   shapePreviewOpen.value = false
   relationChoiceDialogOpen.value = false
   pendingConnection.value = null
@@ -193,7 +193,7 @@ const { nodes, edges, nodeTypes, edgeTypes, hiddenProfileCount } = useEditorGrap
   removeReferenceEdge: requestRemoveReferenceEdge,
   requestedNodePositions,
   selectedShapeIri,
-  highlightedShapeIri: profileSearchHoveredShapeIri,
+  highlightedShapeIri: sidebarHoveredShapeIri,
   selectedPropertyKey,
   draftPropertyNodeId,
   selectShape,
@@ -243,12 +243,6 @@ type CanvasNodePosition = {
   }
 }
 
-type CanvasProfileSearchItem = {
-  shapeIri: string
-  label: string
-  description: string | null
-}
-
 type ReviewSeverityFilter = 'all' | 'urgent' | 'warning'
 type EditorSettingsTab = 'defaults' | 'shacl-classes'
 
@@ -266,8 +260,6 @@ const editorSettingsTab = ref<EditorSettingsTab>('defaults')
 const reviewDialogOpen = ref(false)
 const reviewSeverityFilter = ref<ReviewSeverityFilter>('all')
 const reviewSearch = ref('')
-const profileSearchDialogOpen = ref(false)
-const profileSearch = ref('')
 const subjectHeadingOptions = ref<SelectOption[]>([])
 const defaultCreator = ref(localStorage.getItem('editor.defaultCreator') ?? '')
 const defaultCreated = ref(localStorage.getItem('editor.defaultCreated') ?? '')
@@ -361,7 +353,7 @@ const filteredReviewItems = computed(() => {
 })
 const filteredUrgentReviewItems = computed(() => filteredReviewItems.value.filter(item => item.severity === 'urgent'))
 const filteredWarningReviewItems = computed(() => filteredReviewItems.value.filter(item => item.severity === 'warning'))
-const canvasProfileSearchItems = computed<CanvasProfileSearchItem[]>(() => {
+const canvasProfileItems = computed<CanvasProfileSidebarItem[]>(() => {
   const visibleShapeIris = new Set<string>()
 
   for (const node of nodes.value) {
@@ -376,27 +368,13 @@ const canvasProfileSearchItems = computed<CanvasProfileSearchItem[]>(() => {
       return {
         shapeIri,
         label: shape.label?.trim() || 'Unnamed profile',
+        isDraft: profiles.value.find(profile => profile.iri === shape.sourceProfileIri)?.origin === 'created',
         description: shape.description?.trim().split(/\r?\n/, 1)[0]?.trim() || null,
       }
     })
-    .filter((item): item is CanvasProfileSearchItem => item !== null)
+    .filter((item): item is CanvasProfileSidebarItem => item !== null)
     .sort((left, right) => left.label.localeCompare(right.label))
 })
-const filteredCanvasProfileSearchItems = computed(() => {
-  const needle = profileSearch.value.trim().toLocaleLowerCase()
-  if (!needle) return canvasProfileSearchItems.value
-
-  return canvasProfileSearchItems.value.filter(item => [
-    item.label,
-    item.description,
-    item.shapeIri,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLocaleLowerCase()
-    .includes(needle))
-})
-
 const isPlacementHintVisible = computed(() => pendingProfilePlacement.value && placementPreviewClientPosition.value !== null)
 const placementHintStyle = computed(() => {
   if (!placementPreviewClientPosition.value || !graphShellRef.value) return null
@@ -513,8 +491,7 @@ function closeActionMenus(): void {
 }
 
 function closeActionOverlay(): void {
-  profileSearchHoveredShapeIri.value = null
-  profileSearchDialogOpen.value = false
+  sidebarHoveredShapeIri.value = null
   reviewDialogOpen.value = false
   closeImportDialog()
 }
@@ -524,8 +501,7 @@ function updateActionOverlayMetrics(): void {
 }
 
 function openImportOverlay(importerId: string): void {
-  profileSearchHoveredShapeIri.value = null
-  profileSearchDialogOpen.value = false
+  sidebarHoveredShapeIri.value = null
   reviewDialogOpen.value = false
   updateActionOverlayMetrics()
   openImportDialog(importerId)
@@ -540,7 +516,6 @@ function handleGlobalPointerDown(event: PointerEvent): void {
     && !addProfileMenuOpen.value
     && !settingsMenuOpen.value
     && !reviewDialogOpen.value
-    && !profileSearchDialogOpen.value
     && !activeImportDialogVisible.value
   ) return
   const target = event.target as Node | null
@@ -1115,8 +1090,7 @@ function propertyForConnection(connection: EditableConnection): (typeof nodeShap
 }
 
 function openReviewDialog(): void {
-  profileSearchHoveredShapeIri.value = null
-  profileSearchDialogOpen.value = false
+  sidebarHoveredShapeIri.value = null
   closeImportDialog()
   closeCanvasMenu()
   closeShapeHeaderMenu()
@@ -1126,38 +1100,26 @@ function openReviewDialog(): void {
   void nextTick(updateActionOverlayMetrics)
 }
 
-function openProfileSearchDialog(): void {
-  closeImportDialog()
-  closeCanvasMenu()
-  closeShapeHeaderMenu()
-  closeActionMenus()
-  reviewDialogOpen.value = false
-  profileSearch.value = ''
-  profileSearchHoveredShapeIri.value = null
-  updateActionOverlayMetrics()
-  profileSearchDialogOpen.value = true
-  void nextTick(updateActionOverlayMetrics)
-}
-
-function highlightProfileSearchItem(item: CanvasProfileSearchItem): void {
-  profileSearchHoveredShapeIri.value = item.shapeIri
-}
-
-function clearProfileSearchHighlight(item: CanvasProfileSearchItem): void {
-  if (profileSearchHoveredShapeIri.value !== item.shapeIri) return
-  profileSearchHoveredShapeIri.value = null
-}
-
-async function jumpToProfileSearchItem(item: CanvasProfileSearchItem): Promise<void> {
+async function focusCanvasProfile(item: CanvasProfileSidebarItem): Promise<void> {
   const shape = profileStore.applicationProfile.findNodeShape(item.shapeIri)
   if (!shape) return
 
-  profileSearchHoveredShapeIri.value = null
+  closeCanvasMenu()
+  closeShapeHeaderMenu()
+  closeActionMenus()
+  closeActionOverlay()
+  cancelPendingProfilePlacement()
+  resetPendingPlacement()
+  sidebarHoveredShapeIri.value = null
   selectShape(shape)
-  profileSearchDialogOpen.value = false
   await nextTick()
   await waitForAnimationFrame()
   await centerShapeInCanvas(item.shapeIri)
+}
+
+function openSidebarProfileMenu(item: CanvasProfileSidebarItem, event: MouseEvent): void {
+  const shape = profileStore.applicationProfile.findNodeShape(item.shapeIri)
+  if (shape) openShapeHeaderMenu(shape, event)
 }
 
 async function jumpToReviewItem(item: EditorReviewItem): Promise<void> {
@@ -1452,427 +1414,391 @@ void fetchSubjectHeadingOptions().then(options => {
     <input ref="schemaInputRef" type="file" accept=".ttl,.shacl,text/turtle" multiple style="display:none" @change="onSchemaFiles" />
 
     <div class="editor-workspace">
-      <div
-        ref="graphShellRef"
-        class="editor-graph-shell"
-        :class="{ 'is-placement-active': pendingProfilePlacement }"
-        @contextmenu="handleShellContextMenu"
-        @pointermove="handleGraphPointerMove"
-        @click.capture="handleGraphShellClick"
-      >
-        <div v-if="isResolvingImports" class="graph-status">
-          <i class="pi pi-spin pi-spinner" /> Resolving imports...
-        </div>
-
-        <div v-if="hasNothing" class="empty-state">
-          <h2 class="section-title">Where do you want to start today?</h2>
-          <div class="empty-state__actions">
-            <button type="button" class="empty-state__option" :disabled="readOnlyMode" @click="handleBottomAddNewProfile">
-              <i class="pi pi-plus-circle" aria-hidden="true" />
-              Start with new profile
-            </button>
-            <button type="button" class="empty-state__option" :disabled="readOnlyMode" @click="cancelPendingProfilePlacement(); handleCanvasExistingProfile()">
-              <i class="pi pi-search" aria-hidden="true" />
-              Load profiles from Metadata Profile Service
-            </button>
-            <button type="button" class="empty-state__option" :disabled="readOnlyMode" @click="cancelPendingProfilePlacement(); handleCanvasUploadProfiles()">
-              <i class="pi pi-upload" aria-hidden="true" />
-              Import your own profiles
-            </button>
-          </div>
-        </div>
-
-        <VueFlow
-          class="editor-graph"
-          :class="{ 'editor-graph--empty': hasNothing }"
-          :aria-hidden="hasNothing"
-          v-model:nodes="nodes"
-          v-model:edges="edges"
-          :node-types="nodeTypes"
-          :edge-types="edgeTypes"
-          :default-edge-options="{ animated: false, type: 'default' }"
-          :min-zoom="0.05"
-          :max-zoom="2"
-          fit-view-on-init
-          @connect="handleConnect"
-          @pane-click="handlePaneClick"
-        >
-          <Background pattern-color="var(--color-border)" :gap="20" />
-          <Controls position="top-left" />
-          <MiniMap pannable zoomable />
-        </VueFlow>
-
+      <EditorProfileSidebar
+        :items="canvasProfileItems"
+        :selected-shape-iri="selectedShapeIri"
+        @select="focusCanvasProfile"
+        @contextmenu="openSidebarProfileMenu"
+        @highlight="sidebarHoveredShapeIri = $event"
+      />
+      <div class="editor-canvas-area">
         <div
-          v-if="isPlacementHintVisible && placementHintStyle"
-          class="placement-hint-float"
-          :style="placementHintStyle"
-          aria-hidden="true"
+          ref="graphShellRef"
+          class="editor-graph-shell"
+          :class="{ 'is-placement-active': pendingProfilePlacement }"
+          @contextmenu="handleShellContextMenu"
+          @pointermove="handleGraphPointerMove"
+          @click.capture="handleGraphShellClick"
         >
-          <span class="placement-hint-float__plus">+</span>
-          <span>Click to add</span>
-        </div>
-
-        <div
-          v-if="canvasMenu.open"
-          ref="canvasMenuRef"
-          class="canvas-menu"
-          :style="{ left: `${canvasMenu.x}px`, top: `${canvasMenu.y}px` }"
-        >
-          <button type="button" class="canvas-menu__item" @click="handleCanvasNewProfile">
-            <i class="pi pi-plus-circle canvas-menu__icon" />
-            <span class="canvas-menu__label">Add new profile</span>
-          </button>
-          <button type="button" class="canvas-menu__item" @click="handleCanvasExistingProfile">
-            <i class="pi pi-search canvas-menu__icon" />
-            <span class="canvas-menu__label">Load existing profiles</span>
-          </button>
-          <button type="button" class="canvas-menu__item" @click="handleCanvasUploadProfiles">
-            <i class="pi pi-upload canvas-menu__icon" />
-            <span class="canvas-menu__label">Import profiles</span>
-          </button>
-          <button type="button" class="canvas-menu__item" :disabled="collapsedPropertyConnections.size === 0" @click="showAllHiddenConnections">
-            <i class="pi pi-eye canvas-menu__icon" aria-hidden="true" />
-            <span class="canvas-menu__label">Show all hidden connections</span>
-          </button>
-        </div>
-
-        <div
-          v-if="shapeHeaderMenu.open"
-          class="canvas-menu shape-header-menu"
-          :style="{ left: `${shapeHeaderMenu.x}px`, top: `${shapeHeaderMenu.y}px` }"
-        >
-          <div class="shape-header-menu__title">{{ shapeHeaderMenu.label ?? 'Profile' }}</div>
-          <button v-if="profileMenuConnectionKeys().length" type="button" class="canvas-menu__item" :disabled="reviewMode || profileMenuConnectionKeys().every(key => collapsedPropertyConnections.has(key))" :title="reviewMode ? 'All connections are shown in Review mode.' : undefined" @click="setProfileConnectionsHidden(true)">
-            <i class="pi pi-eye-slash canvas-menu__icon" aria-hidden="true" />
-            <span class="canvas-menu__label">Hide all connections</span>
-          </button>
-          <button v-if="profileMenuConnectionKeys().length" type="button" class="canvas-menu__item" :disabled="!profileMenuConnectionKeys().some(key => collapsedPropertyConnections.has(key))" @click="setProfileConnectionsHidden(false)">
-            <i class="pi pi-eye canvas-menu__icon" aria-hidden="true" />
-            <span class="canvas-menu__label">Show all connections</span>
-          </button>
-          <button type="button" class="canvas-menu__item" @click="handleShapeHeaderCreateInheritedProfile">
-            <i class="pi pi-sitemap canvas-menu__icon" />
-            <span class="canvas-menu__label">Create inherited profile</span>
-          </button>
-          <button v-if="shapeHeaderMenu.allowDelete" type="button" class="canvas-menu__item canvas-menu__item--danger" @click="handleShapeHeaderDeleteProfile">
-            <i class="pi pi-trash canvas-menu__icon" />
-            <span class="canvas-menu__label">Delete profile</span>
-          </button>
-        </div>
-        <div
-          v-if="propertyMenu"
-          ref="propertyMenuRef"
-          class="canvas-menu property-menu"
-          :style="{ left: `${propertyMenu.x}px`, top: `${propertyMenu.y}px` }"
-          aria-label="Field actions"
-          @contextmenu.stop.prevent
-          @keydown.esc.stop.prevent="propertyMenu = null"
-        >
-          <div class="shape-header-menu__title">{{ propertyMenu.label }}</div>
-          <button v-if="propertyMenuHasConnections()" type="button" class="canvas-menu__item" :disabled="reviewMode && !propertyMenuConnectionsCollapsed()" :title="reviewMode ? 'All connections are shown in Review mode.' : undefined" @click="togglePropertyConnections">
-            <i :class="propertyMenuConnectionsCollapsed() ? 'pi pi-eye canvas-menu__icon' : 'pi pi-eye-slash canvas-menu__icon'" aria-hidden="true" />
-            <span class="canvas-menu__label">{{ propertyMenuConnectionsCollapsed() ? 'Show connections' : 'Hide connections' }}</span>
-          </button>
-          <button type="button" class="canvas-menu__item canvas-menu__item--danger" :disabled="profileStore.isPropertyLocked(propertyMenu.shapeIri, propertyMenu.propertyNodeId)" @click="handleDeleteProperty">
-            <i class="pi pi-trash canvas-menu__icon" aria-hidden="true" />
-            <span class="canvas-menu__label">Delete</span>
-          </button>
-          <button type="button" class="canvas-menu__item" @click="handleCopyProperty">
-            <i class="pi pi-copy canvas-menu__icon" aria-hidden="true" />
-            <span class="canvas-menu__label">Create copy</span>
-          </button>
-        </div>
-      </div>
-
-      <button
-        ref="settingsFabRef"
-        type="button"
-        class="settings-fab"
-        title="Settings"
-        aria-label="Settings"
-        @click.stop="settingsMenuOpen = !settingsMenuOpen; addProfileMenuOpen = false"
-      >
-        <i class="pi pi-cog" />
-      </button>
-      <div v-if="settingsMenuOpen" ref="settingsMenuRef" class="settings-menu">
-        <button type="button" class="settings-menu__item" @click="openSettings">
-          <i class="pi pi-sliders-h" />
-          <span>Settings</span>
-        </button>
-        <button type="button" class="settings-menu__item" :disabled="profiles.length === 0" @click="handleExportProfiles">
-          <i class="pi pi-download" />
-          <span>Export Profiles</span>
-        </button>
-        <button type="button" class="settings-menu__item" :disabled="readOnlyMode" @click="handleCanvasUploadProfiles">
-          <i class="pi pi-upload" />
-          <span>Import Profiles</span>
-        </button>
-        <button type="button" class="settings-menu__item" @click="handleConfirmResetAll">
-          <i class="pi pi-refresh" />
-          <span>Reset Editor</span>
-        </button>
-      </div>
-
-      <div ref="canvasActionBarRef" class="canvas-action-bar">
-        <p v-if="hiddenProfileCount > 0" class="canvas-action-bar__hidden-profiles" role="status">
-          {{ hiddenProfileCount }} {{ hiddenProfileCount === 1 ? 'profile hidden' : 'profiles hidden' }}
-        </p>
-        <div class="add-profile-control">
-          <button type="button" class="action-tile action-tile--primary add-profile-main" :disabled="readOnlyMode" @click="handleBottomAddNewProfile">
-            <i class="pi pi-plus-circle action-tile__icon" />
-            <span class="action-tile__label">Add Profile</span>
-          </button>
-          <button
-            type="button"
-            class="add-profile-menu-trigger"
-            title="Choose profile action"
-            aria-label="Choose profile action"
-            :disabled="readOnlyMode"
-            @click.stop="openBottomAddMenu"
-          >
-            <i class="pi pi-chevron-down" />
-          </button>
-          <div v-if="addProfileMenuOpen" class="add-profile-menu">
-            <button type="button" class="add-profile-menu__item" @click="handleBottomAddNewProfile">
-              <i class="pi pi-plus-circle" />
-              <span>Add new Profile</span>
-            </button>
-            <button type="button" class="add-profile-menu__item" @click="handleCanvasExistingProfile">
-              <i class="pi pi-search" />
-              <span>Load existing profiles</span>
-            </button>
-            <button type="button" class="add-profile-menu__item" @click="handleCanvasUploadProfiles">
-              <i class="pi pi-upload" />
-              <span>Import Profiles</span>
-            </button>
-          </div>
-        </div>
-        <button
-          type="button"
-          class="action-tile"
-          title="Undo (Ctrl/Cmd+Z)"
-          aria-label="Undo"
-          aria-keyshortcuts="Control+z Meta+z"
-          :disabled="readOnlyMode || !canUndo"
-          @click="handleHistoryAction('undo')"
-        >
-          <i class="pi pi-undo action-tile__icon" aria-hidden="true" />
-          <span class="action-tile__label">Undo</span>
-        </button>
-        <button
-          type="button"
-          class="action-tile"
-          title="Redo (Ctrl/Cmd+Shift+Z or Ctrl+Y)"
-          aria-label="Redo"
-          aria-keyshortcuts="Control+Shift+z Meta+Shift+z Control+y"
-          :disabled="readOnlyMode || !canRedo"
-          @click="handleHistoryAction('redo')"
-        >
-          <i class="pi pi-undo action-tile__icon action-tile__icon--redo" aria-hidden="true" />
-          <span class="action-tile__label">Redo</span>
-        </button>
-        <button type="button" class="action-tile action-tile--review" :disabled="profiles.length === 0" @click="openReviewDialog">
-          <i class="pi pi-verified action-tile__icon" />
-          <span class="action-tile__label">Review</span>
-          <span v-if="reviewItems.length > 0" class="review-count" :class="{ 'has-urgent': urgentReviewItems.length > 0 }">{{ reviewItems.length }}</span>
-        </button>
-        <button type="button" class="action-tile" :disabled="nodes.length === 0" @click="openProfileSearchDialog">
-          <i class="pi pi-search action-tile__icon" />
-          <span class="action-tile__label">Search</span>
-        </button>
-        <div class="action-menu-divider" aria-hidden="true" />
-        <div class="mode-segment" aria-label="Editor mode">
-          <button
-            v-for="option in EDITOR_MODE_OPTIONS"
-            :key="option.value"
-            type="button"
-            class="mode-segment__button"
-            :class="{ 'is-active': editorMode === option.value }"
-            @click="setEditorMode(option.value)"
-          >
-            <i :class="option.icon" />
-            <span>{{ option.label }}</span>
-          </button>
-        </div>
-      </div>
-
-      <div
-        v-if="profileSearchDialogOpen || reviewDialogOpen || activeImportDialogVisible"
-        ref="actionOverlayRef"
-        class="action-menu-overlay"
-        :style="actionOverlayStyle"
-      >
-        <component
-          :is="activeImportDialogDefinition.component"
-          v-if="activeImportDialogDefinition && activeImportDialogVisible"
-          :key="activeImportDialogKey"
-          v-bind="activeImportDialogProps"
-          class="action-menu-overlay__body"
-          @added="closeImportDialog"
-        />
-
-        <div v-else-if="profileSearchDialogOpen" class="review-overlay">
-          <div class="review-overlay__search">
-            <input
-              v-model="profileSearch"
-              class="review-search-input"
-              type="search"
-              placeholder="Search profiles on canvas"
-              aria-label="Search profiles on canvas"
-              autofocus
-            />
+          <div v-if="isResolvingImports" class="graph-status">
+            <i class="pi pi-spin pi-spinner" /> Resolving imports...
           </div>
 
-          <div v-if="canvasProfileSearchItems.length === 0" class="review-empty">
-            No profiles on the canvas.
-          </div>
-
-          <div v-else-if="filteredCanvasProfileSearchItems.length === 0" class="review-empty">
-            No profiles match your search.
-          </div>
-
-          <div v-else class="review-list" aria-label="Profiles on canvas">
-            <button
-              v-for="item in filteredCanvasProfileSearchItems"
-              :key="item.shapeIri"
-              type="button"
-              class="review-item profile-search-item"
-              @mouseenter="highlightProfileSearchItem(item)"
-              @mouseleave="clearProfileSearchHighlight(item)"
-              @focus="highlightProfileSearchItem(item)"
-              @blur="clearProfileSearchHighlight(item)"
-              @click="jumpToProfileSearchItem(item)"
-            >
-              <span class="review-item__body">
-                <strong class="review-item__title">{{ item.label }}</strong>
-                <span v-if="item.description" class="profile-search-item__description">{{ item.description }}</span>
-              </span>
-              <i class="pi pi-crosshairs review-item__icon" />
-            </button>
-          </div>
-        </div>
-
-        <div v-else-if="reviewDialogOpen" class="review-overlay">
-          <div class="review-overlay__search">
-            <input
-              v-model="reviewSearch"
-              class="review-search-input"
-              type="search"
-              placeholder="Search review findings"
-            />
-          </div>
-
-          <div v-if="reviewItems.length > 0" class="review-filters" aria-label="Review filters">
-            <div class="review-filter-group" aria-label="Severity">
-              <button
-                type="button"
-                class="review-filter"
-                :class="{ 'is-active': reviewSeverityFilter === 'all' }"
-                @click="reviewSeverityFilter = 'all'"
-              >
-                All
+          <div v-if="hasNothing" class="empty-state">
+            <h2 class="section-title">Where do you want to start today?</h2>
+            <div class="empty-state__actions">
+              <button type="button" class="empty-state__option" :disabled="readOnlyMode" @click="handleBottomAddNewProfile">
+                <i class="pi pi-plus-circle" aria-hidden="true" />
+                Start with new profile
               </button>
-              <button
-                type="button"
-                class="review-filter"
-                :class="{ 'is-active': reviewSeverityFilter === 'urgent' }"
-                @click="reviewSeverityFilter = 'urgent'"
-              >
-                Urgent
+              <button type="button" class="empty-state__option" :disabled="readOnlyMode" @click="cancelPendingProfilePlacement(); handleCanvasExistingProfile()">
+                <i class="pi pi-search" aria-hidden="true" />
+                Load profiles from Metadata Profile Service
               </button>
-              <button
-                type="button"
-                class="review-filter"
-                :class="{ 'is-active': reviewSeverityFilter === 'warning' }"
-                @click="reviewSeverityFilter = 'warning'"
-              >
-                Warning
+              <button type="button" class="empty-state__option" :disabled="readOnlyMode" @click="cancelPendingProfilePlacement(); handleCanvasUploadProfiles()">
+                <i class="pi pi-upload" aria-hidden="true" />
+                Import your own profiles
               </button>
             </div>
           </div>
 
-          <div v-if="reviewItems.length === 0" class="review-empty">
-            No review findings.
+          <VueFlow
+            class="editor-graph"
+            :class="{ 'editor-graph--empty': hasNothing }"
+            :aria-hidden="hasNothing"
+            v-model:nodes="nodes"
+            v-model:edges="edges"
+            :node-types="nodeTypes"
+            :edge-types="edgeTypes"
+            :default-edge-options="{ animated: false, type: 'default' }"
+            :min-zoom="0.05"
+            :max-zoom="2"
+            fit-view-on-init
+            @connect="handleConnect"
+            @pane-click="handlePaneClick"
+          >
+            <Background pattern-color="var(--color-border)" :gap="20" />
+            <Controls position="top-left" />
+            <MiniMap pannable zoomable />
+          </VueFlow>
+
+          <div
+            v-if="isPlacementHintVisible && placementHintStyle"
+            class="placement-hint-float"
+            :style="placementHintStyle"
+            aria-hidden="true"
+          >
+            <span class="placement-hint-float__plus">+</span>
+            <span>Click to add</span>
           </div>
 
-          <div v-else-if="filteredReviewItems.length === 0" class="review-empty">
-            No findings match the current filters.
+          <div
+            v-if="canvasMenu.open"
+            ref="canvasMenuRef"
+            class="canvas-menu"
+            :style="{ left: `${canvasMenu.x}px`, top: `${canvasMenu.y}px` }"
+          >
+            <button type="button" class="canvas-menu__item" @click="handleCanvasNewProfile">
+              <i class="pi pi-plus-circle canvas-menu__icon" />
+              <span class="canvas-menu__label">Add new profile</span>
+            </button>
+            <button type="button" class="canvas-menu__item" @click="handleCanvasExistingProfile">
+              <i class="pi pi-search canvas-menu__icon" />
+              <span class="canvas-menu__label">Load existing profiles</span>
+            </button>
+            <button type="button" class="canvas-menu__item" @click="handleCanvasUploadProfiles">
+              <i class="pi pi-upload canvas-menu__icon" />
+              <span class="canvas-menu__label">Import profiles</span>
+            </button>
+            <button type="button" class="canvas-menu__item" :disabled="collapsedPropertyConnections.size === 0" @click="showAllHiddenConnections">
+              <i class="pi pi-eye canvas-menu__icon" aria-hidden="true" />
+              <span class="canvas-menu__label">Show all hidden connections</span>
+            </button>
           </div>
 
-          <div v-else class="review-list">
-            <section v-if="filteredUrgentReviewItems.length > 0" class="review-group">
-              <h3 class="review-group__title">
-                <span>Urgent</span>
-              </h3>
-              <button
-                v-for="item in filteredUrgentReviewItems"
-                :key="item.id"
-                type="button"
-                class="review-item"
-                :class="`is-${item.severity}`"
-                @click="jumpToReviewItem(item)"
-              >
-                <span class="review-item__body">
-                  <strong class="review-item__title">{{ item.title }}</strong>
-                  <span class="review-item__target">
-                    {{ item.subject === 'profile' ? 'Profile' : 'Property' }}:
-                    {{ item.profileLabel }}<template v-if="item.propertyLabel"> / {{ item.propertyLabel }}</template>
-                  </span>
-                </span>
-                <i class="pi pi-arrow-right review-item__icon" />
-              </button>
-            </section>
-
-            <section v-if="filteredWarningReviewItems.length > 0" class="review-group">
-              <h3 class="review-group__title">
-                <span>Warnings</span>
-              </h3>
-              <button
-                v-for="item in filteredWarningReviewItems"
-                :key="item.id"
-                type="button"
-                class="review-item"
-                :class="`is-${item.severity}`"
-                @click="jumpToReviewItem(item)"
-              >
-                <span class="review-item__body">
-                  <strong class="review-item__title">{{ item.title }}</strong>
-                  <span class="review-item__target">
-                    {{ item.subject === 'profile' ? 'Profile' : 'Property' }}:
-                    {{ item.profileLabel }}<template v-if="item.propertyLabel"> / {{ item.propertyLabel }}</template>
-                  </span>
-                </span>
-                <i class="pi pi-arrow-right review-item__icon" />
-              </button>
-            </section>
+          <div
+            v-if="shapeHeaderMenu.open"
+            class="canvas-menu shape-header-menu"
+            :style="{ left: `${shapeHeaderMenu.x}px`, top: `${shapeHeaderMenu.y}px` }"
+          >
+            <div class="shape-header-menu__title">{{ shapeHeaderMenu.label ?? 'Profile' }}</div>
+            <button v-if="profileMenuConnectionKeys().length" type="button" class="canvas-menu__item" :disabled="reviewMode || profileMenuConnectionKeys().every(key => collapsedPropertyConnections.has(key))" :title="reviewMode ? 'All connections are shown in Review mode.' : undefined" @click="setProfileConnectionsHidden(true)">
+              <i class="pi pi-eye-slash canvas-menu__icon" aria-hidden="true" />
+              <span class="canvas-menu__label">Hide all connections</span>
+            </button>
+            <button v-if="profileMenuConnectionKeys().length" type="button" class="canvas-menu__item" :disabled="!profileMenuConnectionKeys().some(key => collapsedPropertyConnections.has(key))" @click="setProfileConnectionsHidden(false)">
+              <i class="pi pi-eye canvas-menu__icon" aria-hidden="true" />
+              <span class="canvas-menu__label">Show all connections</span>
+            </button>
+            <button type="button" class="canvas-menu__item" @click="handleShapeHeaderCreateInheritedProfile">
+              <i class="pi pi-sitemap canvas-menu__icon" />
+              <span class="canvas-menu__label">Create inherited profile</span>
+            </button>
+            <button v-if="shapeHeaderMenu.allowDelete" type="button" class="canvas-menu__item canvas-menu__item--danger" @click="handleShapeHeaderDeleteProfile">
+              <i class="pi pi-trash canvas-menu__icon" />
+              <span class="canvas-menu__label">Delete profile</span>
+            </button>
+          </div>
+          <div
+            v-if="propertyMenu"
+            ref="propertyMenuRef"
+            class="canvas-menu property-menu"
+            :style="{ left: `${propertyMenu.x}px`, top: `${propertyMenu.y}px` }"
+            aria-label="Field actions"
+            @contextmenu.stop.prevent
+            @keydown.esc.stop.prevent="propertyMenu = null"
+          >
+            <div class="shape-header-menu__title">{{ propertyMenu.label }}</div>
+            <button v-if="propertyMenuHasConnections()" type="button" class="canvas-menu__item" :disabled="reviewMode && !propertyMenuConnectionsCollapsed()" :title="reviewMode ? 'All connections are shown in Review mode.' : undefined" @click="togglePropertyConnections">
+              <i :class="propertyMenuConnectionsCollapsed() ? 'pi pi-eye canvas-menu__icon' : 'pi pi-eye-slash canvas-menu__icon'" aria-hidden="true" />
+              <span class="canvas-menu__label">{{ propertyMenuConnectionsCollapsed() ? 'Show connections' : 'Hide connections' }}</span>
+            </button>
+            <button type="button" class="canvas-menu__item canvas-menu__item--danger" :disabled="profileStore.isPropertyLocked(propertyMenu.shapeIri, propertyMenu.propertyNodeId)" @click="handleDeleteProperty">
+              <i class="pi pi-trash canvas-menu__icon" aria-hidden="true" />
+              <span class="canvas-menu__label">Delete</span>
+            </button>
+            <button type="button" class="canvas-menu__item" @click="handleCopyProperty">
+              <i class="pi pi-copy canvas-menu__icon" aria-hidden="true" />
+              <span class="canvas-menu__label">Create copy</span>
+            </button>
           </div>
         </div>
-      </div>
 
-      <div v-if="hasInspectorSelection" class="editor-inspector-overlay">
-        <EditorInspector
-          :shape="selectedShape"
-          :property="selectedProperty"
-          :profile="selectedProfile"
-          :read-only="selectionReadOnly"
-          :imported-locked="selectionImportedLocked"
-          :draft-property-node-id="draftPropertyNodeId"
-          :all-shapes="nodeShapes"
-          :create-property="createProperty"
-          :commit-draft-property="commitDraftProperty"
-          :update-shape-field="profileStore.updateShapeField"
-          :update-profile-url="updateProfileUrl"
-          :update-property-field="profileStore.updatePropertyField"
-          :set-shape-inheritance="profileStore.setShapeInheritance"
-          :set-property-node-target="profileStore.setPropertyNodeTarget"
-          :set-property-inline-node-shape="profileStore.setPropertyInlineNodeShape"
-          :set-property-inline-node-shape-label="profileStore.setPropertyInlineNodeShapeLabel"
-          :set-property-alternative-targets="profileStore.setPropertyAlternativeTargets"
-          :set-property-exclusive-datatype-alternatives="profileStore.setPropertyExclusiveDatatypeAlternatives"
-          :set-property-type="profileStore.setPropertyType"
-          :delete-shape="deleteSelectedShape"
-          :delete-property="deleteSelectedProperty"
-        />
+        <button
+          ref="settingsFabRef"
+          type="button"
+          class="settings-fab"
+          title="Settings"
+          aria-label="Settings"
+          @click.stop="settingsMenuOpen = !settingsMenuOpen; addProfileMenuOpen = false"
+        >
+          <i class="pi pi-cog" />
+        </button>
+        <div v-if="settingsMenuOpen" ref="settingsMenuRef" class="settings-menu">
+          <button type="button" class="settings-menu__item" @click="openSettings">
+            <i class="pi pi-sliders-h" />
+            <span>Settings</span>
+          </button>
+          <button type="button" class="settings-menu__item" :disabled="profiles.length === 0" @click="handleExportProfiles">
+            <i class="pi pi-download" />
+            <span>Export Profiles</span>
+          </button>
+          <button type="button" class="settings-menu__item" :disabled="readOnlyMode" @click="handleCanvasUploadProfiles">
+            <i class="pi pi-upload" />
+            <span>Import Profiles</span>
+          </button>
+          <button type="button" class="settings-menu__item" @click="handleConfirmResetAll">
+            <i class="pi pi-refresh" />
+            <span>Reset Editor</span>
+          </button>
+        </div>
+
+        <div ref="canvasActionBarRef" class="canvas-action-bar">
+          <p v-if="hiddenProfileCount > 0" class="canvas-action-bar__hidden-profiles" role="status">
+            {{ hiddenProfileCount }} {{ hiddenProfileCount === 1 ? 'profile hidden' : 'profiles hidden' }}
+          </p>
+          <div class="add-profile-control">
+            <button type="button" class="action-tile action-tile--primary add-profile-main" :disabled="readOnlyMode" @click="handleBottomAddNewProfile">
+              <i class="pi pi-plus-circle action-tile__icon" />
+              <span class="action-tile__label">Add Profile</span>
+            </button>
+            <button
+              type="button"
+              class="add-profile-menu-trigger"
+              title="Choose profile action"
+              aria-label="Choose profile action"
+              :disabled="readOnlyMode"
+              @click.stop="openBottomAddMenu"
+            >
+              <i class="pi pi-chevron-down" />
+            </button>
+            <div v-if="addProfileMenuOpen" class="add-profile-menu">
+              <button type="button" class="add-profile-menu__item" @click="handleBottomAddNewProfile">
+                <i class="pi pi-plus-circle" />
+                <span>Add new Profile</span>
+              </button>
+              <button type="button" class="add-profile-menu__item" @click="handleCanvasExistingProfile">
+                <i class="pi pi-search" />
+                <span>Load existing profiles</span>
+              </button>
+              <button type="button" class="add-profile-menu__item" @click="handleCanvasUploadProfiles">
+                <i class="pi pi-upload" />
+                <span>Import Profiles</span>
+              </button>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="action-tile"
+            title="Undo (Ctrl/Cmd+Z)"
+            aria-label="Undo"
+            aria-keyshortcuts="Control+z Meta+z"
+            :disabled="readOnlyMode || !canUndo"
+            @click="handleHistoryAction('undo')"
+          >
+            <i class="pi pi-undo action-tile__icon" aria-hidden="true" />
+            <span class="action-tile__label">Undo</span>
+          </button>
+          <button
+            type="button"
+            class="action-tile"
+            title="Redo (Ctrl/Cmd+Shift+Z or Ctrl+Y)"
+            aria-label="Redo"
+            aria-keyshortcuts="Control+Shift+z Meta+Shift+z Control+y"
+            :disabled="readOnlyMode || !canRedo"
+            @click="handleHistoryAction('redo')"
+          >
+            <i class="pi pi-undo action-tile__icon action-tile__icon--redo" aria-hidden="true" />
+            <span class="action-tile__label">Redo</span>
+          </button>
+          <button type="button" class="action-tile action-tile--review" :disabled="profiles.length === 0" @click="openReviewDialog">
+            <i class="pi pi-verified action-tile__icon" />
+            <span class="action-tile__label">Review</span>
+            <span v-if="reviewItems.length > 0" class="review-count" :class="{ 'has-urgent': urgentReviewItems.length > 0 }">{{ reviewItems.length }}</span>
+          </button>
+          <div class="action-menu-divider" aria-hidden="true" />
+          <div class="mode-segment" aria-label="Editor mode">
+            <button
+              v-for="option in EDITOR_MODE_OPTIONS"
+              :key="option.value"
+              type="button"
+              class="mode-segment__button"
+              :class="{ 'is-active': editorMode === option.value }"
+              @click="setEditorMode(option.value)"
+            >
+              <i :class="option.icon" />
+              <span>{{ option.label }}</span>
+            </button>
+          </div>
+        </div>
+
+        <div
+          v-if="reviewDialogOpen || activeImportDialogVisible"
+          ref="actionOverlayRef"
+          class="action-menu-overlay"
+          :style="actionOverlayStyle"
+        >
+          <component
+            :is="activeImportDialogDefinition.component"
+            v-if="activeImportDialogDefinition && activeImportDialogVisible"
+            :key="activeImportDialogKey"
+            v-bind="activeImportDialogProps"
+            class="action-menu-overlay__body"
+            @added="closeImportDialog"
+          />
+
+          <div v-else-if="reviewDialogOpen" class="review-overlay">
+            <div class="review-overlay__search">
+              <input
+                v-model="reviewSearch"
+                class="review-search-input"
+                type="search"
+                placeholder="Search review findings"
+              />
+            </div>
+
+            <div v-if="reviewItems.length > 0" class="review-filters" aria-label="Review filters">
+              <div class="review-filter-group" aria-label="Severity">
+                <button
+                  type="button"
+                  class="review-filter"
+                  :class="{ 'is-active': reviewSeverityFilter === 'all' }"
+                  @click="reviewSeverityFilter = 'all'"
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  class="review-filter"
+                  :class="{ 'is-active': reviewSeverityFilter === 'urgent' }"
+                  @click="reviewSeverityFilter = 'urgent'"
+                >
+                  Urgent
+                </button>
+                <button
+                  type="button"
+                  class="review-filter"
+                  :class="{ 'is-active': reviewSeverityFilter === 'warning' }"
+                  @click="reviewSeverityFilter = 'warning'"
+                >
+                  Warning
+                </button>
+              </div>
+            </div>
+
+            <div v-if="reviewItems.length === 0" class="review-empty">
+              No review findings.
+            </div>
+
+            <div v-else-if="filteredReviewItems.length === 0" class="review-empty">
+              No findings match the current filters.
+            </div>
+
+            <div v-else class="review-list">
+              <section v-if="filteredUrgentReviewItems.length > 0" class="review-group">
+                <h3 class="review-group__title">
+                  <span>Urgent</span>
+                </h3>
+                <button
+                  v-for="item in filteredUrgentReviewItems"
+                  :key="item.id"
+                  type="button"
+                  class="review-item"
+                  :class="`is-${item.severity}`"
+                  @click="jumpToReviewItem(item)"
+                >
+                  <span class="review-item__body">
+                    <strong class="review-item__title">{{ item.title }}</strong>
+                    <span class="review-item__target">
+                      {{ item.subject === 'profile' ? 'Profile' : 'Property' }}:
+                      {{ item.profileLabel }}<template v-if="item.propertyLabel"> / {{ item.propertyLabel }}</template>
+                    </span>
+                  </span>
+                  <i class="pi pi-arrow-right review-item__icon" />
+                </button>
+              </section>
+
+              <section v-if="filteredWarningReviewItems.length > 0" class="review-group">
+                <h3 class="review-group__title">
+                  <span>Warnings</span>
+                </h3>
+                <button
+                  v-for="item in filteredWarningReviewItems"
+                  :key="item.id"
+                  type="button"
+                  class="review-item"
+                  :class="`is-${item.severity}`"
+                  @click="jumpToReviewItem(item)"
+                >
+                  <span class="review-item__body">
+                    <strong class="review-item__title">{{ item.title }}</strong>
+                    <span class="review-item__target">
+                      {{ item.subject === 'profile' ? 'Profile' : 'Property' }}:
+                      {{ item.profileLabel }}<template v-if="item.propertyLabel"> / {{ item.propertyLabel }}</template>
+                    </span>
+                  </span>
+                  <i class="pi pi-arrow-right review-item__icon" />
+                </button>
+              </section>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="hasInspectorSelection" class="editor-inspector-overlay">
+          <EditorInspector
+            :shape="selectedShape"
+            :property="selectedProperty"
+            :profile="selectedProfile"
+            :read-only="selectionReadOnly"
+            :imported-locked="selectionImportedLocked"
+            :draft-property-node-id="draftPropertyNodeId"
+            :all-shapes="nodeShapes"
+            :create-property="createProperty"
+            :commit-draft-property="commitDraftProperty"
+            :update-shape-field="profileStore.updateShapeField"
+            :update-profile-url="updateProfileUrl"
+            :update-property-field="profileStore.updatePropertyField"
+            :set-shape-inheritance="profileStore.setShapeInheritance"
+            :set-property-node-target="profileStore.setPropertyNodeTarget"
+            :set-property-inline-node-shape="profileStore.setPropertyInlineNodeShape"
+            :set-property-inline-node-shape-label="profileStore.setPropertyInlineNodeShapeLabel"
+            :set-property-alternative-targets="profileStore.setPropertyAlternativeTargets"
+            :set-property-exclusive-datatype-alternatives="profileStore.setPropertyExclusiveDatatypeAlternatives"
+            :set-property-type="profileStore.setPropertyType"
+            :delete-shape="deleteSelectedShape"
+            :delete-property="deleteSelectedProperty"
+          />
+        </div>
       </div>
     </div>
 
@@ -2092,9 +2018,17 @@ void fetchSubjectHeadingOptions().then(options => {
 }
 
 .editor-workspace {
+  display: flex;
   flex: 1;
   min-height: 0;
   position: relative;
+}
+
+.editor-canvas-area {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
 }
 
 .editor-graph-shell {
@@ -2126,6 +2060,7 @@ void fetchSubjectHeadingOptions().then(options => {
 }
 
 .canvas-action-bar {
+  max-width: calc(100% - 24px);
   position: absolute;
   left: 50%;
   bottom: 18px;
@@ -2770,21 +2705,6 @@ void fetchSubjectHeadingOptions().then(options => {
 .review-item:hover {
   background: var(--color-surface-1);
   box-shadow: var(--shadow-sm);
-}
-
-.profile-search-item {
-  border-left-width: 1px;
-}
-
-.profile-search-item__description {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--color-text-muted);
-  font-size: 0.82rem;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .review-item.is-urgent {
