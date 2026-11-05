@@ -10,6 +10,7 @@ import { BlankNode, NamedNode } from 'rdflib'
 let server
 let useProfileEditorStore
 let store
+let terminologyTerm
 
 const importedProfileIri = 'https://example.org/imported'
 const importedFieldIri = 'https://example.org/imported/field'
@@ -31,6 +32,7 @@ before(async () => {
     resolve: { alias: { '@': fileURLToPath(new URL('../src', import.meta.url)) } },
   })
   ;({ useProfileEditorStore } = await server.ssrLoadModule('/src/application/profiles/profileEditorStore.ts'))
+  ;({ terminologyTerm } = await server.ssrLoadModule('/src/shared/rdf/terminologySelection.ts'))
 })
 
 after(async () => {
@@ -40,6 +42,40 @@ after(async () => {
 beforeEach(() => {
   setActivePinia(createPinia())
   store = useProfileEditorStore()
+})
+
+test('terminology selection accepts RDF and OLS property types and rejects concepts and invalid IRIs', () => {
+  for (const type of ['property', 'objectProperty', 'dataProperty', 'annotationProperty', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#Property', 'http://www.w3.org/2002/07/owl#DatatypeProperty']) {
+    assert.deepEqual(terminologyTerm({ type, iri: 'https://example.org/term', label: 'Term', ontology_name: 'EX', description: ['First', 'Second'] }), {
+      iri: 'https://example.org/term', label: 'Term', ontology: 'EX', description: 'First Second',
+    })
+  }
+  for (const value of [null, {}, { type: 'class', iri: 'https://example.org/class' }, { type: 'skos:Concept', iri: 'https://example.org/concept' }, { type: 'property', iri: 'no iri' }, { type: 'property', iri: '' }]) {
+    assert.equal(terminologyTerm(value), null)
+  }
+})
+
+test('applying a terminology IRI preserves metadata, serializes sh:path and is one undo step', async () => {
+  const iri = store.createProfile()
+  const fieldId = store.createProperty(iri)
+  store.updatePropertyField(iri, fieldId, 'name', 'Keep name')
+  store.updatePropertyField(iri, fieldId, 'description', 'Keep description')
+  await nextTick()
+  const placeholder = store.applicationProfile.findNodeShape(iri).properties[0].path.value
+  const term = terminologyTerm({ type: 'property', iri: 'https://example.org/selected', label: 'Other name' })
+  store.updatePropertyField(iri, fieldId, 'path', term.iri)
+  await nextTick()
+  const field = store.applicationProfile.findNodeShape(iri).properties[0]
+  assert.equal(field.path.value, term.iri)
+  assert.equal(field.name, 'Keep name')
+  assert.equal(field.description, 'Keep description')
+  const { parseShaclProfile } = await server.ssrLoadModule('/src/infrastructure/shacl/shaclProfileParser.ts')
+  const parsed = parseShaclProfile(store.profiles.find(profile => profile.iri === iri).rawTurtle, 'term.ttl', 'uploaded')
+  assert.equal(parsed.nodeShapes[0].properties[0].path.value, term.iri)
+  assert.equal(store.undo(), true)
+  assert.equal(store.applicationProfile.findNodeShape(iri).properties[0].path.value, placeholder)
+  assert.equal(store.redo(), true)
+  assert.equal(store.applicationProfile.findNodeShape(iri).properties[0].path.value, term.iri)
 })
 
 test('connecting a profile to Add Field creates a named sh:node field as one undo step', async () => {

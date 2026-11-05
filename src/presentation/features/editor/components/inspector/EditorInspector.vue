@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useConfirm } from 'primevue/useconfirm'
 import {
   buildProfileLicenseOptions,
@@ -30,6 +30,8 @@ import InspectorEditableField from '@/presentation/features/editor/components/in
 import InspectorReadOnlyField from '@/presentation/features/editor/components/inspector/InspectorReadOnlyField.vue'
 import InspectorFixedValuesField from '@/presentation/features/editor/components/inspector/InspectorFixedValuesField.vue'
 import InspectorConstraintRangeField from '@/presentation/features/editor/components/inspector/InspectorConstraintRangeField.vue'
+
+const TerminologySearchDialog = defineAsyncComponent(() => import('./TerminologySearchDialog.vue'))
 
 type InspectorTab = 'basic' | 'advanced'
 type AllowedValueRow = {
@@ -84,6 +86,7 @@ const props = defineProps<{
   property: PropertyShape | null
   profile: ShaclProfile | null
   readOnly: boolean
+  reviewMode?: boolean
   importedLocked?: boolean
   draftPropertyNodeId: string | null
   allShapes: NodeShape[]
@@ -108,6 +111,16 @@ const activeTab = ref<InspectorTab>('basic')
 const subjectHeadingOptions = ref<SelectOption[]>([])
 const allowedValuesDialogOpen = ref(false)
 const allowedValueDraftRows = ref<AllowedValueRow[]>([])
+const terminologySearchOpen = ref(false)
+
+watch([() => props.shape?.nodeId.value, () => props.property?.nodeId.value, () => props.readOnly, () => props.reviewMode], () => {
+  terminologySearchOpen.value = false
+})
+
+function useTerminologyTerm(iri: string): void {
+  if (!props.readOnly && !props.reviewMode && terminologySearchOpen.value) updateProperty('path', iri)
+  terminologySearchOpen.value = false
+}
 
 const isPropertyInspector = computed(() => props.shape !== null && props.property !== null)
 const inspectorTitle = computed(() => {
@@ -535,7 +548,20 @@ function requestDeleteProperty(): void {
                 :warning="placeholderPropertyTerm"
                 :helper-text="missingPropertyTerm ? 'A Term IRI is required for this field.' : placeholderPropertyTerm ? 'Placeholder term IRI. Replace it with a term IRI.' : 'Type your own IRI or choose a suggested term while typing.'"
                 @update:value="updateProperty('path', $event)"
-              />
+              >
+                <template #action>
+                  <button
+                    type="button"
+                    class="term-search-button"
+                    title="Search terminology"
+                    aria-label="Search terminology for Term IRI"
+                    :disabled="readOnly || reviewMode"
+                    @click="terminologySearchOpen = true"
+                  >
+                    <i class="pi pi-search" aria-hidden="true" />
+                  </button>
+                </template>
+              </InspectorAutocompleteField>
               <InspectorEditableField
                 label="Field Name"
                 :value="property.name ?? null"
@@ -928,11 +954,36 @@ function requestDeleteProperty(): void {
         <p class="helper-text">The selected shape or property appears here with profile metadata and SHACL constraints.</p>
       </div>
     </div>
+    <TerminologySearchDialog
+      v-if="terminologySearchOpen && property && !readOnly && !reviewMode"
+      :field-name="property.name ?? ''"
+      @select="useTerminologyTerm"
+      @close="terminologySearchOpen = false"
+    />
   </aside>
 </template>
 
 <style scoped lang="scss">
 @use './inspectorValueDialogs';
+
+.term-search-button {
+  flex: 0 0 42px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.term-search-button:hover:not(:disabled) {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.term-search-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
 
 .inspector-lock-notice {
   margin: 12px 0 0;

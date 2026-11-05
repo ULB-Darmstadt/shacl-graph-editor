@@ -27,19 +27,23 @@ function onInput(event: Event): void {
 </script>
 
 <template>
-  <label class="autocomplete-field">
-    <span class="autocomplete-field__label ui-sidepanel-field-label">{{ label }}</span>
+  <div class="autocomplete-field">
+    <label :for="`${listId}-input`" class="autocomplete-field__label ui-sidepanel-field-label">{{ label }}</label>
 
-    <input
-      class="autocomplete-field__input ui-sidepanel-field-input"
-      :class="{ 'is-invalid': invalid, 'is-warning': warning && !invalid }"
-      :value="value ?? ''"
-      :placeholder="placeholder"
-      :disabled="disabled"
-      :list="listId"
-      :autofocus="autoFocus"
-      @input="onInput"
-    >
+    <div class="autocomplete-field__controls">
+      <input
+        :id="`${listId}-input`"
+        class="autocomplete-field__input ui-sidepanel-field-input"
+        :class="{ 'is-invalid': invalid, 'is-warning': warning && !invalid }"
+        :value="value ?? ''"
+        :placeholder="placeholder"
+        :disabled="disabled"
+        :list="listId"
+        :autofocus="autoFocus"
+        @input="onInput"
+      >
+      <slot name="action" />
+    </div>
 
     <datalist :id="listId">
       <option v-for="option in options" :key="option.value" :value="option.value">
@@ -48,7 +52,7 @@ function onInput(event: Event): void {
     </datalist>
 
     <span v-if="helperText" class="autocomplete-field__helper" :class="{ 'is-invalid': invalid, 'is-warning': warning && !invalid }">{{ helperText }}</span>
-  </label>
+  </div>
 </template>
 
 <style scoped lang="scss">
@@ -59,6 +63,7 @@ function onInput(event: Event): void {
 }
 
 .autocomplete-field__input {
+  min-width: 0;
   width: 100%;
   min-height: 46px;
   padding: 10px 12px;
@@ -68,6 +73,12 @@ function onInput(event: Event): void {
   color: var(--color-text);
   box-shadow: var(--shadow-sm), inset 0 -2px 0 var(--color-border-soft);
   font: inherit;
+}
+
+.autocomplete-field__controls {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
 }
 
 .autocomplete-field__input.is-invalid {

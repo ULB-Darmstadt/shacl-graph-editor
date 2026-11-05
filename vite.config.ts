@@ -90,6 +90,16 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: [
       { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
+      // EUI declares icon types under src; its published runtime is under es.
+      {
+        find: /^@elastic\/eui\/src\/components\/icon\//,
+        replacement: fileURLToPath(new URL('./node_modules/@elastic/eui/es/components/icon/', import.meta.url)),
+      },
+      // TSS 7.9.0 exports index.css, but ships this filename instead.
+      {
+        find: '@ts4nfdi/terminology-service-suite/dist/esm/index.css',
+        replacement: fileURLToPath(new URL('./node_modules/@ts4nfdi/terminology-service-suite/dist/esm/terminology-service-suite.css', import.meta.url)),
+      },
       // Force the canonical `process` npm package (has working `nextTick`).
       // Use exact match so `process/browser` etc. are not rewritten.
       { find: /^process$/, replacement: 'process/browser.js' },

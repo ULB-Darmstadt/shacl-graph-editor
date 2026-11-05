@@ -13,6 +13,7 @@ SHACL Graph Editor is a browser-based editor for the workflow:
 - Start from local Turtle files or search profiles from the NFDI4ING Metadata Profile Service.
 - Work visually on a graph canvas with profiles, inherited profiles, properties, and SHACL relations.
 - Edit profile metadata and property details in the side panel.
+- Search property terms with the TS4NFDI Terminology Service Suite using the search button beside Term IRI. Confirm a result to replace only the IRI; field names and descriptions stay unchanged.
 - Use the Value property type (`sh:hasValue`) to require multiple fixed typed values, including language-tagged text.
 - Create and adjust profile connections such as `sh:node`, `sh:or`, and `sh:qualifiedvalueshape`.
 - Use Exactly One Profile (`sh:xone`) when a field must satisfy exactly one of several target profiles.
@@ -62,6 +63,8 @@ Local development usually runs at:
 ```text
 http://localhost:5173/
 ```
+
+Terminology search loads the TS4NFDI SearchResultsListWidget on demand, with type/ontology filters and paginated results. It uses the TIB terminology service by default. Set `VITE_TERMINOLOGY_API_URL` to another OLS-compatible API base URL (including its trailing slash) that supports search facets and pagination to use another service.
 
 ## Repository Structure
 

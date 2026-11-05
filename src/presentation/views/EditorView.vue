@@ -1820,6 +1820,7 @@ void fetchSubjectHeadingOptions().then(options => {
             :property="selectedProperty"
             :profile="selectedProfile"
             :read-only="selectionReadOnly"
+            :review-mode="reviewMode"
             :imported-locked="selectionImportedLocked"
             :draft-property-node-id="draftPropertyNodeId"
             :all-shapes="nodeShapes"
