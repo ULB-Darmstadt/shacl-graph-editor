@@ -810,3 +810,46 @@ test('inherited shape code keeps inheritance references instead of flattening so
   assert.match(previews.previewShapeTurtle.value, /sh:node/)
   assert.ok(!previews.previewShapeTurtle.value.includes('Inherited source field'))
 })
+
+test('form preview includes inherited fields once without re-importing loaded profiles or changing export', async () => {
+  const parent = store.createProfile()
+  const field = store.createProperty(parent)
+  store.updatePropertyField(parent, field, 'name', 'Inherited field')
+  const child = store.createProfile()
+  store.setShapeInheritance(child, parent)
+  const { useEditorPreviews } = await server.ssrLoadModule('/src/presentation/features/editor/useEditorPreviews.ts')
+  const previews = useEditorPreviews({ profileStore: store, profiles: computed(() => store.profiles), toast: { add() {} } })
+  const before = JSON.stringify(store.profiles)
+  await previews.openShapePreview(store.applicationProfile.findNodeShape(child))
+  const { Parser, Store } = await import('n3')
+  const graph = new Store(new Parser().parse(previews.combinedCanvasShapesTurtle.value))
+  const owlImports = 'http://www.w3.org/2002/07/owl#imports'
+  assert.equal(graph.countQuads(null, owlImports, parent, null), 0)
+  assert.equal(graph.countQuads(child, 'http://www.w3.org/ns/shacl#node', parent, null), 1)
+  assert.equal(graph.countQuads(parent, 'http://www.w3.org/ns/shacl#property', null, null), 1)
+  assert.match(previews.previewShapeTurtle.value, /owl:imports/)
+  assert.equal(JSON.stringify(store.profiles), before)
+})
+
+test('preview retains external imports and distinct anonymous fields sharing a path', async () => {
+  const { parseShaclProfile } = await server.ssrLoadModule('/src/infrastructure/shacl/shaclProfileParser.ts')
+  const { serializeProfilesForPreview } = await server.ssrLoadModule('/src/infrastructure/shacl/profilePreviewSerializer.ts')
+  const turtle = `@prefix sh: <http://www.w3.org/ns/shacl#> .
+    @prefix owl: <http://www.w3.org/2002/07/owl#> .
+    <https://example.org/parent> a sh:NodeShape ;
+      owl:imports <https://example.org/vocabulary> ;
+      sh:property [ sh:path <https://example.org/name> ; sh:minCount 1 ],
+                  [ sh:path <https://example.org/name> ; sh:maxCount 1 ] .`
+  const profile = parseShaclProfile(turtle, 'parent.ttl', 'uploaded')
+  const before = JSON.stringify(profile)
+  const { Parser, Store } = await import('n3')
+  const graph = new Store(new Parser().parse(serializeProfilesForPreview([profile])))
+  assert.equal(graph.countQuads(null, 'http://www.w3.org/2002/07/owl#imports', 'https://example.org/vocabulary', null), 1)
+  const fields = graph.getObjects('https://example.org/parent', 'http://www.w3.org/ns/shacl#property', null)
+  assert.equal(fields.length, 2)
+  assert.ok(fields.every(field => field.termType === 'BlankNode'))
+  assert.equal(graph.countQuads(null, 'http://www.w3.org/ns/shacl#path', 'https://example.org/name', null), 2)
+  assert.equal(graph.countQuads(null, 'http://www.w3.org/ns/shacl#minCount', null, null), 1)
+  assert.equal(graph.countQuads(null, 'http://www.w3.org/ns/shacl#maxCount', null, null), 1)
+  assert.equal(JSON.stringify(profile), before)
+})

@@ -1,6 +1,7 @@
 import { computed, ref, type Ref } from 'vue'
-import type { NodeShape } from '@/domain/profiles'
+import type { NodeShape, ShaclProfile } from '@/domain/profiles'
 import type { useProfileEditorStore } from '@/application/profiles/profileEditorStore'
+import { serializeProfilesForPreview } from '@/infrastructure/shacl/profilePreviewSerializer'
 type ProfileStore = ReturnType<typeof useProfileEditorStore>
 
 interface ToastLike {
@@ -14,7 +15,7 @@ interface ToastLike {
 
 interface UseEditorPreviewsOptions {
   profileStore: ProfileStore
-  profiles: Ref<Array<{ rawTurtle: string }>>
+  profiles: Ref<ShaclProfile[]>
   toast: ToastLike
 }
 
@@ -24,7 +25,7 @@ export function useEditorPreviews(options: UseEditorPreviewsOptions) {
   const previewShapeValuesTurtle = ref('')
   const previewShapeSubjects = ref<Array<{ iri: string; label: string }>>([])
   const combinedCanvasShapesTurtle = computed(() => {
-    return options.profiles.value.map(profile => profile.rawTurtle).join('\n\n')
+    return serializeProfilesForPreview(options.profiles.value)
   })
   const previewShapeTurtle = computed(() => {
     const shapeIri = previewShape.value?.nodeId.value
