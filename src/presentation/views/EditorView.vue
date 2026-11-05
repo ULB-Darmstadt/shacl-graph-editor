@@ -823,8 +823,8 @@ async function handleBottomAddNewProfile(): Promise<void> {
   const iri = createProfileAt({ x: center.x - 170, y: center.y - 90 })
   resetPendingPlacement()
 
-  // Use the rendered dimensions and current viewport, including the first
-  // canvas initialization, to center the whole card rather than its corner.
+  // Use the rendered dimensions and current viewport to center the whole
+  // card rather than its corner.
   await nextTick()
   await waitForAnimationFrame()
   const canvasNodes = nodes.value as unknown as CanvasNodePosition[]
@@ -929,19 +929,7 @@ function handleGraphShellClick(event: MouseEvent): void {
 }
 
 function resolvePlacementPosition(clientX: number, clientY: number): XYPosition {
-  if (!hasNothing.value) {
-    return screenToFlowCoordinate({ x: clientX, y: clientY })
-  }
-
-  const shellRect = graphShellRef.value?.getBoundingClientRect()
-  if (!shellRect) {
-    return { x: clientX, y: clientY }
-  }
-
-  return {
-    x: clientX - shellRect.left,
-    y: clientY - shellRect.top,
-  }
+  return screenToFlowCoordinate({ x: clientX, y: clientY })
 }
 
 function resetPendingPlacement(): void {
@@ -1438,25 +1426,25 @@ void fetchSubjectHeadingOptions().then(options => {
           </div>
         </div>
 
-        <template v-else>
-          <VueFlow
-            class="editor-graph"
-            v-model:nodes="nodes"
-            v-model:edges="edges"
-            :node-types="nodeTypes"
-            :edge-types="edgeTypes"
-            :default-edge-options="{ animated: false, type: 'default' }"
-            :min-zoom="0.05"
-            :max-zoom="2"
-            fit-view-on-init
-            @connect="handleConnect"
-            @pane-click="handlePaneClick"
-          >
-            <Background pattern-color="var(--color-border)" :gap="20" />
-            <Controls position="top-left" />
-            <MiniMap pannable zoomable />
-          </VueFlow>
-        </template>
+        <VueFlow
+          class="editor-graph"
+          :class="{ 'editor-graph--empty': hasNothing }"
+          :aria-hidden="hasNothing"
+          v-model:nodes="nodes"
+          v-model:edges="edges"
+          :node-types="nodeTypes"
+          :edge-types="edgeTypes"
+          :default-edge-options="{ animated: false, type: 'default' }"
+          :min-zoom="0.05"
+          :max-zoom="2"
+          fit-view-on-init
+          @connect="handleConnect"
+          @pane-click="handlePaneClick"
+        >
+          <Background pattern-color="var(--color-border)" :gap="20" />
+          <Controls position="top-left" />
+          <MiniMap pannable zoomable />
+        </VueFlow>
 
         <div
           v-if="isPlacementHintVisible && placementHintStyle"
@@ -2373,6 +2361,11 @@ void fetchSubjectHeadingOptions().then(options => {
 .editor-graph {
   width: 100%;
   height: 100%;
+}
+
+.editor-graph--empty {
+  // Preserve layout and viewport initialization behind the welcome screen.
+  visibility: hidden;
 }
 
 .placement-hint-float {
