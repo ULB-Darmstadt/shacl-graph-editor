@@ -19,6 +19,7 @@ export interface ShapeEditorNodeData {
   onCommitDraftProperty?: (propertyNodeId: string) => void
   onDeleteProperty?: (shapeIri: string, propertyNodeId: string) => boolean
   onShapeHeaderContextMenu?: (shape: NodeShape, event: MouseEvent, options?: { allowDelete?: boolean }) => void
+  onPropertyContextMenu?: (shape: NodeShape, property: PropertyShape, event: MouseEvent) => void
   onMoveProperty?: (sourceShapeIri: string, propertyNodeId: string, targetShapeIri: string, targetIndex?: number) => boolean
   selected?: boolean
   highlighted?: boolean
@@ -33,7 +34,7 @@ export interface ShapeEditorNodeData {
     propertySeverities?: Record<string, 'urgent' | 'warning'>
   }>
   showClassRelations?: boolean
-  showBlankNodeRelations?: boolean
+  showQualifiedValueShapes?: boolean
 }
 
 export interface InheritedPropertyGroup {
@@ -54,7 +55,7 @@ export function collectReachableShapeIris(
   rootShapes: NodeShape[],
   allShapes: NodeShape[],
   includeClassRelations = false,
-  includeBlankNodeRelations = false,
+  includeQualifiedValueShapes = false,
 ): string[] {
   const allShapesByIri = new Map(allShapes.map(shape => [shape.nodeId.value, shape]))
   const queue = rootShapes.map(shape => shape.nodeId.value)
@@ -72,7 +73,7 @@ export function collectReachableShapeIris(
     if (!shape) continue
 
     for (const property of shape.properties) {
-      for (const targetIri of propertyGraphTargetIris(property, allShapes, includeClassRelations, includeBlankNodeRelations)) {
+      for (const targetIri of propertyGraphTargetIris(property, allShapes, includeClassRelations, includeQualifiedValueShapes)) {
         if (visited.has(targetIri)) continue
         if (!allShapesByIri.has(targetIri)) continue
         queue.push(targetIri)
@@ -106,9 +107,9 @@ export function collectVisibleShapeNodeDescriptors(
   allShapes: NodeShape[],
   _expandedShapeNodeIds: Set<string>,
   includeClassRelations = false,
-  includeBlankNodeRelations = false,
+  includeQualifiedValueShapes = false,
 ): VisibleShapeNodeDescriptor[] {
-  const reachableShapeIris = collectReachableShapeIris(rootShapes, allShapes, includeClassRelations, includeBlankNodeRelations)
+  const reachableShapeIris = collectReachableShapeIris(rootShapes, allShapes, includeClassRelations, includeQualifiedValueShapes)
   const rootShapeIris = new Set(rootShapes.map(shape => shape.nodeId.value))
   const allShapesByIri = new Map(allShapes.map(shape => [shape.nodeId.value, shape]))
 
@@ -158,21 +159,21 @@ export function propertyClassTargetIris(property: PropertyShape, allShapes: Node
   if (!property.cls?.value) return []
 
   const matchingShapes = allShapes.filter(shape => shape.targetClass?.value === property.cls?.value)
-  return matchingShapes.length === 1 ? [matchingShapes[0].nodeId.value] : []
+  return [...new Set(matchingShapes.map(shape => shape.nodeId.value))]
 }
 
 export function propertyGraphTargetIris(
   property: PropertyShape,
   allShapes: NodeShape[],
   includeClassRelations = false,
-  includeBlankNodeRelations = false,
+  includeQualifiedValueShapes = false,
 ): string[] {
-  const targets = new Set(propertyNodeTargets(property).map(target => target.value))
-
-  if (property.qualifiedValueShape?.inlineNodeShape && !includeBlankNodeRelations) {
-    const qualifiedTarget = property.qualifiedValueShape.node?.value
-    if (qualifiedTarget && property.node?.value !== qualifiedTarget) targets.delete(qualifiedTarget)
-  }
+  // Visibility does not change loaded constraints. Hide qualified targets only
+  // for this relation; the same profile may also be used by sh:node or sh:or.
+  const visibleConstraints = includeQualifiedValueShapes
+    ? property
+    : { ...property, qualifiedValueShape: undefined }
+  const targets = new Set(propertyNodeTargets(visibleConstraints).map(target => target.value))
 
   if (includeClassRelations) {
     for (const targetIri of propertyClassTargetIris(property, allShapes)) targets.add(targetIri)

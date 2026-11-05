@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
-import { NamedNode } from 'rdflib'
-import { computed, shallowRef, ref } from 'vue'
+import { BlankNode, NamedNode } from 'rdflib'
+import { computed, shallowRef, ref, watch } from 'vue'
 import { ApplicationProfile, classifyShape, type NodeShape, type PropertyShape, type ShaclProfile } from '@/domain/profiles'
 import {
   importProfileFromTurtle,
@@ -22,11 +22,104 @@ export const useProfileEditorStore = defineStore('profiles', () => {
   const applicationProfile = shallowRef<ApplicationProfile>(new ApplicationProfile())
   const isResolvingImports = ref(false)
   const fitViewRequestTick = ref(0)
+  const lockImportedProfiles = ref(typeof localStorage === 'undefined'
+    || localStorage.getItem('editor.lockImportedProfiles') !== 'false')
+  const lockedShapeIris = computed(() => new Set(applicationProfile.value.list()
+    .filter(profile => lockImportedProfiles.value && profile.origin !== 'created')
+    .flatMap(profile => profile.nodeShapes.map(shape => shape.nodeId.value))))
+
+  watch(lockImportedProfiles, value => {
+    if (typeof localStorage !== 'undefined') localStorage.setItem('editor.lockImportedProfiles', String(value))
+  }, { flush: 'sync' })
+
+  function isShapeLocked(shapeIri: string): boolean {
+    return lockedShapeIris.value.has(shapeIri)
+  }
+
+  function isPropertyLocked(shapeIri: string, propertyNodeId: string): boolean {
+    const property = applicationProfile.value.findNodeShape(shapeIri)?.properties
+      .find(candidate => candidate.nodeId.value === propertyNodeId)
+    return isShapeLocked(shapeIri) || isShapeLocked(property?.inheritedFromShapeIri ?? shapeIri)
+  }
   const lastResolveErrors = ref<Array<{
     iri: string
     error: string
     importedBy: Array<{ iri: string; source: string }>
   }>>([])
+
+  type HistorySnapshot = {
+    profiles: ShaclProfile[]
+    resolveErrors: typeof lastResolveErrors.value
+  }
+
+  const history = shallowRef<HistorySnapshot[]>([{ profiles: [], resolveErrors: [] }])
+  const historyIndex = ref(0)
+  let historyGroupActive = false
+  const canUndo = computed(() => !isResolvingImports.value && historyIndex.value > 0 && canRestoreHistory(historyIndex.value - 1))
+  const canRedo = computed(() => !isResolvingImports.value && historyIndex.value < history.value.length - 1 && canRestoreHistory(historyIndex.value + 1))
+
+  function canRestoreHistory(index: number): boolean {
+    if (!lockImportedProfiles.value) return true
+    const targetProfiles = new Map(history.value[index].profiles.map(profile => [profile.iri, profile]))
+    return applicationProfile.value.list().every(profile => {
+      const target = targetProfiles.get(profile.iri)
+      // Loading or removing a profile remains undoable, like resetting the
+      // canvas. Existing locked profile contents must remain unchanged.
+      return profile.origin === 'created' || !target || JSON.stringify(profile) === JSON.stringify(target)
+    })
+  }
+
+  function recordHistory(): void {
+    if (historyGroupActive) return
+    const currentProfiles = applicationProfile.value.list()
+    if (JSON.stringify(currentProfiles) === JSON.stringify(history.value[historyIndex.value].profiles)) return
+
+    const snapshot = cloneProfileValue({ profiles: currentProfiles, resolveErrors: lastResolveErrors.value })
+    // Keep up to 100 undo steps; a new edit discards the redo branch.
+    history.value = [...history.value.slice(0, historyIndex.value + 1), snapshot].slice(-101)
+    historyIndex.value = history.value.length - 1
+  }
+
+  function beginHistoryGroup(): void {
+    if (historyGroupActive) return
+    // Save any preceding action before collecting the focused field's edits.
+    recordHistory()
+    historyGroupActive = true
+  }
+
+  function endHistoryGroup(): void {
+    historyGroupActive = false
+    recordHistory()
+  }
+
+  function restoreHistory(index: number): void {
+    const snapshot = cloneProfileValue(history.value[index])
+    const restoredProfile = new ApplicationProfile()
+    for (const profile of snapshot.profiles) restoredProfile.upsert(profile)
+    historyIndex.value = index
+    lastResolveErrors.value = snapshot.resolveErrors
+    applicationProfile.value = restoredProfile
+  }
+
+  function undo(): boolean {
+    if (isResolvingImports.value) return false
+    endHistoryGroup()
+    if (!canUndo.value) return false
+    restoreHistory(historyIndex.value - 1)
+    return true
+  }
+
+  function redo(): boolean {
+    if (isResolvingImports.value) return false
+    endHistoryGroup()
+    if (!canRedo.value) return false
+    restoreHistory(historyIndex.value + 1)
+    return true
+  }
+
+  // Vue batches synchronous changes so compound actions (e.g. creating a
+  // profile and applying its defaults) become a single undo step.
+  watch(applicationProfile, recordHistory)
 
   const profiles = computed<ShaclProfile[]>(() => applicationProfile.value.list())
   const nodeShapes = computed<NodeShape[]>(() => applicationProfile.value.allNodeShapes())
@@ -36,7 +129,11 @@ export const useProfileEditorStore = defineStore('profiles', () => {
 
     const candidates = nodeShapes.value.filter(nodeShape => {
       const isDirectlyLoadedRoot = profiles.value.some(profile =>
-        profile.iri === nodeShape.sourceProfileIri && profile.source !== profile.iri,
+        profile.iri === nodeShape.sourceProfileIri
+        && profile.source !== profile.iri
+        // Inline qualified shapes belong to the profile's loaded data, but
+        // enter the canvas through the qualified-shape visibility switch.
+        && profile.nodeShapes[0]?.nodeId.value === nodeShape.nodeId.value,
       )
       if (hiddenImportedShapeIds.has(nodeShape.nodeId.value)) return false
       if (!isDirectlyLoadedRoot) return false
@@ -71,6 +168,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
   })
 
   function removeProfile(iri: string): { ok: boolean; reason?: string } {
+    if (isShapeLocked(iri)) return { ok: false, reason: 'Imported profiles are locked for editing in Settings.' }
     const blockingReferences = listProfileReferences(iri)
     if (blockingReferences.length > 0) {
       return {
@@ -179,6 +277,28 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     return property.nodeId.value
   }
 
+  function copyProperty(shapeIri: string, propertyNodeId: string, targetShapeIri = shapeIri): string | null {
+    const context = findEditableShapeContext(targetShapeIri)
+    const source = applicationProfile.value.findNodeShape(shapeIri)?.properties
+      .find(property => property.nodeId.value === propertyNodeId)
+    if (!context || !source) return null
+
+    const copy: PropertyShape = {
+      nodeId: new NamedNode(`${targetShapeIri}#property-shape-${crypto.randomUUID()}`),
+      ...cloneProfileValue({
+        name: source.name,
+        nameLiterals: source.nameLiterals,
+        description: source.description,
+        descriptionLiterals: source.descriptionLiterals,
+        path: source.path,
+      }),
+      order: context.shape.properties.filter(property => !property.inherited).length,
+    }
+    context.shape.properties.push(copy)
+    syncSerializedProfiles()
+    return copy.nodeId.value
+  }
+
   function updateShapeField(shapeIri: string, field: EditableShapeField, value: string | null): void {
     const context = findEditableShapeContext(shapeIri)
     if (!context) return
@@ -188,7 +308,9 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     } else if (field === 'closed') {
       context.shape.closed = value === 'closed'
     } else {
-      context.shape[field] = normalizeString(value)
+      context.shape[field] = field === 'label' || field === 'description'
+        ? value || undefined
+        : normalizeString(value)
       if (field === 'label') {
         context.shape.labelLiterals = undefined
         context.shape.rdfsLabelLiterals = undefined
@@ -205,8 +327,12 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     if (!context) return
     const property = context.property
 
-    const normalized = normalizeString(value)
-    const previousName = property.name?.trim()
+    // Keep user-entered whitespace in live text fields. Trimming on each
+    // keystroke feeds a shortened value back into the focused input.
+    const normalized = field === 'name' || field === 'description'
+      ? value || undefined
+      : normalizeString(value)
+    const previousName = property.name
     switch (field) {
       case 'path':
         property.path = normalized ? new NamedNode(normalized) : undefined
@@ -394,12 +520,14 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     context.property.exclusiveAlternatives = alternatives
       .map(alternative => ({
         datatype: alternative.datatype.trim(),
-        label: alternative.label?.trim(),
+        label: alternative.label,
       }))
       .filter(alternative => alternative.datatype)
       .map(alternative => ({
         datatype: new NamedNode(alternative.datatype),
-        label: alternative.label || defaultDatatypeLabel(alternative.datatype),
+        // An explicitly empty label is a valid edit, not a request to
+        // restore the generated label while the user is replacing it.
+        label: alternative.label ?? defaultDatatypeLabel(alternative.datatype),
       }))
     context.property.qualifiedValueShape = undefined
     context.property.qualifiedMinCount = undefined
@@ -569,7 +697,8 @@ export const useProfileEditorStore = defineStore('profiles', () => {
   function profilesImporting(importIri: string): Array<{ iri: string; source: string }> {
     return applicationProfile.value
       .list()
-      .filter(profile => profile.imports.includes(importIri))
+      .filter(profile => profile.imports.includes(importIri)
+        || profile.nodeShapes.some(shape => shape.properties.some(property => property.cls?.value === importIri)))
       .map(profile => ({
         iri: profile.iri,
         source: profile.source,
@@ -590,6 +719,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
   }
 
   function findEditableShapeContext(shapeIri: string): { profile: ShaclProfile; shape: NodeShape } | null {
+    if (isShapeLocked(shapeIri)) return null
     for (const profile of applicationProfile.value.list()) {
       const shape = profile.nodeShapes.find(candidate => candidate.nodeId.value === shapeIri)
       if (shape) return { profile, shape }
@@ -598,6 +728,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
   }
 
   function findEditablePropertyContext(shapeIri: string, propertyNodeId: string): { profile: ShaclProfile; shape: NodeShape; property: PropertyShape } | null {
+    if (isPropertyLocked(shapeIri, propertyNodeId)) return null
     const directContext = findEditableShapeContext(shapeIri)
     const directProperty = directContext?.shape.properties.find(property => property.nodeId.value === propertyNodeId)
     if (directContext && directProperty) {
@@ -628,13 +759,24 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     nodeShapes,
     rootNodeShapes,
     hasProfiles,
+    lockImportedProfiles,
+    lockedShapeIris,
+    isShapeLocked,
+    isPropertyLocked,
     isResolvingImports,
     fitViewRequestTick,
     lastResolveErrors,
     lastResolveErrorsSummary,
+    canUndo,
+    canRedo,
+    beginHistoryGroup,
+    endHistoryGroup,
+    undo,
+    redo,
     removeProfile,
     createProfile,
     createProperty,
+    copyProperty,
     removeProperty,
     movePropertyToShape,
     updateShapeField,
@@ -656,6 +798,18 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     reset,
   }
 })
+
+// Copy editable data without losing RDF term prototypes or sharing nested
+// constraints with a saved history entry.
+function cloneProfileValue<T>(value: T): T {
+  if (value instanceof NamedNode) return new NamedNode(value.value) as T
+  if (value instanceof BlankNode) return new BlankNode(value.value) as T
+  if (Array.isArray(value)) return value.map(entry => cloneProfileValue(entry)) as T
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, cloneProfileValue(entry)])) as T
+  }
+  return value
+}
 
 type EditableShapeField =
   | 'label'

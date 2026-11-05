@@ -1,6 +1,13 @@
 const AIMS_API = 'https://aims-backend.tools.coscine.dev/AIMS'
 const AIMS_PROFILE_SEARCH_LANGUAGES = ['EN', 'DE'] as const
 let aimsProfilesPromise: Promise<AimsProfile[]> | null = null
+const classDefinitionPromises = new Map<string, Promise<AimsProfileDefinition[]>>()
+
+export interface AimsProfileDefinition {
+  iri: string
+  text: string
+  mediaType?: string
+}
 
 export interface AimsProfile {
   base_url: string
@@ -82,4 +89,36 @@ export async function fetchAimsProfileDefinition(baseUrl: string): Promise<{ tex
 
 export async function fetchAimsProfileTurtle(profile: AimsProfile): Promise<string> {
   return (await fetchAimsProfileDefinition(profile.base_url)).text
+}
+
+export function searchAimsProfileDefinitions(classIri: string): Promise<AimsProfileDefinition[]> {
+  const existing = classDefinitionPromises.get(classIri)
+  if (existing) return existing
+
+  // URI search also returns profiles mentioning the class. The resolver
+  // verifies sh:targetClass before adding any result to the editor.
+  const request = Promise.all(AIMS_PROFILE_SEARCH_LANGUAGES.map(language => fetchAimsJson(
+    `${AIMS_API}/application-profiles/?query=${encodeURIComponent(classIri)}&language=${language}&includeDefinition=true`,
+  ))).then(responses => {
+    const definitions = new Map<string, AimsProfileDefinition>()
+    for (const response of responses) {
+      if (!Array.isArray(response)) continue
+      for (const entry of response) {
+        if (typeof entry !== 'object' || entry === null
+          || typeof entry.base_url !== 'string' || typeof entry.definition !== 'string'
+          || !entry.definition.trim()) continue
+        definitions.set(entry.base_url, {
+          iri: entry.base_url,
+          text: entry.definition,
+          mediaType: typeof entry.mimeType === 'string' ? entry.mimeType : undefined,
+        })
+      }
+    }
+    return [...definitions.values()]
+  }).catch(error => {
+    classDefinitionPromises.delete(classIri)
+    throw error
+  })
+  classDefinitionPromises.set(classIri, request)
+  return request
 }

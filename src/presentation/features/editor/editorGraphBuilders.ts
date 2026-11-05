@@ -49,10 +49,11 @@ export function buildEditorShapeNodes(
   reviewMode = false,
   reviewAnnotations?: Map<string, EditorShapeReviewAnnotation>,
   showClassRelations = false,
-  showBlankNodeRelations = false,
+  showQualifiedValueShapes = false,
   highlightedShapeIri?: string | null,
+  openPropertyMenu?: ShapeEditorNodeData['onPropertyContextMenu'],
 ): Node[] {
-  const descriptors = collectVisibleShapeNodeDescriptors(rootShapes, allShapes, expandedShapeNodeIds, showClassRelations, showBlankNodeRelations)
+  const descriptors = collectVisibleShapeNodeDescriptors(rootShapes, allShapes, expandedShapeNodeIds, showClassRelations, showQualifiedValueShapes)
   const reviewAnnotationsByShape = reviewAnnotationsRecord(reviewAnnotations)
 
   return descriptors.map(descriptor => ({
@@ -79,6 +80,7 @@ export function buildEditorShapeNodes(
       onCommitDraftProperty: interactive ? commitDraftProperty : undefined,
       onDeleteProperty: interactive ? deleteProperty : undefined,
       onShapeHeaderContextMenu: interactive ? openShapeHeaderMenu : undefined,
+      onPropertyContextMenu: interactive ? openPropertyMenu : undefined,
       onMoveProperty: interactive ? moveProperty : undefined,
       selected: descriptor.representedShapeIri === selectedShapeIri,
       highlighted: descriptor.representedShapeIri === highlightedShapeIri,
@@ -90,7 +92,7 @@ export function buildEditorShapeNodes(
       reviewPropertySeverities: reviewAnnotations?.get(descriptor.representedShapeIri)?.propertySeverities ?? {},
       reviewAnnotationsByShape,
       showClassRelations,
-      showBlankNodeRelations,
+      showQualifiedValueShapes,
     } satisfies ShapeEditorNodeData,
   }))
 }
@@ -103,9 +105,10 @@ export function buildEditorStructuralEdges(
   selectedShapeIri?: string | null,
   selectedPropertyKey?: string | null,
   showClassRelations = false,
-  showBlankNodeRelations = false,
+  showQualifiedValueShapes = false,
+  canEditProperty?: (shapeIri: string, propertyNodeId: string) => boolean,
 ): Edge[] {
-  return buildShapeReferenceEdges(rootShapes, allShapes, visibleNodeIds, onRemoveReferenceEdge, selectedShapeIri, selectedPropertyKey, showClassRelations, showBlankNodeRelations)
+  return buildShapeReferenceEdges(rootShapes, allShapes, visibleNodeIds, onRemoveReferenceEdge, selectedShapeIri, selectedPropertyKey, showClassRelations, showQualifiedValueShapes, canEditProperty)
 }
 
 function buildShapeReferenceEdges(
@@ -116,17 +119,18 @@ function buildShapeReferenceEdges(
   selectedShapeIri?: string | null,
   selectedPropertyKey?: string | null,
   showClassRelations = false,
-  showBlankNodeRelations = false,
+  showQualifiedValueShapes = false,
+  canEditProperty?: (shapeIri: string, propertyNodeId: string) => boolean,
 ): Edge[] {
   const edges: Edge[] = []
-  const reachableShapeIris = collectReachableShapeIris(rootShapes, allShapes, showClassRelations, showBlankNodeRelations)
+  const reachableShapeIris = collectReachableShapeIris(rootShapes, allShapes, showClassRelations, showQualifiedValueShapes)
   const reachableShapes = reachableShapeIris
     .map(shapeIri => allShapes.find(shape => shape.nodeId.value === shapeIri))
     .filter((shape): shape is NodeShape => shape !== undefined)
 
   for (const shape of reachableShapes) {
     for (const property of shape.properties) {
-      const targetIris = propertyGraphTargetIris(property, allShapes, showClassRelations, showBlankNodeRelations)
+      const targetIris = propertyGraphTargetIris(property, allShapes, showClassRelations, showQualifiedValueShapes)
       if (targetIris.length === 0) continue
       const source = findVisibleShapeNodeId(shape.nodeId.value, visibleNodeIds, allShapes)
       for (const targetIri of targetIris) {
@@ -149,7 +153,7 @@ function buildShapeReferenceEdges(
             relationLabel: propertyRelationshipLabel(property),
             edgeKind: 'structural' satisfies EditorEdgeKind,
             selected: isSelectedEdge,
-            onRemove: onRemoveReferenceEdge
+            onRemove: onRemoveReferenceEdge && (canEditProperty?.(shape.nodeId.value, property.nodeId.value) ?? true)
               ? () => onRemoveReferenceEdge(shape.nodeId.value, property.nodeId.value, targetIri)
               : undefined,
           },

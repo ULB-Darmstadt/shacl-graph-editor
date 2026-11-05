@@ -26,6 +26,13 @@ export function useEditorPreviews(options: UseEditorPreviewsOptions) {
   const combinedCanvasShapesTurtle = computed(() => {
     return options.profiles.value.map(profile => profile.rawTurtle).join('\n\n')
   })
+  const previewShapeTurtle = computed(() => {
+    const shapeIri = previewShape.value?.nodeId.value
+    if (!shapeIri) return ''
+    return options.profileStore.profiles.find(profile =>
+      profile.nodeShapes.some(shape => shape.nodeId.value === shapeIri),
+    )?.rawTurtle ?? ''
+  })
 
   async function openShapePreview(shape: NodeShape): Promise<void> {
     previewShape.value = shape
@@ -40,6 +47,7 @@ export function useEditorPreviews(options: UseEditorPreviewsOptions) {
     previewShapeValuesTurtle,
     previewShapeSubjects,
     combinedCanvasShapesTurtle,
+    previewShapeTurtle,
     openShapePreview,
   }
 }

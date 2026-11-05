@@ -15,9 +15,15 @@ SHACL Graph Editor is a browser-based editor for the workflow:
 - Edit profile metadata and property details in the side panel.
 - Create and adjust profile connections such as `sh:node`, `sh:or`, and `sh:qualifiedvalueshape`.
 - Move properties between profiles or reorder them within a profile by drag and drop.
+- Right-click a field to delete it or create an own-property copy of its name, description, and IRI for additional constraints.
+- Imported profiles are locked for editing by default. Change this in Settings → Display Settings; locked profiles can still be inherited and their fields copied into editable profiles.
+- Profiles referenced by imports stay loaded for previews and export. Display Settings controls whether profiles linked by `sh:class` and `sh:qualifiedValueShape` appear on the canvas.
+- Class references also discover matching `sh:targetClass` profiles from MPS when no matching profile is loaded, including references without `owl:imports`.
+- Undo and redo profile changes from the main menu (Ctrl/Cmd+Z to undo; Ctrl/Cmd+Shift+Z or Ctrl+Y to redo).
 - Use Review mode to find missing required metadata, incomplete property definitions, and other profile quality issues.
 - Jump from review findings directly to the affected profile or property on the canvas.
 - Preview shapes with `@ulb-darmstadt/shacl-form`.
+- Switch the eye-button preview to Turtle (TTL) for read-only, syntax-highlighted source with line numbers and a copy action.
 - Export the current editor state as SHACL/Turtle.
 
 ## Tech Stack
@@ -39,6 +45,7 @@ Recommended runtime: Node.js 20 or newer.
 ```bash
 npm install
 npm run dev
+npm test
 npm run type-check
 npm run lint
 npm run build

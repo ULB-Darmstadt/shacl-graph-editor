@@ -12,6 +12,7 @@ defineProps<{
   shapePreviewOpen: boolean
   previewShape: NodeShape | null
   combinedCanvasShapesTurtle: string
+  previewShapeTurtle: string
   previewShapeValuesTurtle: string
   previewShapeSubjects: PreviewSubject[]
 }>()
@@ -30,9 +31,10 @@ const emit = defineEmits<{
     @update:visible="emit('update:shapePreviewOpen', $event)"
   >
     <ShapePreviewPanel
-      v-if="previewShape"
+      v-if="previewShape && shapePreviewOpen"
       :shape="previewShape"
       :shapes-turtle="combinedCanvasShapesTurtle"
+      :source-turtle="previewShapeTurtle"
       :values-turtle="previewShapeValuesTurtle"
       :subjects="previewShapeSubjects"
     />

@@ -82,6 +82,7 @@ const props = defineProps<{
   property: PropertyShape | null
   profile: ShaclProfile | null
   readOnly: boolean
+  importedLocked?: boolean
   draftPropertyNodeId: string | null
   allShapes: NodeShape[]
   createProperty: (shapeIri: string) => void
@@ -298,8 +299,11 @@ function removeAlternativeTarget(index: number): void {
 function onDatatypeAlternativeChange(index: number, field: keyof DatatypeAlternativeRow, value: string): void {
   if (!props.shape || !props.property) return
   const next = propertyDatatypeAlternativeInputs.value.map(row => ({ ...row }))
+  const previous = next[index]
   next[index] = { ...next[index], [field]: value }
-  if (field === 'datatype') next[index].label = defaultDatatypeLabel(value)
+  if (field === 'datatype' && (!previous.datatype || previous.label === defaultDatatypeLabel(previous.datatype))) {
+    next[index].label = defaultDatatypeLabel(value)
+  }
   props.setPropertyExclusiveDatatypeAlternatives(
     props.shape.nodeId.value,
     props.property.nodeId.value,
@@ -486,6 +490,10 @@ function requestDeleteProperty(): void {
         </div>
         <p class="inspector-subtitle ui-sidepanel-meta">
           {{ isPropertyInspector ? (shape.label ?? shape.nodeId.value) : (profile?.iri ?? shape.sourceProfileIri ?? 'Local profile') }}
+        </p>
+        <p v-if="importedLocked" class="inspector-lock-notice" role="status">
+          <i class="pi pi-lock" aria-hidden="true" />
+          Imported profile locked. You can still inherit it or copy its fields into an editable profile.
         </p>
       </header>
 
@@ -887,6 +895,13 @@ function requestDeleteProperty(): void {
 </template>
 
 <style scoped lang="scss">
+.inspector-lock-notice {
+  margin: 12px 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
 .editor-inspector {
   position: relative;
   width: 100%;

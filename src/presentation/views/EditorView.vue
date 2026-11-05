@@ -24,7 +24,7 @@ import Button from 'primevue/button'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import { PROFILE_LICENSE_OPTIONS, fetchSubjectHeadingOptions, type SelectOption } from '@/application/profiles/profileEditorCatalogs'
-import { inferPropertyEditorType, propertyNodeTargets } from '@/domain/profiles'
+import { inferPropertyEditorType, propertyNodeTargets, type NodeShape, type PropertyShape } from '@/domain/profiles'
 import type { PropertyEditorType } from '@/application/profiles/profileEditorStore'
 import { loadAimsProfiles } from '@/infrastructure/external/aimsProfileService'
 
@@ -37,7 +37,7 @@ const profileStore = useProfileEditorStore()
 const toast = useToast()
 const confirm = useConfirm()
 const { screenToFlowCoordinate, fitView, setCenter } = useVueFlow()
-const { nodeShapes, profiles, isResolvingImports, rootNodeShapes, fitViewRequestTick } = storeToRefs(profileStore)
+const { nodeShapes, profiles, isResolvingImports, rootNodeShapes, fitViewRequestTick, canUndo, canRedo, lockImportedProfiles, lockedShapeIris } = storeToRefs(profileStore)
 
 type EditorMode = 'edit' | 'review' | 'view'
 
@@ -75,12 +75,20 @@ const {
   previewShapeValuesTurtle,
   previewShapeSubjects,
   combinedCanvasShapesTurtle,
+  previewShapeTurtle,
   openShapePreview,
 } = useEditorPreviews({
   profileStore,
   profiles,
   toast,
 })
+
+const selectionImportedLocked = computed(() => Boolean(selectedShapeIri.value && (
+  selectedPropertyKey.value
+    ? profileStore.isPropertyLocked(selectedShapeIri.value, selectedPropertyKey.value)
+    : profileStore.isShapeLocked(selectedShapeIri.value)
+)))
+const selectionReadOnly = computed(() => readOnlyMode.value || selectionImportedLocked.value)
 
 function resetEditorUiState(): void {
   closeImportDialog()
@@ -92,6 +100,8 @@ function resetEditorUiState(): void {
   selectedConnection.value = null
   canvasMenu.value.open = false
   shapeHeaderMenu.value.open = false
+  propertyMenu.value = null
+  copyFieldSource.value = null
   clearSelection()
   cancelPendingProfilePlacement()
   resetPendingPlacement()
@@ -119,13 +129,14 @@ const {
 })
 
 const showClassRelations = ref(localStorage.getItem('editor.showClassRelations') === 'true')
-const showBlankNodeRelations = ref(localStorage.getItem('editor.showBlankNodeRelations') === 'true')
+const showQualifiedValueShapes = ref((localStorage.getItem('editor.showQualifiedValueShapes')
+  ?? localStorage.getItem('editor.showBlankNodeRelations')) === 'true')
 const reviewItems = computed(() => {
   const visibleShapeIris = new Set(collectReachableShapeIris(
     rootNodeShapes.value,
     nodeShapes.value,
     showClassRelations.value,
-    showBlankNodeRelations.value,
+    showQualifiedValueShapes.value,
   ))
   return buildEditorReviewItems(nodeShapes.value.filter(shape => visibleShapeIris.has(shape.nodeId.value)))
 })
@@ -156,9 +167,11 @@ const { nodes, edges, nodeTypes, edgeTypes } = useEditorGraph({
     requestedNodePositions.value = {}
   },
   readOnlyMode,
+  lockedShapeIris,
+  canEditProperty: (shapeIri, propertyNodeId) => !readOnlyMode.value && !profileStore.isPropertyLocked(shapeIri, propertyNodeId),
   reviewMode,
   showClassRelations,
-  showBlankNodeRelations,
+  showQualifiedValueShapes,
   reviewAnnotations,
   openShapePreview,
   addField: createProperty,
@@ -175,6 +188,7 @@ const { nodes, edges, nodeTypes, edgeTypes } = useEditorGraph({
   selectShape,
   selectProperty,
   openShapeHeaderMenu,
+  openPropertyMenu,
   moveProperty,
 })
 
@@ -191,6 +205,17 @@ const shapeHeaderMenu = ref<{ x: number; y: number; open: boolean; shapeIri: str
   label: null,
   allowDelete: true,
 })
+const propertyMenu = ref<{
+  x: number
+  y: number
+  shapeIri: string
+  propertyNodeId: string
+  label: string
+} | null>(null)
+const propertyMenuRef = ref<HTMLElement | null>(null)
+const copyFieldSource = ref<{ shapeIri: string; propertyNodeId: string; label: string } | null>(null)
+const copyTargetShapeIri = ref('')
+const copyTargetOptions = computed(() => nodeShapes.value.filter(shape => !profileStore.isShapeLocked(shape.nodeId.value)))
 const relationChoiceDialogOpen = ref(false)
 type EditableConnection = {
   sourceShapeIri: string
@@ -467,6 +492,7 @@ function closeShapeHeaderMenu(): void {
 function closeActionMenus(): void {
   addProfileMenuOpen.value = false
   settingsMenuOpen.value = false
+  propertyMenu.value = null
 }
 
 function closeActionOverlay(): void {
@@ -493,6 +519,7 @@ function handleGlobalPointerDown(event: PointerEvent): void {
   if (
     !canvasMenu.value.open
     && !shapeHeaderMenu.value.open
+    && !propertyMenu.value
     && !addProfileMenuOpen.value
     && !settingsMenuOpen.value
     && !reviewDialogOpen.value
@@ -502,6 +529,7 @@ function handleGlobalPointerDown(event: PointerEvent): void {
   const target = event.target as Node | null
   if (!target) return
   if (canvasMenuRef.value?.contains(target)) return
+  if (propertyMenuRef.value?.contains(target)) return
   if (canvasActionBarRef.value?.contains(target)) return
   if (settingsFabRef.value?.contains(target)) return
   if (settingsMenuRef.value?.contains(target)) return
@@ -526,6 +554,7 @@ function handleShellContextMenu(event: MouseEvent): void {
   if (readOnlyMode.value) return
   event.preventDefault()
   closeShapeHeaderMenu()
+  propertyMenu.value = null
   openCanvasMenu(event)
 }
 
@@ -534,6 +563,7 @@ function openShapeHeaderMenu(shape: (typeof nodeShapes.value)[number], event: Mo
   event.preventDefault()
   event.stopPropagation()
   closeCanvasMenu()
+  closeActionMenus()
   cancelPendingProfilePlacement()
   resetPendingPlacement()
   selectShape(shape)
@@ -543,8 +573,87 @@ function openShapeHeaderMenu(shape: (typeof nodeShapes.value)[number], event: Mo
     open: true,
     shapeIri: shape.nodeId.value,
     label: shape.label ?? shape.nodeId.value,
-    allowDelete: options.allowDelete ?? true,
+    allowDelete: (options.allowDelete ?? true) && !profileStore.isShapeLocked(shape.nodeId.value),
   }
+}
+
+function openPropertyMenu(shape: NodeShape, property: PropertyShape, event: MouseEvent): void {
+  if (readOnlyMode.value) return
+  event.preventDefault()
+  event.stopPropagation()
+  closeCanvasMenu()
+  closeShapeHeaderMenu()
+  closeActionMenus()
+  closeActionOverlay()
+  cancelPendingProfilePlacement()
+  resetPendingPlacement()
+  selectProperty(shape, property)
+  propertyMenu.value = {
+    x: Math.max(8, Math.min(event.clientX, window.innerWidth - 248)),
+    y: Math.max(8, Math.min(event.clientY, window.innerHeight - 160)),
+    shapeIri: shape.nodeId.value,
+    propertyNodeId: property.nodeId.value,
+    label: property.name?.trim() || 'Unnamed field',
+  }
+  void nextTick(() => propertyMenuRef.value?.querySelector<HTMLButtonElement>('button')?.focus())
+}
+
+function handleCopyProperty(): void {
+  const menu = propertyMenu.value
+  closeActionMenus()
+  if (!menu || readOnlyMode.value) return
+  if (profileStore.isShapeLocked(menu.shapeIri)) {
+    copyFieldSource.value = menu
+    copyTargetShapeIri.value = copyTargetOptions.value[0]?.nodeId.value ?? ''
+    return
+  }
+  copyFieldToShape(menu, menu.shapeIri)
+}
+
+function copyFieldToShape(source: { shapeIri: string; propertyNodeId: string }, targetShapeIri: string): void {
+  if (readOnlyMode.value) return
+  const copyId = profileStore.copyProperty(source.shapeIri, source.propertyNodeId, targetShapeIri)
+  const shape = profileStore.applicationProfile.findNodeShape(targetShapeIri)
+  const copy = shape?.properties.find(property => property.nodeId.value === copyId)
+  if (shape && copy) {
+    selectProperty(shape, copy)
+    copyFieldSource.value = null
+  }
+}
+
+function copyFieldToExistingProfile(): void {
+  if (copyFieldSource.value && copyTargetShapeIri.value) copyFieldToShape(copyFieldSource.value, copyTargetShapeIri.value)
+}
+
+function copyFieldToNewInheritedProfile(): void {
+  const source = copyFieldSource.value
+  if (!source || readOnlyMode.value) return
+  const iri = createProfile()
+  profileStore.setShapeInheritance(iri, source.shapeIri)
+  copyFieldToShape(source, iri)
+}
+
+function handleDeleteProperty(): void {
+  const menu = propertyMenu.value
+  closeActionMenus()
+  if (!menu || readOnlyMode.value || profileStore.isPropertyLocked(menu.shapeIri, menu.propertyNodeId)) return
+  const property = profileStore.applicationProfile.findNodeShape(menu.shapeIri)?.properties
+    .find(candidate => candidate.nodeId.value === menu.propertyNodeId)
+  if (!property) return
+  const owner = property.inheritedFromShapeLabel || property.inheritedFromShapeIri || 'the source profile'
+  confirm.require({
+    header: 'Delete field',
+    message: property.inherited
+      ? `This field belongs to ${owner}. Delete it from that profile and all profiles inheriting it?`
+      : 'Delete this field from the profile?',
+    icon: 'pi pi-exclamation-triangle',
+    acceptLabel: 'Delete',
+    rejectLabel: 'Cancel',
+    acceptClass: 'p-button-danger',
+    accept: () => {
+      if (!readOnlyMode.value) deleteSelectedProperty(menu.shapeIri, menu.propertyNodeId)
+    },
+  })
 }
 
 function handleCanvasNewProfile(): void {
@@ -581,16 +690,43 @@ function handleConfirmResetAll(): void {
   confirmResetAll()
 }
 
+function handleHistoryAction(action: 'undo' | 'redo'): void {
+  if (readOnlyMode.value || !profileStore[action]()) return
+  closeCanvasMenu()
+  closeShapeHeaderMenu()
+  closeActionMenus()
+  closeActionOverlay()
+  cancelPendingProfilePlacement()
+  resetPendingPlacement()
+  pendingConnection.value = null
+  selectedConnection.value = null
+  draftPropertyNodeId.value = null
+  shapePreviewOpen.value = false
+  relationChoiceDialogOpen.value = false
+  if (!selectedShape.value) clearSelection()
+  else if (!selectedProperty.value) selectedPropertyKey.value = null
+}
+
 function handleExportProfiles(): void {
   closeActionMenus()
   closeActionOverlay()
   exportProfiles()
 }
 
-function openDefaultSettings(): void {
+function openSettings(): void {
   closeActionMenus()
   closeActionOverlay()
   settingsOpen.value = true
+}
+
+function toggleImportedProfileLock(): void {
+  profileStore.endHistoryGroup()
+  lockImportedProfiles.value = !lockImportedProfiles.value
+  closeCanvasMenu()
+  closeShapeHeaderMenu()
+  closeActionMenus()
+  closeRelationChoiceDialog()
+  closeSelectedConnectionDialog()
 }
 
 function toggleClassRelations(): void {
@@ -598,9 +734,9 @@ function toggleClassRelations(): void {
   localStorage.setItem('editor.showClassRelations', String(showClassRelations.value))
 }
 
-function toggleBlankNodeRelations(): void {
-  showBlankNodeRelations.value = !showBlankNodeRelations.value
-  localStorage.setItem('editor.showBlankNodeRelations', String(showBlankNodeRelations.value))
+function toggleQualifiedValueShapes(): void {
+  showQualifiedValueShapes.value = !showQualifiedValueShapes.value
+  localStorage.setItem('editor.showQualifiedValueShapes', String(showQualifiedValueShapes.value))
 }
 
 function handleShapeHeaderDeleteProfile(): void {
@@ -640,7 +776,7 @@ function handleShapeHeaderCreateInheritedProfile(): void {
 }
 
 function requestRemoveReferenceEdge(shapeIri: string, propertyNodeId: string, targetShapeIri: string): void {
-  if (readOnlyMode.value) return
+  if (readOnlyMode.value || profileStore.isPropertyLocked(shapeIri, propertyNodeId)) return
   selectedConnection.value = {
     sourceShapeIri: shapeIri,
     sourceHandle: `ref:${propertyNodeId}`,
@@ -788,6 +924,7 @@ function handleConnect(connection: Connection): void {
   const sourceHandle = connection.sourceHandle
   const propertyNodeId = propertyNodeIdFromReferenceHandle(sourceHandle)
   if (!propertyNodeId || !sourceHandle) return
+  if (profileStore.isPropertyLocked(source.representedShapeIri, propertyNodeId)) return
 
   const sourceShape = nodeShapes.value.find(shape => shape.nodeId.value === source.representedShapeIri)
   const sourceProperty = sourceShape?.properties.find(property => property.nodeId.value === propertyNodeId)
@@ -1177,6 +1314,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  profileStore.endHistoryGroup()
   window.removeEventListener('pointerdown', handleGlobalPointerDown)
   window.removeEventListener('keydown', handleGlobalKeyDown)
   window.removeEventListener('resize', updateActionOverlayMetrics)
@@ -1184,9 +1322,30 @@ onBeforeUnmount(() => {
   resetPendingPlacement()
 })
 
+function handleEditorFocusIn(event: FocusEvent): void {
+  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+    profileStore.beginHistoryGroup()
+  }
+}
+
 function handleGlobalKeyDown(event: KeyboardEvent): void {
+  const target = event.target
+  const isEditingText = target instanceof HTMLElement
+    && (target.isContentEditable || Boolean(target.closest('input, textarea, select, [role="textbox"]')))
+  if (!event.defaultPrevented && !event.isComposing && !isEditingText
+    && (event.ctrlKey || event.metaKey) && !event.altKey) {
+    const key = event.key.toLowerCase()
+    const action = key === 'z' ? (event.shiftKey ? 'redo' : 'undo') : key === 'y' && !event.shiftKey ? 'redo' : null
+    if (action) {
+      event.preventDefault()
+      handleHistoryAction(action)
+      return
+    }
+  }
   if (event.key !== 'Escape') return
   if (pendingProfilePlacement.value) cancelPendingProfilePlacement()
+  closeCanvasMenu()
+  closeShapeHeaderMenu()
   closeActionMenus()
   closeActionOverlay()
 }
@@ -1201,7 +1360,7 @@ void fetchSubjectHeadingOptions().then(options => {
 </script>
 
 <template>
-  <div class="editor-view">
+  <div class="editor-view" @focusin="handleEditorFocusIn" @focusout="profileStore.endHistoryGroup">
     <input ref="schemaInputRef" type="file" accept=".ttl,.shacl,text/turtle" multiple style="display:none" @change="onSchemaFiles" />
 
     <div class="editor-workspace">
@@ -1288,6 +1447,25 @@ void fetchSubjectHeadingOptions().then(options => {
             <span class="canvas-menu__label">Delete profile</span>
           </button>
         </div>
+        <div
+          v-if="propertyMenu"
+          ref="propertyMenuRef"
+          class="canvas-menu property-menu"
+          :style="{ left: `${propertyMenu.x}px`, top: `${propertyMenu.y}px` }"
+          aria-label="Field actions"
+          @contextmenu.stop.prevent
+          @keydown.esc.stop.prevent="propertyMenu = null"
+        >
+          <div class="shape-header-menu__title">{{ propertyMenu.label }}</div>
+          <button type="button" class="canvas-menu__item canvas-menu__item--danger" :disabled="profileStore.isPropertyLocked(propertyMenu.shapeIri, propertyMenu.propertyNodeId)" @click="handleDeleteProperty">
+            <i class="pi pi-trash canvas-menu__icon" aria-hidden="true" />
+            <span class="canvas-menu__label">Delete</span>
+          </button>
+          <button type="button" class="canvas-menu__item" @click="handleCopyProperty">
+            <i class="pi pi-copy canvas-menu__icon" aria-hidden="true" />
+            <span class="canvas-menu__label">Create copy</span>
+          </button>
+        </div>
       </div>
 
       <button
@@ -1301,9 +1479,9 @@ void fetchSubjectHeadingOptions().then(options => {
         <i class="pi pi-cog" />
       </button>
       <div v-if="settingsMenuOpen" ref="settingsMenuRef" class="settings-menu">
-        <button type="button" class="settings-menu__item" @click="openDefaultSettings">
+        <button type="button" class="settings-menu__item" @click="openSettings">
           <i class="pi pi-sliders-h" />
-          <span>Default Settings</span>
+          <span>Settings</span>
         </button>
         <button type="button" class="settings-menu__item" :disabled="profiles.length === 0" @click="handleExportProfiles">
           <i class="pi pi-download" />
@@ -1346,6 +1524,30 @@ void fetchSubjectHeadingOptions().then(options => {
             </button>
           </div>
         </div>
+        <button
+          type="button"
+          class="action-tile"
+          title="Undo (Ctrl/Cmd+Z)"
+          aria-label="Undo"
+          aria-keyshortcuts="Control+z Meta+z"
+          :disabled="readOnlyMode || !canUndo"
+          @click="handleHistoryAction('undo')"
+        >
+          <i class="pi pi-undo action-tile__icon" aria-hidden="true" />
+          <span class="action-tile__label">Undo</span>
+        </button>
+        <button
+          type="button"
+          class="action-tile"
+          title="Redo (Ctrl/Cmd+Shift+Z or Ctrl+Y)"
+          aria-label="Redo"
+          aria-keyshortcuts="Control+Shift+z Meta+Shift+z Control+y"
+          :disabled="readOnlyMode || !canRedo"
+          @click="handleHistoryAction('redo')"
+        >
+          <i class="pi pi-undo action-tile__icon action-tile__icon--redo" aria-hidden="true" />
+          <span class="action-tile__label">Redo</span>
+        </button>
         <button type="button" class="action-tile" @click="handleConfirmResetAll">
           <i class="pi pi-refresh action-tile__icon" />
           <span class="action-tile__label">Reset Editor</span>
@@ -1533,7 +1735,8 @@ void fetchSubjectHeadingOptions().then(options => {
           :shape="selectedShape"
           :property="selectedProperty"
           :profile="selectedProfile"
-          :read-only="readOnlyMode"
+          :read-only="selectionReadOnly"
+          :imported-locked="selectionImportedLocked"
           :draft-property-node-id="draftPropertyNodeId"
           :all-shapes="nodeShapes"
           :create-property="createProperty"
@@ -1557,6 +1760,7 @@ void fetchSubjectHeadingOptions().then(options => {
       :shape-preview-open="shapePreviewOpen"
       :preview-shape="previewShape"
       :combined-canvas-shapes-turtle="combinedCanvasShapesTurtle"
+      :preview-shape-turtle="previewShapeTurtle"
       :preview-shape-values-turtle="previewShapeValuesTurtle"
       :preview-shape-subjects="previewShapeSubjects"
       @update:shape-preview-open="shapePreviewOpen = $event"
@@ -1630,9 +1834,32 @@ void fetchSubjectHeadingOptions().then(options => {
     </Dialog>
 
     <Dialog
+      :visible="copyFieldSource !== null"
+      modal
+      header="Copy field to own properties"
+      :style="{ width: 'min(520px, 96vw)' }"
+      @update:visible="visible => { if (!visible) copyFieldSource = null }"
+    >
+      <p>The source profile is locked. Choose where to copy {{ copyFieldSource?.label ?? 'this field' }}.</p>
+      <label v-if="copyTargetOptions.length > 0" class="settings-field">
+        <span>Editable profile</span>
+        <select v-model="copyTargetShapeIri" class="settings-input">
+          <option v-for="shape in copyTargetOptions" :key="shape.nodeId.value" :value="shape.nodeId.value">
+            {{ shape.label || 'Unnamed profile' }}
+          </option>
+        </select>
+      </label>
+      <template #footer>
+        <Button label="Cancel" severity="secondary" text @click="copyFieldSource = null" />
+        <Button label="Create inherited profile" severity="secondary" @click="copyFieldToNewInheritedProfile" />
+        <Button v-if="copyTargetOptions.length > 0" label="Copy" icon="pi pi-copy" :disabled="!copyTargetShapeIri" @click="copyFieldToExistingProfile" />
+      </template>
+    </Dialog>
+
+    <Dialog
       :visible="settingsOpen"
       modal
-      header="Editor Settings"
+      header="Settings"
       :style="{ width: 'min(560px, 96vw)' }"
       @update:visible="settingsOpen = $event"
     >
@@ -1689,33 +1916,48 @@ void fetchSubjectHeadingOptions().then(options => {
 
       <div v-else class="settings-form" role="tabpanel">
         <div class="settings-toggle-row">
-          <span>Load and display Class connections (sh:class)</span>
+          <span>Lock imported profiles for editing</span>
+          <button
+            type="button"
+            role="switch"
+            class="settings-toggle"
+            :class="{ 'is-on': lockImportedProfiles }"
+            :aria-checked="lockImportedProfiles"
+            aria-label="Lock imported profiles for editing"
+            @click="toggleImportedProfileLock"
+          >
+            <span class="settings-toggle__thumb" />
+          </button>
+        </div>
+        <div class="settings-toggle-row">
+          <span>Display profiles linked by sh:class</span>
           <button
             type="button"
             role="switch"
             class="settings-toggle"
             :class="{ 'is-on': showClassRelations }"
             :aria-checked="showClassRelations"
-            aria-label="Load and display Class connections (sh:class)"
+            aria-label="Display profiles linked by sh:class"
             @click="toggleClassRelations"
           >
             <span class="settings-toggle__thumb" />
           </button>
         </div>
         <div class="settings-toggle-row">
-          <span>Load and display blank nodes (in sh:qualifiedValueShape)</span>
+          <span>Display profiles linked by sh:qualifiedValueShape</span>
           <button
             type="button"
             role="switch"
             class="settings-toggle"
-            :class="{ 'is-on': showBlankNodeRelations }"
-            :aria-checked="showBlankNodeRelations"
-            aria-label="Load and display blank nodes (in sh:qualifiedValueShape)"
-            @click="toggleBlankNodeRelations"
+            :class="{ 'is-on': showQualifiedValueShapes }"
+            :aria-checked="showQualifiedValueShapes"
+            aria-label="Display profiles linked by sh:qualifiedValueShape"
+            @click="toggleQualifiedValueShapes"
           >
             <span class="settings-toggle__thumb" />
           </button>
         </div>
+        <p class="helper-text">Referenced profiles are loaded regardless of these display settings. Enable a switch to show the linked profiles and connections on the canvas.</p>
       </div>
     </Dialog>
   </div>
@@ -1885,6 +2127,10 @@ void fetchSubjectHeadingOptions().then(options => {
 
 .action-tile__icon {
   font-size: 1.27rem;
+}
+
+.action-tile__icon--redo {
+  transform: scaleX(-1);
 }
 
 .action-tile__label {
@@ -2458,7 +2704,17 @@ void fetchSubjectHeadingOptions().then(options => {
   gap: 10px;
 }
 
-.canvas-menu__item:hover {
+.property-menu {
+  width: 240px;
+  min-width: 0;
+}
+
+.property-menu .shape-header-menu__title {
+  max-height: 52px;
+  overflow: hidden;
+}
+
+.canvas-menu__item:hover:not(:disabled) {
   background: var(--color-primary-soft);
 }
 
@@ -2466,13 +2722,19 @@ void fetchSubjectHeadingOptions().then(options => {
   color: #b42323;
 }
 
-.canvas-menu__item--danger:hover {
+.canvas-menu__item--danger:hover:not(:disabled) {
   background: #fff1f1;
 }
 
 .canvas-menu__icon {
   font-size: 1rem;
   color: var(--color-text-muted);
+}
+
+.canvas-menu__item:disabled {
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .canvas-menu__item--danger .canvas-menu__icon {

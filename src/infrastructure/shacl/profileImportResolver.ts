@@ -1,7 +1,7 @@
 import localforage from 'localforage'
 import { ApplicationProfile, type ShaclProfile } from '@/domain/profiles'
-import { fetchAimsProfileDefinition } from '@/infrastructure/external/aimsProfileService'
-import { parseShaclProfile } from '@/infrastructure/shacl/shaclProfileParser'
+import { fetchAimsProfileDefinition, searchAimsProfileDefinitions } from '@/infrastructure/external/aimsProfileService'
+import { parseShaclProfile, parseShaclProfiles } from '@/infrastructure/shacl/shaclProfileParser'
 
 const cache = localforage.createInstance({
   name: 'shacl-editor',
@@ -26,15 +26,29 @@ export interface ResolveResult {
   errors: Array<{ iri: string; error: string }>
 }
 
-export async function resolveProfileImportsRecursive(applicationProfile: ApplicationProfile): Promise<ResolveResult> {
+interface ProfileResolutionDependencies {
+  fetchProfile: (iri: string) => Promise<ShaclProfile>
+  findClassProfiles: (classIri: string) => Promise<ShaclProfile[]>
+}
+
+export async function resolveProfileImportsRecursive(
+  applicationProfile: ApplicationProfile,
+  dependencies: Partial<ProfileResolutionDependencies> = {},
+): Promise<ResolveResult> {
   const errors: Array<{ iri: string; error: string }> = []
   const failedImports = new Set<string>()
+  const searchedClasses = new Set<string>()
 
   while (true) {
     const missingImports = collectMissingImports(applicationProfile, failedImports)
-    if (missingImports.length === 0) return { errors }
+    const missingClasses = collectMissingClasses(applicationProfile, searchedClasses)
+    if (missingImports.length === 0 && missingClasses.length === 0) return { errors }
+    missingClasses.forEach(iri => searchedClasses.add(iri))
 
-    const fetchedProfiles = await Promise.allSettled(missingImports.map(iri => fetchProfile(iri)))
+    const [fetchedProfiles, classProfiles] = await Promise.all([
+      Promise.allSettled(missingImports.map(iri => (dependencies.fetchProfile ?? fetchProfile)(iri))),
+      Promise.allSettled(missingClasses.map(iri => (dependencies.findClassProfiles ?? findClassProfiles)(iri))),
+    ])
     let addedCount = 0
 
     fetchedProfiles.forEach((result, index) => {
@@ -51,8 +65,51 @@ export async function resolveProfileImportsRecursive(applicationProfile: Applica
       }
     })
 
+    classProfiles.forEach((result, index) => {
+      const iri = missingClasses[index]
+      if (result.status === 'fulfilled') {
+        for (const profile of result.value) {
+          if (applicationProfile.profiles.has(profile.iri)) continue
+          applicationProfile.upsert({ ...profile, origin: 'fetched', source: profile.iri })
+          addedCount += 1
+        }
+      } else {
+        errors.push({ iri, error: `Class profile lookup failed: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}` })
+      }
+    })
+
     if (addedCount === 0) return { errors }
   }
+}
+
+function collectMissingClasses(applicationProfile: ApplicationProfile, searchedClasses: Set<string>): string[] {
+  const shapes = applicationProfile.rawNodeShapes()
+  const knownClasses = new Set(shapes.map(shape => shape.targetClass?.value).filter(Boolean))
+  const missing = new Set<string>()
+  for (const shape of shapes) {
+    for (const property of shape.properties) {
+      const constraints = [property, property.qualifiedValueShape, property.negatedConstraint,
+        ...property.alternatives ?? [], ...property.conjunctions ?? [], ...property.exclusiveAlternatives ?? []]
+      for (const constraint of constraints) {
+        const cls = constraint?.cls?.value
+        if (cls && !knownClasses.has(cls) && !searchedClasses.has(cls)) missing.add(cls)
+      }
+    }
+  }
+  return [...missing]
+}
+
+async function findClassProfiles(classIri: string): Promise<ShaclProfile[]> {
+  const definitions = await searchAimsProfileDefinitions(classIri)
+  return definitions.flatMap(definition => {
+    try {
+      return parseShaclProfiles(definition.text, definition.iri, 'fetched', definition.mediaType)
+        .filter(profile => profile.nodeShapes.some(shape => shape.targetClass?.value === classIri))
+    } catch {
+      // A malformed search result must not hide other matching profiles.
+      return []
+    }
+  })
 }
 
 function collectMissingImports(applicationProfile: ApplicationProfile, failedImports: Set<string>): string[] {

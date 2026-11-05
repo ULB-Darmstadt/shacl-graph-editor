@@ -118,7 +118,9 @@ export class ApplicationProfile {
     nextVisited.add(iri)
 
     const ownProperties = rawShape.properties.map(property => ({ ...property }))
-    const ownKeys = new Set(ownProperties.map(propertyKeyFor))
+    // Separate property shapes on the same path add constraints; they do not
+    // replace the inherited field, even when their names are identical.
+    const ownKeys = new Set(ownProperties.map(property => property.nodeId.value))
     const inheritedProperties: PropertyShape[] = []
 
     for (const inheritedIri of rawShape.inheritedShapeIris ?? []) {
@@ -127,7 +129,7 @@ export class ApplicationProfile {
 
       const inheritedShape = this.resolveNodeShape(inheritedIri, nextVisited)
       for (const property of inheritedShape.properties) {
-        const key = propertyKeyFor(property)
+        const key = property.nodeId.value
         if (ownKeys.has(key)) continue
         inheritedProperties.push({
           ...property,
@@ -147,12 +149,4 @@ export class ApplicationProfile {
   get hasShapes(): boolean {
     return this.allNodeShapes().length > 0
   }
-}
-
-function propertyKeyFor(property: PropertyShape): string {
-  if (!property.path?.value) return property.nodeId.value
-  const normalizedName = property.name?.trim().toLocaleLowerCase()
-  return normalizedName
-    ? `${property.path.value}\u0000${normalizedName}`
-    : property.path.value
 }

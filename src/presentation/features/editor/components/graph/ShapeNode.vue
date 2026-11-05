@@ -127,7 +127,7 @@ function focusInlineEditor(): void {
 }
 
 function startShapeNameEdit(shapeIri: string, value: string | undefined, event?: Event): void {
-  if (!isInteractive() || !props.data.onRenameShape) return
+  if (!isEditable(shapeIri) || !props.data.onRenameShape) return
   event?.stopPropagation()
   const shape = profiles.applicationProfile.findNodeShape(shapeIri)
   if (shape) props.data.onSelectShape?.(shape)
@@ -141,13 +141,14 @@ function startShapeNameEdit(shapeIri: string, value: string | undefined, event?:
 function onShapeNameInput(shapeIri: string, event: Event): void {
   const value = (event.target as HTMLInputElement).value
   inlineNameDraft.value = value
-  props.data.onRenameShape?.(shapeIri, value)
+  if (isEditable(shapeIri)) props.data.onRenameShape?.(shapeIri, value)
 }
 
 function commitShapeNameEdit(shapeIri: string): void {
   if (editingShapeIri.value !== shapeIri) return
   props.data.onRenameShape?.(shapeIri, inlineNameDraft.value)
   editingShapeIri.value = null
+  profiles.endHistoryGroup()
 }
 
 function cancelShapeNameEdit(shapeIri: string): void {
@@ -155,15 +156,15 @@ function cancelShapeNameEdit(shapeIri: string): void {
     props.data.onRenameShape?.(shapeIri, inlineOriginalName.value)
   }
   editingShapeIri.value = null
+  profiles.endHistoryGroup()
 }
 
 function startPropertyNameEdit(shapeIri: string, property: PropertyShape, event?: Event): void {
-  if (!isInteractive() || !props.data.onRenameProperty) return
+  if (!isPropertyEditable(property, shapeIri) || !props.data.onRenameProperty) return
   event?.stopPropagation()
   const shape = profiles.applicationProfile.findNodeShape(shapeIri)
   const selectedProperty = shape?.properties.find(candidate =>
-    candidate.nodeId.value === property.nodeId.value
-    || candidate.path?.value === property.path?.value,
+    candidate.nodeId.value === property.nodeId.value,
   )
   if (shape && selectedProperty) props.data.onSelectProperty?.(shape, selectedProperty)
   editingShapeIri.value = null
@@ -176,7 +177,7 @@ function startPropertyNameEdit(shapeIri: string, property: PropertyShape, event?
 function onPropertyNameInput(shapeIri: string, property: PropertyShape, event: Event): void {
   const value = (event.target as HTMLInputElement).value
   inlineNameDraft.value = value
-  props.data.onRenameProperty?.(shapeIri, property.nodeId.value, value)
+  if (isPropertyEditable(property, shapeIri)) props.data.onRenameProperty?.(shapeIri, property.nodeId.value, value)
 }
 
 function commitPropertyNameEdit(shapeIri: string, property: PropertyShape): void {
@@ -188,6 +189,7 @@ function commitPropertyNameEdit(shapeIri: string, property: PropertyShape): void
     else props.data.onDeleteProperty?.(shapeIri, property.nodeId.value)
   }
   editingPropertyKey.value = null
+  profiles.endHistoryGroup()
 }
 
 function cancelPropertyNameEdit(shapeIri: string, property: PropertyShape): void {
@@ -198,14 +200,20 @@ function cancelPropertyNameEdit(shapeIri: string, property: PropertyShape): void
     }
   }
   editingPropertyKey.value = null
+  profiles.endHistoryGroup()
 }
 
 function selectProperty(property: PropertyShape): void {
   props.data.onSelectProperty?.(props.data.shape, property)
 }
 
+function openPropertyContextMenu(property: PropertyShape, event: MouseEvent): void {
+  if (!isInteractive()) return
+  props.data.onPropertyContextMenu?.(props.data.shape, property, event)
+}
+
 function addField(shapeIri: string): void {
-  props.data.onAddField?.(shapeIri)
+  if (isEditable(shapeIri)) props.data.onAddField?.(shapeIri)
 }
 
 function selectInheritedShape(shapeIri: string): void {
@@ -231,7 +239,7 @@ function isPropertyHandleOccupied(property: PropertyShape): boolean {
     property,
     profiles.applicationProfile.allNodeShapes(),
     false,
-    props.data.showBlankNodeRelations,
+    props.data.showQualifiedValueShapes,
   ).length > 0
 }
 
@@ -245,7 +253,7 @@ function isShapeTargetHandleOccupied(): boolean {
   const allShapes = profiles.applicationProfile.allNodeShapes()
   return allShapes.some(shape =>
     shape.properties.some(property =>
-      propertyGraphTargetIris(property, allShapes, false, props.data.showBlankNodeRelations).includes(props.data.representedShapeIri),
+      propertyGraphTargetIris(property, allShapes, false, props.data.showQualifiedValueShapes).includes(props.data.representedShapeIri),
     ),
   )
 }
@@ -262,6 +270,14 @@ function isShapeClassTargetHandleOccupied(): boolean {
 
 function isInteractive(): boolean {
   return props.data.interactive !== false
+}
+
+function isEditable(shapeIri = props.data.representedShapeIri): boolean {
+  return isInteractive() && !profiles.isShapeLocked(shapeIri)
+}
+
+function isPropertyEditable(property: PropertyShape, shapeIri = props.data.representedShapeIri): boolean {
+  return isInteractive() && !profiles.isPropertyLocked(shapeIri, property.nodeId.value)
 }
 
 function inheritedPropertyPrefixCount(): number {
@@ -327,6 +343,7 @@ function isSourceShape(payload: PropertyDragPayload): boolean {
 }
 
 function canMovePropertyToThisShape(payload: PropertyDragPayload): boolean {
+  if (!isEditable() || profiles.isPropertyLocked(payload.sourceShapeIri, payload.propertyNodeId)) return false
   if (!props.data.onMoveProperty) return false
   if (isSourceShape(payload)) return true
 
@@ -418,7 +435,7 @@ function dragPreviewStyle(): Record<string, string> {
 }
 
 function onPropertyDragStart(property: PropertyShape, event: DragEvent): void {
-  if (!isInteractive() || property.inherited || !event.dataTransfer) return
+  if (!isPropertyEditable(property) || property.inherited || !event.dataTransfer) return
 
   updateDragPosition(event)
   event.dataTransfer.effectAllowed = 'move'
@@ -442,6 +459,12 @@ function onPropertyDragEnd(): void {
 function onShapeDragOver(event: DragEvent): void {
   const payload = parsePropertyDragPayload(event)
   if (!payload) return
+  if (!canMovePropertyToThisShape(payload)) {
+    event.preventDefault()
+    dragOverBlocked.value = true
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'none'
+    return
+  }
 
   event.preventDefault()
   updateDragPosition(event)
@@ -478,6 +501,11 @@ function onShapeDragLeave(event: DragEvent): void {
 function onShapeDrop(event: DragEvent): void {
   const payload = parsePropertyDragPayload(event)
   if (!payload) return
+  if (!canMovePropertyToThisShape(payload)) {
+    event.preventDefault()
+    resetPropertyDragState()
+    return
+  }
 
   event.preventDefault()
   updateDragPosition(event)
@@ -537,7 +565,7 @@ function onShapeDrop(event: DragEvent): void {
           'handle-readonly': !isInteractive(),
         }"
       />
-      <i class="pi pi-bookmark" />
+      <i :class="profiles.isShapeLocked(data.representedShapeIri) ? 'pi pi-lock' : 'pi pi-bookmark'" :title="profiles.isShapeLocked(data.representedShapeIri) ? 'Imported profile locked for editing' : undefined" />
       <input
         v-if="editingShapeIri === data.representedShapeIri"
         data-inline-name-editor="active"
@@ -577,7 +605,7 @@ function onShapeDrop(event: DragEvent): void {
         @contextmenu.stop.prevent="openInheritedShapeContextMenu(section.shapeIri, $event)"
       >
         <span class="inherited-section-label__content">
-          <i class="pi pi-sitemap section-icon" />
+          <i :class="profiles.isShapeLocked(section.shapeIri) ? 'pi pi-lock section-icon' : 'pi pi-sitemap section-icon'" :title="profiles.isShapeLocked(section.shapeIri) ? 'Imported profile locked for editing' : undefined" />
           <input
             v-if="editingShapeIri === section.shapeIri"
             data-inline-name-editor="active"
@@ -599,7 +627,7 @@ function onShapeDrop(event: DragEvent): void {
       <ul class="properties">
         <li
           v-for="property in section.properties"
-          :key="`inh:${section.title}:${property.path?.value ?? property.nodeId.value}`"
+          :key="`inh:${section.shapeIri}:${property.nodeId.value}`"
           class="row inherited-row nodrag"
           :class="[
             propertyReviewClass(property, section.shapeIri),
@@ -607,6 +635,7 @@ function onShapeDrop(event: DragEvent): void {
           ]"
           @click.stop="selectProperty(property)"
           @dblclick.stop="startPropertyNameEdit(section.shapeIri, property, $event)"
+          @contextmenu.stop.prevent="openPropertyContextMenu(property, $event)"
         >
           <template v-if="isObjectRef(property)">
             <i class="pi pi-book field-icon" :class="{ 'field-icon--muted': !hasTermIri(property) }" />
@@ -649,19 +678,19 @@ function onShapeDrop(event: DragEvent): void {
             :id="`ref:${property.nodeId.value}`"
             type="source"
             :position="Position.Right"
-            :connectable="isInteractive()"
+            :connectable="isPropertyEditable(property)"
             class="handle handle-ref-source"
             :class="{
               'handle-active': isPropertyHandleOccupied(property),
               'handle-class-active': isPropertyClassHandleOccupied(property),
-              'handle-readonly': !isInteractive(),
+              'handle-readonly': !isPropertyEditable(property),
             }"
           />
         </li>
       </ul>
 
       <button
-        v-if="data.onAddField && isSelectedInheritedProfile(section.shapeIri)"
+        v-if="data.onAddField && isEditable(section.shapeIri) && isSelectedInheritedProfile(section.shapeIri)"
         type="button"
         class="add-field-row add-field-row--inherited nodrag"
         :style="{ paddingLeft: `${12 + (section.depth * 18)}px` }"
@@ -677,7 +706,7 @@ function onShapeDrop(event: DragEvent): void {
     </div>
 
     <ul v-if="ownProperties().length > 0 || dropPreviewIndex !== null" ref="ownPropertiesListRef" class="properties properties--own">
-      <template v-for="(property, index) in visibleOwnProperties" :key="`own:${property.path?.value ?? property.nodeId.value}`">
+      <template v-for="(property, index) in visibleOwnProperties" :key="`own:${property.nodeId.value}`">
         <li v-if="dropPreviewIndex === index" :key="`drop:${index}`" class="property-drop-line" />
         <li
           class="row nodrag"
@@ -687,10 +716,11 @@ function onShapeDrop(event: DragEvent): void {
           ]"
           @click.stop="selectProperty(property)"
           @dblclick.stop="startPropertyNameEdit(data.representedShapeIri, property, $event)"
+          @contextmenu.stop.prevent="openPropertyContextMenu(property, $event)"
         >
           <template v-if="isObjectRef(property)">
             <i
-              v-if="isInteractive()"
+              v-if="isPropertyEditable(property)"
               class="pi pi-bars property-drag-grip"
               draggable="true"
               title="Move field"
@@ -718,7 +748,7 @@ function onShapeDrop(event: DragEvent): void {
 
           <template v-else>
             <i
-              v-if="isInteractive()"
+              v-if="isPropertyEditable(property)"
               class="pi pi-bars property-drag-grip"
               draggable="true"
               title="Move field"
@@ -749,12 +779,12 @@ function onShapeDrop(event: DragEvent): void {
             :id="`ref:${property.nodeId.value}`"
             type="source"
             :position="Position.Right"
-            :connectable="isInteractive()"
+            :connectable="isPropertyEditable(property)"
             class="handle handle-ref-source"
             :class="{
               'handle-active': isPropertyHandleOccupied(property),
               'handle-class-active': isPropertyClassHandleOccupied(property),
-              'handle-readonly': !isInteractive(),
+              'handle-readonly': !isPropertyEditable(property),
             }"
           />
         </li>
@@ -763,7 +793,7 @@ function onShapeDrop(event: DragEvent): void {
     </ul>
 
     <button
-      v-if="data.onAddField"
+      v-if="data.onAddField && isEditable()"
       type="button"
       class="add-field-row nodrag"
       @click.stop="addField(data.representedShapeIri)"
