@@ -28,7 +28,7 @@ import { useConfirm } from 'primevue/useconfirm'
 import { PROFILE_LICENSE_OPTIONS, fetchSubjectHeadingOptions, type SelectOption } from '@/application/profiles/profileEditorCatalogs'
 import { inferPropertyEditorType, propertyNodeTargets, type NodeShape, type PropertyShape } from '@/domain/profiles'
 import type { PropertyEditorType } from '@/application/profiles/profileEditorStore'
-import { loadAimsProfiles } from '@/infrastructure/external/aimsProfileService'
+import { aimsProfileBadges, loadAimsProfiles, type AimsProfile } from '@/infrastructure/external/aimsProfileService'
 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -353,6 +353,8 @@ const filteredReviewItems = computed(() => {
 })
 const filteredUrgentReviewItems = computed(() => filteredReviewItems.value.filter(item => item.severity === 'urgent'))
 const filteredWarningReviewItems = computed(() => filteredReviewItems.value.filter(item => item.severity === 'warning'))
+const serviceProfiles = ref<AimsProfile[]>([])
+const serviceProfilesByIri = computed(() => new Map(serviceProfiles.value.map(profile => [profile.base_url, profile])))
 const canvasProfileItems = computed<CanvasProfileSidebarItem[]>(() => {
   const visibleShapeIris = new Set<string>()
 
@@ -365,10 +367,12 @@ const canvasProfileItems = computed<CanvasProfileSidebarItem[]>(() => {
     .map((shapeIri) => {
       const shape = profileStore.applicationProfile.findNodeShape(shapeIri)
       if (!shape) return null
+      const profile = profiles.value.find(profile => profile.iri === shape.sourceProfileIri)
       return {
         shapeIri,
         label: shape.label?.trim() || 'Unnamed profile',
-        isDraft: profiles.value.find(profile => profile.iri === shape.sourceProfileIri)?.origin === 'created',
+        isDraft: profile?.origin === 'created',
+        badges: profile?.origin === 'fetched' ? aimsProfileBadges(serviceProfilesByIri.value.get(profile.iri)) : [],
         description: shape.description?.trim().split(/\r?\n/, 1)[0]?.trim() || null,
       }
     })
@@ -1398,7 +1402,7 @@ watch(fitViewRequestTick, (tick) => {
 })
 
 onMounted(() => {
-  void loadAimsProfiles().catch(() => undefined)
+  void loadAimsProfiles().then(profiles => { serviceProfiles.value = profiles }).catch(() => undefined)
   window.addEventListener('pointerdown', handleGlobalPointerDown)
   window.addEventListener('keydown', handleGlobalKeyDown)
   window.addEventListener('resize', updateActionOverlayMetrics)

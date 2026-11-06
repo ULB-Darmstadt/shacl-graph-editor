@@ -1,9 +1,12 @@
 <script lang="ts">
+import type { AimsProfileBadge } from '@/infrastructure/external/aimsProfileService'
+
 export interface CanvasProfileSidebarItem {
   shapeIri: string
   label: string
   description: string | null
   isDraft: boolean
+  badges: AimsProfileBadge[]
 }
 </script>
 
@@ -19,7 +22,7 @@ const emit = defineEmits<{
 const search = ref('')
 const filtered = computed(() => {
   const needle = search.value.trim().toLocaleLowerCase()
-  return props.items.filter(item => !needle || [item.label, item.description, item.shapeIri]
+  return props.items.filter(item => !needle || [item.label, item.description, item.shapeIri, ...item.badges.map(badge => badge.label)]
     .filter(Boolean).join(' ').toLocaleLowerCase().includes(needle))
 })
 const groups = computed(() => [
@@ -54,8 +57,19 @@ const groups = computed(() => [
           @click="emit('select', item)"
           @contextmenu.stop.prevent="emit('contextmenu', item, $event)"
         >
-          <span class="profile-sidebar__name">{{ item.label }}</span>
-          <span v-if="item.description" class="profile-sidebar__description">{{ item.description }}</span>
+          <span class="profile-sidebar__text">
+            <span class="profile-sidebar__name">{{ item.label }}</span>
+            <span v-if="item.description" class="profile-sidebar__description">{{ item.description }}</span>
+          </span>
+          <span v-if="item.badges.length" class="profile-sidebar__badges">
+            <span
+              v-for="badge in item.badges"
+              :key="badge.label"
+              class="profile-sidebar__badge"
+              :title="`Approved by ${badge.label} — NFDI4ING Metadata Profile Service`"
+              :aria-label="`Approved by ${badge.label}`"
+            >{{ badge.label }}</span>
+          </span>
         </button>
       </section>
     </div>
@@ -71,7 +85,10 @@ const groups = computed(() => [
 .profile-sidebar__group + .profile-sidebar__group { margin-top: 18px; }
 .profile-sidebar__heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 10px 8px 6px; color: var(--color-text-muted); font-size: 0.78rem; font-weight: 600; }
 .profile-sidebar__heading span { font-size: 0.72rem; font-weight: 400; }
-.profile-sidebar__item { display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 9px 10px; border: 0; border-left: 2px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--color-text); font: inherit; text-align: left; cursor: pointer; }
+.profile-sidebar__item { display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 9px 10px; border: 0; border-left: 2px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--color-text); font: inherit; text-align: left; cursor: pointer; }
+.profile-sidebar__text { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.profile-sidebar__badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 45%; flex-shrink: 0; margin-left: auto; }
+.profile-sidebar__badge { padding: 1px 5px; border: 1px solid var(--color-border-strong); border-radius: 3px; background: var(--color-primary-soft); color: var(--color-primary); font-size: 0.65rem; line-height: 1.4; overflow-wrap: anywhere; }
 .profile-sidebar__item:hover { background: var(--color-surface-2); }
 .profile-sidebar__item.is-selected { border-left-color: var(--color-primary); background: var(--color-primary-soft); }
 .profile-sidebar__item:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }

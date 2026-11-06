@@ -18,6 +18,27 @@ export interface AimsProfile {
   mimeType?: string
   name: string
   state?: string | number
+  approvedBy?: string[]
+  underReviewBy?: string[]
+}
+
+export interface AimsProfileBadge {
+  label: string
+}
+
+export function aimsProfileBadges(profile: AimsProfile | undefined): AimsProfileBadge[] {
+  const badges: AimsProfileBadge[] = []
+  const seen = new Set<string>()
+  if (!Array.isArray(profile?.approvedBy)) return badges
+  for (const value of profile.approvedBy) {
+    if (typeof value !== 'string' || !value.trim()) continue
+    const label = value.trim()
+    const key = label.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    badges.push({ label })
+  }
+  return badges
 }
 
 function isAimsProfile(entry: unknown): entry is AimsProfile {
