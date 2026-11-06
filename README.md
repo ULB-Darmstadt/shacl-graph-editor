@@ -23,6 +23,7 @@ SHACL Graph Editor is a browser-based editor for the workflow:
 - Move properties between profiles or reorder them within a profile by drag and drop.
 - Move fields between editable parent and child sections within a node using their drag handles. Locked imported profiles stay protected.
 - Inheritance changes preserve canvas positions; removing an inherited child leaves the revealed parent in the same place.
+- Choose Resort Canvas from the gear menu or by right-clicking empty canvas to automatically arrange visible nodes and fit the canvas to the new layout.
 - Right-click a profile on the canvas or in the sidebar and choose Preview to open its form and Turtle code.
 - Right-click a field to delete it or create an own-property copy of its name, description, and IRI for additional constraints.
 - Right-click an editable field to create a new profile with the same name and connect it directly using `sh:node`.

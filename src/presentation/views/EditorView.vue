@@ -762,6 +762,14 @@ function handleConfirmResetAll(): void {
   confirmResetAll()
 }
 
+function handleResortCanvas(): void {
+  if (!nodes.value.length || isResolvingImports.value) return
+  closeCanvasMenu()
+  closeActionMenus()
+  resetPendingPlacement()
+  fitViewRequestTick.value += 1
+}
+
 function handleHistoryAction(action: 'undo' | 'redo'): void {
   if (readOnlyMode.value || !profileStore[action]()) return
   closeCanvasMenu()
@@ -802,11 +810,13 @@ function toggleImportedProfileLock(): void {
 }
 
 function toggleClassRelations(): void {
+  if (reviewMode.value) return
   showClassRelations.value = !showClassRelations.value
   localStorage.setItem('editor.showClassRelations', String(showClassRelations.value))
 }
 
 function toggleQualifiedValueShapes(): void {
+  if (reviewMode.value) return
   showQualifiedValueShapes.value = !showQualifiedValueShapes.value
   localStorage.setItem('editor.showQualifiedValueShapes', String(showQualifiedValueShapes.value))
 }
@@ -1554,6 +1564,10 @@ void fetchSubjectHeadingOptions().then(options => {
               <i class="pi pi-eye canvas-menu__icon" aria-hidden="true" />
               <span class="canvas-menu__label">Show all hidden connections</span>
             </button>
+            <button type="button" class="canvas-menu__item" :disabled="nodes.length === 0 || isResolvingImports" @click="handleResortCanvas">
+              <i class="pi pi-sort-alt canvas-menu__icon" aria-hidden="true" />
+              <span class="canvas-menu__label">Resort Canvas</span>
+            </button>
           </div>
 
           <div
@@ -1626,6 +1640,10 @@ void fetchSubjectHeadingOptions().then(options => {
           <button type="button" class="settings-menu__item" @click="openSettings">
             <i class="pi pi-sliders-h" />
             <span>Settings</span>
+          </button>
+          <button type="button" class="settings-menu__item" :disabled="nodes.length === 0 || isResolvingImports" @click="handleResortCanvas">
+            <i class="pi pi-sort-alt" aria-hidden="true" />
+            <span>Resort Canvas</span>
           </button>
           <button type="button" class="settings-menu__item" :disabled="profiles.length === 0" @click="handleExportProfiles">
             <i class="pi pi-download" />
@@ -2040,8 +2058,10 @@ void fetchSubjectHeadingOptions().then(options => {
             type="button"
             role="switch"
             class="settings-toggle"
-            :class="{ 'is-on': showClassRelations }"
-            :aria-checked="showClassRelations"
+            :class="{ 'is-on': reviewMode || showClassRelations }"
+            :aria-checked="reviewMode || showClassRelations"
+            :disabled="reviewMode"
+            :title="reviewMode ? 'Always shown in Review mode.' : undefined"
             aria-label="Display profiles linked by sh:class"
             @click="toggleClassRelations"
           >
@@ -2054,8 +2074,10 @@ void fetchSubjectHeadingOptions().then(options => {
             type="button"
             role="switch"
             class="settings-toggle"
-            :class="{ 'is-on': showQualifiedValueShapes }"
-            :aria-checked="showQualifiedValueShapes"
+            :class="{ 'is-on': reviewMode || showQualifiedValueShapes }"
+            :aria-checked="reviewMode || showQualifiedValueShapes"
+            :disabled="reviewMode"
+            :title="reviewMode ? 'Always shown in Review mode.' : undefined"
             aria-label="Display profiles linked by sh:qualifiedValueShape"
             @click="toggleQualifiedValueShapes"
           >
@@ -2063,6 +2085,7 @@ void fetchSubjectHeadingOptions().then(options => {
           </button>
         </div>
         <p class="helper-text">Referenced profiles are loaded regardless of these display settings. Enable a switch to show the linked profiles and connections on the canvas.</p>
+        <p v-if="reviewMode" class="helper-text">Review mode always shows all linked profiles. Your display preferences will apply again when you leave Review mode.</p>
       </div>
     </Dialog>
   </div>
