@@ -6,7 +6,6 @@ import {
   buildEditorStructuralEdges,
   type EditorShapeReviewAnnotation,
   preserveEditorNodePositions,
-  representedShapeIriFromNode,
   shouldAutoLayoutEditorGraph,
 } from '@/presentation/features/editor/editorGraphBuilders'
 import {
@@ -136,6 +135,8 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
   }
 
   function rebuildGraph(forceAutoLayout = false, preserveLayout = false): void {
+    // A queued measurement pass belongs to the previous graph, not to subsequent edits or drags.
+    pendingRenderedLayoutPass += 1
     const reviewMode = options.reviewMode?.value ?? false
     const showClassRelations = reviewMode || (options.showClassRelations?.value ?? false)
     const showQualifiedValueShapes = reviewMode || (options.showQualifiedValueShapes?.value ?? false)
@@ -188,20 +189,14 @@ export function useEditorGraph(options: UseEditorGraphOptions) {
     if (!options.allShapes.value.length) rememberedPositions.clear()
     const existingIds = new Set(existingNodes.map(node => node.id))
     const newNodes = shapeNodes.filter(node => !existingIds.has(node.id))
-    const existingShapeIris = new Set(existingNodes.map(representedShapeIriFromNode).filter((value): value is string => Boolean(value)))
-    const hasNewRepresentedShapes = shapeNodes.some(node => {
-      const representedShapeIri = representedShapeIriFromNode(node)
-      return !representedShapeIri || !existingShapeIris.has(representedShapeIri)
-    })
     const allNewNodesHaveRequestedPositions = newNodes.length > 0 && newNodes.every(node => Boolean(options.requestedNodePositions?.value[node.id]))
     const shouldRunAutoLayout = !preserveLayout && (shouldAutoLayoutEditorGraph(existingNodes, shapeNodes) || forceAutoLayout) && !allNewNodesHaveRequestedPositions
-    const shouldRunRenderedLayoutPass = !preserveLayout && (forceAutoLayout || (hasNewRepresentedShapes && !allNewNodesHaveRequestedPositions))
 
     nodes.value = shouldRunAutoLayout
       ? autoLayoutNodes(shapeNodes, nextEdges)
       : preserveEditorNodePositions(existingNodes, shapeNodes, positionForNewNode)
     edges.value = nextEdges
-    if (shouldRunRenderedLayoutPass) {
+    if (shouldRunAutoLayout) {
       scheduleRenderedLayoutPass()
     }
   }

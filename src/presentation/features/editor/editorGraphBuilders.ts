@@ -182,31 +182,46 @@ export function preserveEditorNodePositions(
     }
   }
 
+  const nextShapeIris = new Set(nextNodes.map(representedShapeIriFromNode))
+  const disappearingNodes = existingNodes.filter(node => !nextShapeIris.has(representedShapeIriFromNode(node)))
+
   return nextNodes.map((node, index) => {
     const existingNode = existingNodesById.get(node.id)
       ?? (representedShapeIriFromNode(node)
         ? existingNodesByShapeIri.get(representedShapeIriFromNode(node) as string)
         : undefined)
 
+    // A composite inheritance card can replace its parent, or reveal that parent on deletion.
+    // Transfer the card's canvas position rather than treating the survivor as an unrelated new node.
+    const representedShapeIri = representedShapeIriFromNode(node)
+    const inheritedIris = inheritedShapeIrisFromNode(node)
+    const replacedNode = disappearingNodes.find(previous => {
+      const previousIri = representedShapeIriFromNode(previous)
+      return (representedShapeIri && inheritedShapeIrisFromNode(previous).has(representedShapeIri))
+        || (previousIri && inheritedIris.has(previousIri))
+    })
     return {
       ...node,
       ...(existingNode?.dimensions ? { dimensions: existingNode.dimensions } : {}),
-      position: existingNode?.position ?? positionForNewNode(node, index),
+      position: existingNode?.position ?? replacedNode?.position ?? positionForNewNode(node, index),
     }
   })
 }
 
 export function shouldAutoLayoutEditorGraph(existingNodes: Node[], nextNodes: Node[]): boolean {
-  if (existingNodes.length === 0) return nextNodes.length > 0
+  return existingNodes.length === 0 && nextNodes.length > 0
+}
 
-  const existingIds = new Set(existingNodes.map(node => node.id))
-  const existingShapeIris = new Set(existingNodes.map(representedShapeIriFromNode).filter((value): value is string => Boolean(value)))
-
-  return nextNodes.some(node => {
-    if (existingIds.has(node.id)) return false
-    const representedShapeIri = representedShapeIriFromNode(node)
-    return !representedShapeIri || !existingShapeIris.has(representedShapeIri)
-  })
+function inheritedShapeIrisFromNode(node: Node): Set<string> {
+  const result = new Set<string>()
+  function collect(groups: ShapeEditorNodeData['inheritedGroups']): void {
+    for (const group of groups ?? []) {
+      result.add(group.shape.nodeId.value)
+      collect(group.children)
+    }
+  }
+  collect((node.data as Partial<ShapeEditorNodeData> | undefined)?.inheritedGroups)
+  return result
 }
 
 function representedShapeIriFromNode(node: Node): string | null {

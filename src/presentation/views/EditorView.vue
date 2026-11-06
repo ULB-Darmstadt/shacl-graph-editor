@@ -841,17 +841,21 @@ function handleShapeHeaderCreateInheritedProfile(): void {
   const inheritedShapeIri = shapeHeaderMenu.value.shapeIri
   if (!inheritedShapeIri) return
 
+  const inheritedPosition = (nodes.value as unknown as CanvasNodePosition[])
+    .find(node => parseEditorShapeNodeTarget(node.id)?.representedShapeIri === inheritedShapeIri)?.position
   const placement = resolvePlacementPosition(shapeHeaderMenu.value.x, shapeHeaderMenu.value.y)
   closeShapeHeaderMenu()
   pendingPlacementAnchor.value = placement
   const iri = createProfile()
   profileStore.setShapeInheritance(iri, inheritedShapeIri)
-  queueShapePlacementAt(iri, {
+  const replacesParent = !rootNodeShapes.value.some(shape => shape.nodeId.value === inheritedShapeIri)
+  queueShapePlacementAt(iri, replacesParent && inheritedPosition ? { ...inheritedPosition } : {
     x: placement.x + IMPORT_HORIZONTAL_OFFSET,
     y: placement.y,
   })
   const shape = profileStore.applicationProfile.findNodeShape(iri)
   if (shape) selectShape(shape)
+  resetPendingPlacement()
 }
 
 function requestRemoveReferenceEdge(shapeIri: string, propertyNodeId: string, targetShapeIri: string): void {

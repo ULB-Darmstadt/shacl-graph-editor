@@ -318,6 +318,77 @@ test('showing collapsed connections restores node positions without changing pro
   assert.equal(JSON.stringify(store.profiles), before)
 })
 
+test('inheritance creation and deletion keep the composite card and unrelated nodes in place', async () => {
+  const parent = store.createProfile()
+  const other = store.createProfile()
+  store.updateShapeField(parent, 'targetClass', 'http://www.w3.org/ns/dcat#Dataset')
+  const positions = ref({ [`shape:${parent}`]: { x: 312, y: 428 }, [`shape:${other}`]: { x: 1100, y: 750 } })
+  const { useEditorGraph } = await server.ssrLoadModule('/src/presentation/features/editor/useEditorGraph.ts')
+  const graph = useEditorGraph({ allShapes: computed(() => store.nodeShapes), canvasShapes: computed(() => store.rootNodeShapes), requestedNodePositions: positions, openShapePreview() {} })
+  await nextTick()
+  const child = store.createProfile()
+  store.setShapeInheritance(child, parent)
+  await nextTick()
+  const find = iri => graph.nodes.value.find(node => node.data.representedShapeIri === iri)
+  assert.equal(find(parent), undefined)
+  assert.deepEqual(find(child).position, { x: 312, y: 428 })
+  assert.deepEqual(find(other).position, { x: 1100, y: 750 })
+  find(child).position = { x: 615, y: 218 }
+  positions.value = Object.fromEntries(graph.nodes.value.map(node => [node.id, { ...node.position }]))
+  await nextTick()
+  assert.equal(store.removeProfile(child).ok, true)
+  await nextTick()
+  assert.deepEqual(find(parent).position, { x: 615, y: 218 })
+  assert.deepEqual(find(other).position, { x: 1100, y: 750 })
+  assert.equal(store.undo(), true)
+  await nextTick()
+  assert.deepEqual(find(child).position, { x: 615, y: 218 })
+  assert.deepEqual(find(other).position, { x: 1100, y: 750 })
+  assert.equal(store.redo(), true)
+  await nextTick()
+  assert.deepEqual(find(parent).position, { x: 615, y: 218 })
+})
+
+test('changing inheritance preserves existing card positions while a former parent becomes visible', async () => {
+  const parent = store.createProfile()
+  const child = store.createProfile()
+  const other = store.createProfile()
+  store.updateShapeField(parent, 'targetClass', 'http://www.w3.org/ns/dcat#Dataset')
+  const positions = ref(Object.fromEntries([parent, child, other].map((iri, i) => [`shape:${iri}`, { x: 100 + i * 500, y: 250 + i * 125 }])))
+  const { useEditorGraph } = await server.ssrLoadModule('/src/presentation/features/editor/useEditorGraph.ts')
+  const graph = useEditorGraph({ allShapes: computed(() => store.nodeShapes), canvasShapes: computed(() => store.rootNodeShapes), requestedNodePositions: positions, openShapePreview() {} })
+  const before = Object.fromEntries(graph.nodes.value.map(node => [node.id, { ...node.position }]))
+  store.setShapeInheritance(child, parent)
+  await nextTick()
+  positions.value = Object.fromEntries(graph.nodes.value.map(node => [node.id, { ...node.position }]))
+  await nextTick()
+  store.setShapeInheritance(child, null)
+  await nextTick()
+  for (const node of graph.nodes.value) assert.deepEqual(node.position, before[node.id])
+})
+
+test('a queued overlap pass cannot reposition nodes after a later inheritance edit', async t => {
+  const originalRaf = globalThis.requestAnimationFrame
+  const frames = []
+  globalThis.requestAnimationFrame = callback => { frames.push(callback); return frames.length }
+  t.after(() => { if (originalRaf) globalThis.requestAnimationFrame = originalRaf; else delete globalThis.requestAnimationFrame })
+  const parent = store.createProfile()
+  const other = store.createProfile()
+  store.updateShapeField(parent, 'targetClass', 'http://www.w3.org/ns/dcat#Dataset')
+  const relayout = ref(0)
+  const { useEditorGraph } = await server.ssrLoadModule('/src/presentation/features/editor/useEditorGraph.ts')
+  const graph = useEditorGraph({ allShapes: computed(() => store.nodeShapes), canvasShapes: computed(() => store.rootNodeShapes), relayoutRequestTick: relayout, requestedNodePositions: ref({ [`shape:${parent}`]: { x: 0, y: 0 }, [`shape:${other}`]: { x: 500, y: 0 } }), openShapePreview() {} })
+  relayout.value++
+  await nextTick()
+  graph.nodes.value.find(node => node.id === `shape:${other}`).position = { x: 909, y: 808 }
+  const child = store.createProfile()
+  store.setShapeInheritance(child, parent)
+  await nextTick()
+  assert.ok(frames.length > 0)
+  while (frames.length) frames.shift()(0)
+  assert.deepEqual(graph.nodes.value.find(node => node.id === `shape:${other}`).position, { x: 909, y: 808 })
+})
+
 test('Review mode reveals collapsed branches, clears the hidden count, and restores hiding on exit', async () => {
   const source = store.createProfile()
   const target = store.createProfile()
