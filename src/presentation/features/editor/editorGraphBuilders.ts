@@ -202,6 +202,7 @@ export function preserveEditorNodePositions(
     })
     return {
       ...node,
+      selected: (existingNode as (Node & { selected?: boolean }) | undefined)?.selected ?? false,
       ...(existingNode?.dimensions ? { dimensions: existingNode.dimensions } : {}),
       position: existingNode?.position ?? replacedNode?.position ?? positionForNewNode(node, index),
     }

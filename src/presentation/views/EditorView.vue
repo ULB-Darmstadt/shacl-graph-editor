@@ -9,6 +9,8 @@ import type { QuantityDefinition } from '@/application/profiles/quantityGenerato
 import { isPlaceholderTermIri } from '@/shared/rdf/placeholderTermIri'
 import { storeToRefs } from 'pinia'
 import { VueFlow, useVueFlow, type Connection, type XYPosition } from '@vue-flow/core'
+import { combineCanvasSelection, type CanvasSelectionMode } from '@/presentation/features/editor/canvasSelection'
+import ProfileDeletionDialog from '@/presentation/features/editor/components/ProfileDeletionDialog.vue'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
@@ -47,7 +49,16 @@ const quantityGeneratorBusy = ref(false)
 const quantityGeneratorError = ref<string | null>(null)
 const toast = useToast()
 const confirm = useConfirm()
-const { screenToFlowCoordinate, fitView, setCenter } = useVueFlow()
+const { screenToFlowCoordinate, fitView, setCenter, viewport, setViewport, nodesSelectionActive } = useVueFlow()
+const deleteRequestIris = ref<string[] | null>(null)
+const deleteInheritedParents = ref(false)
+let middlePanAbort: AbortController | null = null
+const isCanvasPanning = ref(false)
+const selectionFrame = ref<{ x: number; y: number; width: number; height: number } | null>(null)
+let selectionAbort: AbortController | null = null
+let suppressSelectionClick = false
+const deletionPlan = computed(() => profileStore.profileDeletionPlan(deleteRequestIris.value ?? [], deleteInheritedParents.value))
+const deletionHasParents = computed(() => (deleteRequestIris.value ?? []).some(iri => profileStore.applicationProfile.findNodeShape(iri)?.inheritedShapeIris?.length))
 const { nodeShapes, profiles, isResolvingImports, rootNodeShapes, fitViewRequestTick, canUndo, canRedo, lockImportedProfiles, lockedShapeIris } = storeToRefs(profileStore)
 
 type EditorMode = 'edit' | 'review' | 'view'
@@ -213,6 +224,8 @@ const { nodes, edges, nodeTypes, edgeTypes, hiddenProfileCount } = useEditorGrap
 })
 
 const hasNothing = computed(() => profiles.value.length === 0)
+const canvasSelectedShapeIris = computed(() => [...new Set((nodes.value as unknown as Array<{ id: string; selected?: boolean }>).filter(node => node.selected).map(node => parseEditorShapeNodeTarget(node.id)?.representedShapeIri).filter((iri): iri is string => !!iri))])
+watch(() => canvasSelectedShapeIris.value.length, count => { if (count <= 1) nodesSelectionActive.value = false })
 const hasInspectorSelection = computed(() => selectedShape.value !== null)
 const addProfileMenuOpen = ref(false)
 const settingsMenuOpen = ref(false)
@@ -442,10 +455,137 @@ function renameProperty(shapeIri: string, propertyNodeId: string, name: string):
   profileStore.updatePropertyField(shapeIri, propertyNodeId, 'name', name)
 }
 
-function deleteSelectedShape(shapeIri: string): { ok: boolean; reason?: string } {
-  const result = profileStore.removeProfile(shapeIri)
-  if (result.ok) clearSelection()
-  return result
+function requestProfileDeletion(iris: string | string[]): void {
+  if (readOnlyMode.value || isResolvingImports.value) return
+  closeActionMenus()
+  closeShapeHeaderMenu()
+  closeCanvasMenu()
+  profileStore.endHistoryGroup()
+  deleteInheritedParents.value = false
+  deleteRequestIris.value = typeof iris === 'string' ? [iris] : [...iris]
+}
+
+function confirmProfileDeletion(): void {
+  if (!deleteRequestIris.value || readOnlyMode.value || isResolvingImports.value) return
+  profileStore.removeProfiles(deleteRequestIris.value, deleteInheritedParents.value)
+  deleteRequestIris.value = null
+  clearSelection()
+  for (const node of nodes.value as unknown as Array<{ selected?: boolean }>) node.selected = false
+}
+
+function handleCanvasPinch(event: WheelEvent): void {
+  if (!event.ctrlKey) return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  const rect = graphShellRef.value?.getBoundingClientRect()
+  if (!rect) return
+  const x = event.clientX - rect.left
+  const y = event.clientY - rect.top
+  const current = viewport.value
+  const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? rect.height : 1)
+  const zoom = Math.max(0.05, Math.min(2, current.zoom * Math.exp(-delta * 0.002)))
+  const ratio = zoom / current.zoom
+  void setViewport({ x: x - (x - current.x) * ratio, y: y - (y - current.y) * ratio, zoom })
+}
+
+function handleCanvasMiddlePan(event: MouseEvent): void {
+  if (event.button === 0 && selectionAbort) { event.preventDefault(); event.stopImmediatePropagation(); return }
+  if (event.button !== 1) return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  middlePanAbort?.abort()
+  const controller = new AbortController()
+  middlePanAbort = controller
+  isCanvasPanning.value = true
+  const initial = { ...viewport.value }
+  const x = event.clientX
+  const y = event.clientY
+  window.addEventListener('mousemove', move => {
+    void setViewport({ ...initial, x: initial.x + move.clientX - x, y: initial.y + move.clientY - y })
+  }, { signal: controller.signal })
+  const stop = () => { controller.abort(); middlePanAbort = null; isCanvasPanning.value = false }
+  window.addEventListener('mouseup', stop, { once: true, signal: controller.signal })
+  window.addEventListener('blur', stop, { once: true, signal: controller.signal })
+}
+onBeforeUnmount(() => { middlePanAbort?.abort(); selectionAbort?.abort() })
+
+function syncCanvasSelectionInspector(): void {
+  const iris = canvasSelectedShapeIris.value
+  nodesSelectionActive.value = false
+  const shape = iris.length === 1 ? profileStore.applicationProfile.findNodeShape(iris[0]) : null
+  if (shape) selectShape(shape)
+  else clearSelection()
+}
+
+function setCanvasSelection(ids: ReadonlySet<string>): void {
+  for (const node of nodes.value as unknown as Array<{ id: string; selected?: boolean }>) node.selected = ids.has(node.id)
+  nodesSelectionActive.value = false
+}
+
+function handleCanvasSelectionPointerDown(event: PointerEvent): void {
+  if (event.button !== 0 || event.pointerType === 'touch' || !(event.target instanceof Element)) return
+  const node = event.target.closest<HTMLElement>('.vue-flow__node')
+  const pane = event.target.matches('.vue-flow__pane')
+  const modified = event.shiftKey || event.ctrlKey || event.metaKey
+  if (node && !modified) return
+  if (!pane && !(node && modified)) return
+  if (node && event.target.closest('input, textarea, select, button, a, .vue-flow__handle, [contenteditable="true"]')) return
+  const shell = graphShellRef.value
+  if (!shell) return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  closeActionMenus()
+  closeCanvasMenu()
+  closeShapeHeaderMenu()
+  selectionAbort?.abort()
+  const controller = new AbortController()
+  selectionAbort = controller
+  const initial = new Set((nodes.value as unknown as Array<{ id: string; selected?: boolean }>).filter(node => node.selected).map(node => node.id))
+  const mode: CanvasSelectionMode = event.ctrlKey || event.metaKey ? 'remove' : event.shiftKey ? 'add' : 'replace'
+  const start = { x: event.clientX, y: event.clientY }
+  const bounds = shell.getBoundingClientRect()
+  let dragging = false
+  const select = (move: PointerEvent) => {
+    if (move.pointerId !== event.pointerId) return
+    if (Math.hypot(move.clientX - start.x, move.clientY - start.y) < 3 && !dragging) return
+    dragging = true
+    const left = Math.min(start.x, move.clientX), top = Math.min(start.y, move.clientY)
+    const right = Math.max(start.x, move.clientX), bottom = Math.max(start.y, move.clientY)
+    selectionFrame.value = { x: left - bounds.left, y: top - bounds.top, width: right - left, height: bottom - top }
+    const hits = new Set(Array.from(shell.querySelectorAll<HTMLElement>('.vue-flow__node')).filter(element => {
+      const rect = element.getBoundingClientRect()
+      return rect.right >= left && rect.left <= right && rect.bottom >= top && rect.top <= bottom
+    }).map(element => element.getAttribute('data-id')!).filter(Boolean))
+    setCanvasSelection(combineCanvasSelection(initial, hits, mode))
+  }
+  window.addEventListener('pointermove', select, { signal: controller.signal })
+  const finish = (up: PointerEvent) => {
+    if (up.pointerId !== event.pointerId) return
+    if (!dragging) setCanvasSelection(combineCanvasSelection(initial, new Set(node?.getAttribute('data-id') ? [node.getAttribute('data-id')!] : []), mode))
+    selectionFrame.value = null
+    controller.abort()
+    selectionAbort = null
+    suppressSelectionClick = true
+    window.setTimeout(() => { suppressSelectionClick = false }, 0)
+    syncCanvasSelectionInspector()
+  }
+  window.addEventListener('pointerup', finish, { signal: controller.signal })
+  const cancel = () => { setCanvasSelection(initial); selectionFrame.value = null; controller.abort(); selectionAbort = null }
+  window.addEventListener('pointercancel', cancel, { once: true, signal: controller.signal })
+  window.addEventListener('blur', cancel, { once: true, signal: controller.signal })
+}
+
+function handleCanvasSelectionClick(event: MouseEvent): void {
+  if (suppressSelectionClick) { event.preventDefault(); event.stopImmediatePropagation(); return }
+  if (!(event.target instanceof Element) || event.button !== 0) return
+  const nodeId = event.target.closest<HTMLElement>('.vue-flow__node')?.getAttribute('data-id')
+  if (nodeId && !event.target.closest('.vue-flow__handle')) setCanvasSelection(new Set([nodeId]))
+}
+
+function rememberDraggedNodePositions(): void {
+  const positions = { ...requestedNodePositions.value }
+  for (const node of nodes.value as unknown as CanvasNodePosition[]) positions[node.id] = { ...node.position }
+  requestedNodePositions.value = positions
 }
 
 function deleteSelectedProperty(shapeIri: string, propertyNodeId: string): boolean {
@@ -889,20 +1029,7 @@ function toggleQualifiedValueShapes(): void {
 function handleShapeHeaderDeleteProfile(): void {
   const shapeIri = shapeHeaderMenu.value.shapeIri
   if (!shapeIri) return
-  closeShapeHeaderMenu()
-
-  confirm.require({
-    header: 'Delete profile',
-    message: 'Delete this profile from the editor?',
-    icon: 'pi pi-exclamation-triangle',
-    acceptLabel: 'Delete',
-    rejectLabel: 'Cancel',
-    acceptClass: 'p-button-danger',
-    accept: () => {
-      const result = deleteSelectedShape(shapeIri)
-      if (!result.ok) window.alert(result.reason ?? 'Profile cannot be deleted.')
-    },
-  })
+  requestProfileDeletion(canvasSelectedShapeIris.value.includes(shapeIri) && canvasSelectedShapeIris.value.length > 1 ? canvasSelectedShapeIris.value : shapeIri)
 }
 
 function handleShapeHeaderPreview(): void {
@@ -1513,6 +1640,12 @@ function handleGlobalKeyDown(event: KeyboardEvent): void {
   const target = event.target
   const isEditingText = target instanceof HTMLElement
     && (target.isContentEditable || Boolean(target.closest('input, textarea, select, [role="textbox"]')))
+  if (!event.defaultPrevented && !event.isComposing && !isEditingText && !event.ctrlKey && !event.metaKey && !event.altKey
+    && (event.key === 'Delete' || event.key === 'Backspace') && !document.querySelector('.p-dialog-mask')
+    && (!selectedPropertyKey.value || canvasSelectedShapeIris.value.length > 1)) {
+    const iris = canvasSelectedShapeIris.value.length ? canvasSelectedShapeIris.value : selectedShapeIri.value && !selectedPropertyKey.value ? [selectedShapeIri.value] : []
+    if (iris.length) { event.preventDefault(); requestProfileDeletion(iris); return }
+  }
   if (!event.defaultPrevented && !event.isComposing && !isEditingText
     && (event.ctrlKey || event.metaKey) && !event.altKey) {
     const key = event.key.toLowerCase()
@@ -1585,7 +1718,7 @@ void fetchSubjectHeadingOptions().then(options => {
 
           <VueFlow
             class="editor-graph"
-            :class="{ 'editor-graph--empty': hasNothing }"
+            :class="{ 'editor-graph--empty': hasNothing, 'editor-graph--panning': isCanvasPanning, 'editor-graph--multiselect': canvasSelectedShapeIris.length > 1 }"
             :aria-hidden="hasNothing"
             v-model:nodes="nodes"
             v-model:edges="edges"
@@ -1594,6 +1727,20 @@ void fetchSubjectHeadingOptions().then(options => {
             :default-edge-options="{ animated: false, type: 'default' }"
             :min-zoom="0.05"
             :max-zoom="2"
+            :selection-key-code="false"
+            :multi-selection-key-code="null"
+            :pan-on-drag="[1]"
+            :pan-on-scroll="true"
+            :pan-on-scroll-speed="1"
+            :zoom-on-scroll="false"
+            :zoom-on-pinch="true"
+            :zoom-on-double-click="false"
+            :delete-key-code="null"
+            @wheel.capture="handleCanvasPinch"
+            @mousedown.capture="handleCanvasMiddlePan"
+            @pointerdown.capture="handleCanvasSelectionPointerDown"
+            @click.capture="handleCanvasSelectionClick"
+            @node-drag-stop="rememberDraggedNodePositions"
             fit-view-on-init
             @connect="handleConnect"
             @pane-click="handlePaneClick"
@@ -1602,6 +1749,11 @@ void fetchSubjectHeadingOptions().then(options => {
             <Controls position="top-left" />
             <MiniMap pannable zoomable />
           </VueFlow>
+          <div v-if="selectionFrame" class="canvas-selection-frame" :style="{ left: `${selectionFrame.x}px`, top: `${selectionFrame.y}px`, width: `${selectionFrame.width}px`, height: `${selectionFrame.height}px` }" aria-hidden="true" />
+          <div v-if="canvasSelectedShapeIris.length > 1" class="canvas-selection-toolbar" role="region" aria-label="Selected profiles">
+            <span>{{ canvasSelectedShapeIris.length }} profiles selected</span>
+            <button type="button" :disabled="readOnlyMode || isResolvingImports" @click="requestProfileDeletion(canvasSelectedShapeIris)"><i class="pi pi-trash" aria-hidden="true" /> Delete selected profiles</button>
+          </div>
 
           <div
             v-if="isPlacementHintVisible && placementHintStyle"
@@ -1638,6 +1790,10 @@ void fetchSubjectHeadingOptions().then(options => {
             <button type="button" class="canvas-menu__item" :disabled="nodes.length === 0 || isResolvingImports" @click="handleResortCanvas">
               <i class="pi pi-sort-alt canvas-menu__icon" aria-hidden="true" />
               <span class="canvas-menu__label">Resort Canvas</span>
+            </button>
+            <button v-if="canvasSelectedShapeIris.length" type="button" class="canvas-menu__item canvas-menu__item--danger" :disabled="readOnlyMode || isResolvingImports" @click="requestProfileDeletion(canvasSelectedShapeIris)">
+              <i class="pi pi-trash canvas-menu__icon" aria-hidden="true" />
+              <span class="canvas-menu__label">Delete selected profiles</span>
             </button>
           </div>
 
@@ -1929,7 +2085,7 @@ void fetchSubjectHeadingOptions().then(options => {
           </div>
         </div>
 
-        <div v-if="hasInspectorSelection" class="editor-inspector-overlay">
+        <div v-if="hasInspectorSelection && canvasSelectedShapeIris.length <= 1" class="editor-inspector-overlay">
           <EditorInspector
             :shape="selectedShape"
             :property="selectedProperty"
@@ -1951,13 +2107,22 @@ void fetchSubjectHeadingOptions().then(options => {
             :set-property-alternative-targets="profileStore.setPropertyAlternativeTargets"
             :set-property-exclusive-datatype-alternatives="profileStore.setPropertyExclusiveDatatypeAlternatives"
             :set-property-type="profileStore.setPropertyType"
-            :delete-shape="deleteSelectedShape"
+            :request-delete-shape="requestProfileDeletion"
             :delete-property="deleteSelectedProperty"
           />
         </div>
       </div>
     </div>
 
+    <ProfileDeletionDialog
+      v-if="deleteRequestIris"
+      :plan="deletionPlan"
+      v-model:include-parents="deleteInheritedParents"
+      :has-parents="deletionHasParents"
+      :busy="isResolvingImports"
+      @close="deleteRequestIris = null"
+      @confirm="confirmProfileDeletion"
+    />
     <QuantityGeneratorDialog
       v-if="quantityGenerator"
       :initial-name="quantityGenerator.name"
@@ -2181,6 +2346,18 @@ void fetchSubjectHeadingOptions().then(options => {
 </template>
 
 <style scoped lang="scss">
+.editor-graph { cursor: default; }
+:deep(.vue-flow__pane), :deep(.vue-flow__pane.selection), :deep(.vue-flow__pane.draggable), :deep(.vue-flow__nodesselection-rect) { cursor: default; }
+:deep(.vue-flow__node), :deep(.vue-flow__node.draggable), :deep(.shape-node) { cursor: pointer; }
+:deep(.vue-flow__pane.dragging), :deep(.vue-flow__node.draggable.dragging), :deep(.vue-flow__node.draggable.dragging .shape-node), :deep(.vue-flow__nodesselection-rect.dragging) { cursor: grabbing; }
+.editor-graph--panning, .editor-graph--panning :deep(*) { cursor: grabbing !important; }
+.canvas-selection-toolbar { position: absolute; top: 14px; right: 16px; z-index: 6; display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text-muted); font-size: 0.82rem; }
+.canvas-selection-toolbar button { display: flex; align-items: center; gap: 6px; border: 0; padding: 3px; background: transparent; color: #b42323; font: inherit; cursor: pointer; }
+.canvas-selection-toolbar button:disabled { opacity: 0.5; cursor: default; }
+.editor-graph--multiselect :deep(.vue-flow__node.selected .shape-node) { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+:deep(.vue-flow__selection) { background: var(--color-primary-soft); border: 1px solid var(--color-primary); }
+:deep(.vue-flow__nodesselection) { display: none; }
+.canvas-selection-frame { position: absolute; z-index: 5; pointer-events: none; background: var(--color-primary-soft); border: 1px solid var(--color-primary); }
 .editor-view {
   display: flex;
   flex-direction: column;

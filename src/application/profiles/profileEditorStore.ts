@@ -12,6 +12,7 @@ import { PREFIX_APS } from '@/shared/rdf/rdfConstants'
 import { PLACEHOLDER_TERM_IRI_PREFIX } from '@/shared/rdf/placeholderTermIri'
 import { defaultDatatypeLabel } from '@/application/profiles/profileEditorCatalogs'
 import { buildQuantityProfile, NUMERICAL_VARIABLE_PROFILE, type QuantityDefinition } from '@/application/profiles/quantityGenerator'
+import { detachDeletedProfileReferences, planProfileDeletion } from '@/application/profiles/profileDeletion'
 
 /**
  * profileEditorStore
@@ -169,18 +170,25 @@ export const useProfileEditorStore = defineStore('profiles', () => {
   })
 
   function removeProfile(iri: string): { ok: boolean; reason?: string } {
-    if (isShapeLocked(iri)) return { ok: false, reason: 'Imported profiles are locked for editing in Settings.' }
-    const blockingReferences = listProfileReferences(iri)
-    if (blockingReferences.length > 0) {
-      return {
-        ok: false,
-        reason: `Profile is still referenced by ${blockingReferences.join(', ')}.`,
-      }
-    }
+    const result = removeProfiles([iri])
+    return result.deleted.length ? { ok: true } : { ok: false, reason: result.skipped[0]?.reason || 'Profile not found.' }
+  }
 
-    applicationProfile.value.profiles.delete(iri)
-    syncSerializedProfiles()
-    return { ok: true }
+  function profileDeletionPlan(iris: string[], includeParents = false) {
+    return planProfileDeletion(profiles.value, iris, lockImportedProfiles.value, includeParents)
+  }
+
+  function removeProfiles(iris: string[], includeParents = false) {
+    const plan = profileDeletionPlan(iris, includeParents)
+    if (!plan.shapeIris.length || isResolvingImports.value) return { ...plan, deleted: [] }
+    beginHistoryGroup()
+    try {
+      const remaining = profiles.value.filter(profile => !plan.profileIris.includes(profile.iri))
+      detachDeletedProfileReferences(remaining, plan)
+      for (const iri of plan.profileIris) applicationProfile.value.profiles.delete(iri)
+      syncSerializedProfiles()
+    } finally { endHistoryGroup() }
+    return plan
   }
 
   async function addTurtleFiles(files: File[]): Promise<void> {
@@ -923,6 +931,8 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     undo,
     redo,
     removeProfile,
+    removeProfiles,
+    profileDeletionPlan,
     createProfile,
     createProperty,
     copyProperty,

@@ -102,7 +102,7 @@ const props = defineProps<{
   setPropertyAlternativeTargets: (shapeIri: string, propertyNodeId: string, targetShapeIris: string[]) => void
   setPropertyExclusiveDatatypeAlternatives: (shapeIri: string, propertyNodeId: string, alternatives: DatatypeAlternativeRow[]) => void
   setPropertyType: (shapeIri: string, propertyNodeId: string, type: PropertyEditorType) => void
-  deleteShape: (shapeIri: string) => { ok: boolean; reason?: string }
+  requestDeleteShape: (shapeIri: string) => void
   deleteProperty: (shapeIri: string, propertyNodeId: string) => boolean
 }>()
 
@@ -471,18 +471,7 @@ function onPropertyMaxValueChange(value: string): void {
 
 function requestDeleteProfile(): void {
   if (!props.shape || props.property || props.readOnly) return
-  confirm.require({
-    header: 'Delete profile',
-    message: 'Delete this profile from the editor?',
-    icon: 'pi pi-exclamation-triangle',
-    acceptLabel: 'Delete',
-    rejectLabel: 'Cancel',
-    acceptClass: 'p-button-danger',
-    accept: () => {
-      const result = props.deleteShape(props.shape!.nodeId.value)
-      if (!result.ok) window.alert(result.reason ?? 'Profile cannot be deleted.')
-    },
-  })
+  props.requestDeleteShape(props.shape.nodeId.value)
 }
 
 function requestDeleteProperty(): void {
