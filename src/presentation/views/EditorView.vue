@@ -1645,7 +1645,7 @@ void fetchSubjectHeadingOptions().then(options => {
             <i class="pi pi-sort-alt" aria-hidden="true" />
             <span>Resort Canvas</span>
           </button>
-          <button type="button" class="settings-menu__item" :disabled="profiles.length === 0" @click="handleExportProfiles">
+          <button type="button" class="settings-menu__item" :disabled="!profiles.some(profile => profile.origin === 'created')" @click="handleExportProfiles">
             <i class="pi pi-download" />
             <span>Export Profiles</span>
           </button>

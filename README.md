@@ -29,14 +29,14 @@ SHACL Graph Editor is a browser-based editor for the workflow:
 - Right-click an editable field to create a new profile with the same name and connect it directly using `sh:node`.
 - Drag a profile's header connector to another profile's Add Field connector to create a field named after the referenced profile with a `sh:node` link.
 - Imported profiles are locked for editing by default. Change this in Settings → Display Settings; locked profiles can still be inherited and their fields copied into editable profiles.
-- Profiles referenced by imports stay loaded for previews and export. Display Settings controls whether profiles linked by `sh:class` and `sh:qualifiedValueShape` appear on the canvas.
+- Profiles referenced by imports stay loaded for previews. Display Settings controls whether profiles linked by `sh:class` and `sh:qualifiedValueShape` appear on the canvas.
 - Class references also discover matching `sh:targetClass` profiles from MPS when no matching profile is loaded, including references without `owl:imports`.
 - Undo and redo profile changes from the main menu (Ctrl/Cmd+Z to undo; Ctrl/Cmd+Shift+Z or Ctrl+Y to redo).
 - Use Review mode to find missing required metadata, incomplete property definitions, and other profile quality issues.
 - Jump from review findings directly to the affected profile or property on the canvas.
 - Preview shapes with `@ulb-darmstadt/shacl-form`.
 - Switch the eye-button preview to Turtle (TTL) for read-only, syntax-highlighted source with line numbers and a copy action.
-- Export the current editor state as SHACL/Turtle.
+- Export profiles created in the editor as SHACL/Turtle, retaining links and `owl:imports` to imported profiles without embedding their definitions. Export is available when at least one draft profile exists.
 
 ## Tech Stack
 

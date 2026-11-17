@@ -1521,6 +1521,54 @@ test('form preview includes inherited fields once without re-importing loaded pr
   assert.equal(JSON.stringify(store.profiles), before)
 })
 
+test('TTL export includes only drafts while retaining imported profile links and ownership', async () => {
+  const nested = `${importedProfileIri}/nested`
+  await store.addProfileFromTurtle(`${importedTurtle}\n<${nested}> a <http://www.w3.org/ns/shacl#NodeShape> .`, 'mps.ttl', importedProfileIri)
+  const uploaded = 'https://example.org/uploaded'
+  await store.addTurtleFiles([new File([
+    `@prefix sh: <http://www.w3.org/ns/shacl#> . <${uploaded}> a sh:NodeShape .`,
+  ], 'uploaded.ttl', { type: 'text/turtle' })])
+  const child = store.createProfile()
+  store.setShapeInheritance(child, importedProfileIri)
+  const field = store.createProperty(child)
+  store.setPropertyNodeTarget(child, field, nested)
+  const uploadField = store.createProperty(child)
+  store.setPropertyNodeTarget(child, uploadField, uploaded)
+  const otherDraft = store.createProfile()
+  await nextTick()
+  const before = JSON.stringify(store.profiles)
+  const { serializeProfilesForExport } = await server.ssrLoadModule('/src/infrastructure/shacl/shaclProfileSerializer.ts')
+  const { serializeProfilesForPreview } = await server.ssrLoadModule('/src/infrastructure/shacl/profilePreviewSerializer.ts')
+  const { Parser, Store } = await import('n3')
+  const graph = new Store(new Parser().parse(serializeProfilesForExport(store.profiles)))
+  const sh = 'http://www.w3.org/ns/shacl#'
+  const imports = 'http://www.w3.org/2002/07/owl#imports'
+  for (const iri of [importedProfileIri, nested, importedFieldIri, uploaded]) {
+    assert.equal(graph.countQuads(iri, null, null, null), 0, `No imported definition for ${iri}`)
+  }
+  for (const iri of [child, otherDraft]) {
+    assert.equal(graph.countQuads(iri, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', `${sh}NodeShape`, null), 1)
+  }
+  assert.equal(graph.countQuads(child, `${sh}node`, importedProfileIri, null), 1)
+  const exportedFields = graph.getObjects(child, `${sh}property`, null)
+  assert.ok(exportedFields.some(subject => graph.countQuads(subject, `${sh}node`, nested, null) === 1))
+  assert.ok(exportedFields.some(subject => graph.countQuads(subject, `${sh}node`, uploaded, null) === 1))
+  assert.equal(graph.countQuads(child, imports, importedProfileIri, null), 1)
+  assert.equal(graph.countQuads(child, imports, uploaded, null), 1)
+  const preview = new Store(new Parser().parse(serializeProfilesForPreview(store.profiles)))
+  assert.ok(preview.countQuads(importedProfileIri, null, null, null) > 0)
+  assert.ok(preview.countQuads(uploaded, null, null, null) > 0)
+  assert.equal(JSON.stringify(store.profiles), before)
+})
+
+test('TTL export with only imported profiles contains no definitions even when unlocked', async () => {
+  await store.addProfileFromTurtle(importedTurtle, 'mps.ttl', importedProfileIri)
+  store.lockImportedProfiles = false
+  const { serializeProfilesForExport } = await server.ssrLoadModule('/src/infrastructure/shacl/shaclProfileSerializer.ts')
+  const { Parser } = await import('n3')
+  assert.equal(new Parser().parse(serializeProfilesForExport(store.profiles)).length, 0)
+})
+
 test('preview retains external imports and distinct anonymous fields sharing a path', async () => {
   const { parseShaclProfile } = await server.ssrLoadModule('/src/infrastructure/shacl/shaclProfileParser.ts')
   const { serializeProfilesForPreview } = await server.ssrLoadModule('/src/infrastructure/shacl/profilePreviewSerializer.ts')

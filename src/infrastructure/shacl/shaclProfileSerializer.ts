@@ -33,9 +33,12 @@ const PREFIX_DEFINITIONS = [
   ['aps', PREFIX_APS],
 ] as const
 
-export function serializeProfilesAsTurtle(profiles: readonly ShaclProfile[]): string {
+export function serializeProfilesAsTurtle(
+  profiles: readonly ShaclProfile[],
+  allProfiles: readonly ShaclProfile[] = profiles,
+): string {
   const blocks = profiles
-    .map(profile => serializeProfileBodyAsTurtle(profile, profiles).trim())
+    .map(profile => serializeProfileBodyAsTurtle(profile, allProfiles).trim())
     .filter(Boolean)
 
   if (blocks.length === 0) return PREFIXES.join('\n')
@@ -50,6 +53,10 @@ export function serializeApplicationProfileAsTurtle(applicationProfile: Applicat
   return serializeProfilesAsTurtle(applicationProfile.list())
 }
 
+export function serializeProfilesForExport(profiles: readonly ShaclProfile[]): string {
+  return serializeProfilesAsTurtle(profiles.filter(profile => profile.origin === 'created'), profiles)
+}
+
 export function buildProfilesExportFilename(baseName = 'shacl-profile-set'): string {
   const safeBaseName = baseName
     .trim()
@@ -62,7 +69,7 @@ export function buildProfilesExportFilename(baseName = 'shacl-profile-set'): str
 
 export function downloadProfilesAsTurtle(profiles: readonly ShaclProfile[], baseName?: string): string {
   const filename = buildProfilesExportFilename(baseName)
-  const turtle = serializeProfilesAsTurtle(profiles)
+  const turtle = serializeProfilesForExport(profiles)
   const blob = new Blob([turtle], { type: 'text/turtle' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
