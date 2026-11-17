@@ -69,7 +69,7 @@ Local development usually runs at:
 http://localhost:5173/
 ```
 
-Terminology search loads the TS4NFDI SearchResultsListWidget on demand, with type/ontology filters and paginated results. It uses the TIB terminology service by default. Set `VITE_TERMINOLOGY_API_URL` to another OLS-compatible API base URL (including its trailing slash) that supports search facets and pagination to use another service.
+Terminology search uses native Vue controls with AIMS-style behaviour: live search after 300 ms, suggestions, grouping by IRI, type/ontology filters, pagination, descriptions, and ontology provenance. It uses the same Coscine-hosted TIB API as AIMS by default. Each property's Add button applies its IRI immediately and closes the dialog, preserving the field's name and description. Cancel leaves the field unchanged. Set `VITE_TERMINOLOGY_API_URL` to another OLS-compatible API base URL (including its trailing slash) to use another service.
 
 ## Repository Structure
 
