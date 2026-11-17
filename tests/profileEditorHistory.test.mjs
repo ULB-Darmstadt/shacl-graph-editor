@@ -1521,6 +1521,37 @@ test('form preview includes inherited fields once without re-importing loaded pr
   assert.equal(JSON.stringify(store.profiles), before)
 })
 
+test('sidebar includes nested inheritance and hidden relation targets once, excluding unrelated imports', async () => {
+  await store.addProfileFromTurtle(importedTurtle, 'parent.ttl', importedProfileIri)
+  const child = store.createProfile()
+  store.setShapeInheritance(child, importedProfileIri)
+  const grandchild = store.createProfile()
+  store.setShapeInheritance(grandchild, child)
+  const qualified = store.createProfile()
+  const field = store.createProperty(grandchild)
+  store.setPropertyType(grandchild, field, 'qualifiedProfile')
+  store.setPropertyNodeTarget(grandchild, field, qualified)
+  const { collectSidebarProfileShapes, canvasShapeIncludesProfile } = await server.ssrLoadModule('/src/presentation/features/editor/editorProfileSidebar.ts')
+  const unrelated = { nodeId: new NamedNode('https://example.org/unrelated'), properties: [] }
+  const all = [...store.nodeShapes, unrelated]
+  const roots = [store.applicationProfile.findNodeShape(grandchild)]
+  const listed = collectSidebarProfileShapes(roots, all).map(shape => shape.nodeId.value)
+  assert.deepEqual(new Set(listed), new Set([grandchild, child, importedProfileIri, qualified]))
+  assert.equal(listed.length, 4)
+  assert.equal(canvasShapeIncludesProfile(grandchild, child, all), true)
+  assert.equal(canvasShapeIncludesProfile(grandchild, importedProfileIri, all), true)
+  assert.equal(canvasShapeIncludesProfile(grandchild, qualified, all), false)
+  assert.equal(canvasShapeIncludesProfile(grandchild, grandchild, all), true)
+})
+
+test('sidebar traversal and inherited visibility terminate on cyclic inheritance', async () => {
+  const { collectSidebarProfileShapes, canvasShapeIncludesProfile } = await server.ssrLoadModule('/src/presentation/features/editor/editorProfileSidebar.ts')
+  const first = { nodeId: new NamedNode('https://example.org/first'), properties: [], inheritedShapeIris: ['https://example.org/second'] }
+  const second = { nodeId: new NamedNode('https://example.org/second'), properties: [], inheritedShapeIris: [first.nodeId.value] }
+  assert.equal(collectSidebarProfileShapes([first], [first, second]).length, 2)
+  assert.equal(canvasShapeIncludesProfile(first.nodeId.value, 'missing', [first, second]), false)
+})
+
 test('TTL export includes only drafts while retaining imported profile links and ownership', async () => {
   const nested = `${importedProfileIri}/nested`
   await store.addProfileFromTurtle(`${importedTurtle}\n<${nested}> a <http://www.w3.org/ns/shacl#NodeShape> .`, 'mps.ttl', importedProfileIri)

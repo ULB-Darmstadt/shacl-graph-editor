@@ -6,6 +6,7 @@ export interface CanvasProfileSidebarItem {
   label: string
   description: string | null
   isDraft: boolean
+  isHidden: boolean
   badges: AimsProfileBadge[]
 }
 </script>
@@ -47,7 +48,7 @@ const groups = computed(() => [
           :key="item.shapeIri"
           type="button"
           class="profile-sidebar__item"
-          :class="{ 'is-selected': selectedShapeIri === item.shapeIri }"
+          :class="{ 'is-selected': selectedShapeIri === item.shapeIri, 'is-hidden': item.isHidden }"
           :aria-current="selectedShapeIri === item.shapeIri ? 'true' : undefined"
           :title="`${item.label}\n${item.shapeIri}`"
           @mouseenter="emit('highlight', item.shapeIri)"
@@ -70,6 +71,7 @@ const groups = computed(() => [
               :aria-label="`Approved by ${badge.label}`"
             >{{ badge.label }}</span>
           </span>
+          <i v-if="item.isHidden" class="pi pi-eye-slash profile-sidebar__hidden" role="img" aria-label="Hidden on canvas" title="Hidden on canvas" />
         </button>
       </section>
     </div>
@@ -77,7 +79,7 @@ const groups = computed(() => [
 </template>
 
 <style scoped>
-.profile-sidebar { display: flex; flex-direction: column; flex: 0 0 240px; width: 240px; max-width: 35vw; min-width: 160px; min-height: 0; border-right: 1px solid var(--color-border); background: var(--color-surface); }
+.profile-sidebar { display: flex; flex-direction: column; flex: 0 0 280px; width: 280px; max-width: 35vw; min-width: 160px; min-height: 0; border-right: 1px solid var(--color-border); background: var(--color-surface); }
 .profile-sidebar__search { display: flex; align-items: center; gap: 8px; margin: 14px 12px 8px; padding: 7px 9px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text-muted); font-size: 0.78rem; }
 .profile-sidebar__search:focus-within { border-color: var(--color-primary); }
 .profile-sidebar__search input { width: 100%; min-width: 0; padding: 0; border: 0; outline: none; background: transparent; color: var(--color-text); font: inherit; }
@@ -89,10 +91,15 @@ const groups = computed(() => [
 .profile-sidebar__text { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
 .profile-sidebar__badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 45%; flex-shrink: 0; margin-left: auto; }
 .profile-sidebar__badge { padding: 1px 5px; border: 1px solid var(--color-border-strong); border-radius: 3px; background: var(--color-primary-soft); color: var(--color-primary); font-size: 0.65rem; line-height: 1.4; overflow-wrap: anywhere; }
+.profile-sidebar__hidden { flex-shrink: 0; margin-top: 3px; color: var(--color-text-muted); font-size: 0.85rem; }
 .profile-sidebar__item:hover { background: var(--color-surface-2); }
+.profile-sidebar__item.is-hidden { opacity: 0.65; }
+.profile-sidebar__item.is-hidden:hover,
+.profile-sidebar__item.is-hidden:focus-visible { opacity: 0.85; }
 .profile-sidebar__item.is-selected { border-left-color: var(--color-primary); background: var(--color-primary-soft); }
 .profile-sidebar__item:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
 .profile-sidebar__name { font-size: 0.83rem; line-height: 1.4; overflow-wrap: anywhere; }
+.profile-sidebar__item:not(.is-hidden) .profile-sidebar__name { font-weight: 600; }
 .profile-sidebar__description { overflow: hidden; max-width: 100%; color: var(--color-text-muted); font-size: 0.72rem; line-height: 1.4; white-space: nowrap; text-overflow: ellipsis; }
 .profile-sidebar__empty { margin: 8px; color: var(--color-text-muted); font-size: 0.75rem; line-height: 1.5; }
 @media (max-width: 720px) { .profile-sidebar { flex-basis: 180px; width: 180px; } }

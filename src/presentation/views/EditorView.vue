@@ -15,6 +15,7 @@ import { propertyConnectionKey } from '@/presentation/features/editor/collapsedP
 import { useEditorPreviews } from '@/presentation/features/editor/useEditorPreviews'
 import { useEditorSelection } from '@/presentation/features/editor/useEditorSelection'
 import EditorProfileSidebar, { type CanvasProfileSidebarItem } from '@/presentation/features/editor/components/EditorProfileSidebar.vue'
+import { canvasShapeIncludesProfile, collectSidebarProfileShapes } from '@/presentation/features/editor/editorProfileSidebar'
 import EditorDialogs from '@/presentation/features/editor/EditorDialogs.vue'
 import EditorInspector from '@/presentation/features/editor/components/inspector/EditorInspector.vue'
 import { useProfileWorkflowMenu } from '@/presentation/features/profile-workflow/useProfileWorkflowMenu'
@@ -363,20 +364,19 @@ const canvasProfileItems = computed<CanvasProfileSidebarItem[]>(() => {
     if (target?.representedShapeIri) visibleShapeIris.add(target.representedShapeIri)
   }
 
-  return Array.from(visibleShapeIris)
-    .map((shapeIri) => {
-      const shape = profileStore.applicationProfile.findNodeShape(shapeIri)
-      if (!shape) return null
+  return collectSidebarProfileShapes(rootNodeShapes.value, nodeShapes.value)
+    .map((shape) => {
+      const shapeIri = shape.nodeId.value
       const profile = profiles.value.find(profile => profile.iri === shape.sourceProfileIri)
       return {
         shapeIri,
+        isHidden: !Array.from(visibleShapeIris).some(visibleIri => canvasShapeIncludesProfile(visibleIri, shapeIri, nodeShapes.value)),
         label: shape.label?.trim() || 'Unnamed profile',
         isDraft: profile?.origin === 'created',
         badges: profile?.origin === 'fetched' ? aimsProfileBadges(serviceProfilesByIri.value.get(profile.iri)) : [],
         description: shape.description?.trim().split(/\r?\n/, 1)[0]?.trim() || null,
       }
     })
-    .filter((item): item is CanvasProfileSidebarItem => item !== null)
     .sort((left, right) => left.label.localeCompare(right.label))
 })
 const isPlacementHintVisible = computed(() => pendingProfilePlacement.value && placementPreviewClientPosition.value !== null)
@@ -1219,6 +1219,12 @@ async function centerShapeInCanvas(shapeIri: string): Promise<void> {
     }
   }
 
+  if (!node) {
+    node = canvasNodes.find(candidate => {
+      const target = parseEditorShapeNodeTarget(candidate.id)
+      return target && canvasShapeIncludesProfile(target.representedShapeIri, shapeIri, nodeShapes.value)
+    })
+  }
   if (!node) return
   const dimensions = node.dimensions
   await setCenter(
