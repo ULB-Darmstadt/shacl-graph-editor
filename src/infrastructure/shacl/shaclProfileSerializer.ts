@@ -187,10 +187,11 @@ function propertyStatements(property: PropertyShape, includeType: boolean): stri
   pushNamedNodeStatement(statements, 'sh:disjoint', property.disjoint?.value)
   pushNamedNodeStatement(statements, 'sh:lessThan', property.lessThan?.value)
   pushNamedNodeStatement(statements, 'sh:lessThanOrEquals', property.lessThanOrEquals?.value)
-  pushLiteralStatement(statements, 'sh:minInclusive', property.minInclusive)
-  pushLiteralStatement(statements, 'sh:minExclusive', property.minExclusive)
-  pushLiteralStatement(statements, 'sh:maxInclusive', property.maxInclusive)
-  pushLiteralStatement(statements, 'sh:maxExclusive', property.maxExclusive)
+  const boundDatatype = property.datatype?.value ? term(property.datatype.value) : undefined
+  pushLiteralStatement(statements, 'sh:minInclusive', property.minInclusive, boundDatatype)
+  pushLiteralStatement(statements, 'sh:minExclusive', property.minExclusive, boundDatatype)
+  pushLiteralStatement(statements, 'sh:maxInclusive', property.maxInclusive, boundDatatype)
+  pushLiteralStatement(statements, 'sh:maxExclusive', property.maxExclusive, boundDatatype)
   if (property.dashSingleLine !== undefined) statements.push(`dash:singleLine ${property.dashSingleLine ? 'true' : 'false'}`)
   return statements
 }

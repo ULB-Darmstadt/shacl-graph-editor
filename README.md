@@ -97,3 +97,6 @@ public/
 
 MIT. See [LICENSE](LICENSE).
 created by Roger Winkler, ULB Darmstadt
+
+The Quantity Generator is available from an editable, unconnected field's right-click menu: **Use Quantity Generator**. Choose an English QUDT quantity kind and allowed units, a numeric datatype, optional inclusive bounds, and qualified cardinality, then click **Add**. The existing field is connected to a new draft parameter profile inheriting m4i Numerical Variable. Its name is also a fixed label identifying the parameter role. Existing field IRIs are retained; placeholder IRIs default to has part and can be changed in the dialog. Bounds require one unit and do not perform unit conversion. QUDT lookup and initial m4i base-profile loading require network access. Cancel leaves profiles unchanged, and one undo reverses the complete addition. Vocabulary imports remain external references.
+The Add Profile drop-up also offers **Use Quantity Generator** to create a standalone parameter profile, which can be connected to fields later. In this mode the dialog omits field IRI and connection cardinality.

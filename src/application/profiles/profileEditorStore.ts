@@ -11,6 +11,7 @@ import { serializeProfileAsTurtle } from '@/infrastructure/shacl/shaclProfileSer
 import { PREFIX_APS } from '@/shared/rdf/rdfConstants'
 import { PLACEHOLDER_TERM_IRI_PREFIX } from '@/shared/rdf/placeholderTermIri'
 import { defaultDatatypeLabel } from '@/application/profiles/profileEditorCatalogs'
+import { buildQuantityProfile, NUMERICAL_VARIABLE_PROFILE, type QuantityDefinition } from '@/application/profiles/quantityGenerator'
 
 /**
  * profileEditorStore
@@ -314,6 +315,40 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     setPropertyType(shapeIri, propertyNodeId, 'profile')
     setPropertyNodeTarget(shapeIri, propertyNodeId, iri)
     return iri
+  }
+
+  function addQuantityFromProperty(shapeIri: string, propertyNodeId: string, definition: QuantityDefinition, dependencies: ShaclProfile[]): string {
+    return addQuantityProfile(definition, dependencies, { shapeIri, propertyNodeId })
+  }
+
+  function addQuantityProfile(definition: QuantityDefinition, dependencies: ShaclProfile[], connection?: { shapeIri: string; propertyNodeId: string }): string {
+    if (connection && !canCreateConnectedProfileFromProperty(connection.shapeIri, connection.propertyNodeId)) throw new Error('This field is locked, missing, or already connected.')
+    if (![...profiles.value, ...dependencies].some(profile => profile.nodeShapes.some(shape => shape.nodeId.value === NUMERICAL_VARIABLE_PROFILE))) throw new Error('The m4i Numerical Variable profile must be loaded first.')
+    const generated = buildQuantityProfile(`${PREFIX_APS}${crypto.randomUUID()}`, definition)
+    const context = connection ? findEditablePropertyContext(connection.shapeIri, connection.propertyNodeId)! : null
+    beginHistoryGroup()
+    try {
+      for (const dependency of dependencies) {
+        if (!applicationProfile.value.profiles.has(dependency.iri)) applicationProfile.value.upsert(cloneProfileValue(dependency))
+      }
+      applicationProfile.value.upsert(generated)
+      if (context && connection) {
+        setPropertyType(connection.shapeIri, connection.propertyNodeId, 'qualifiedProfile')
+        for (const key of ['minInclusive', 'maxInclusive', 'minExclusive', 'maxExclusive', 'pattern', 'defaultValue', 'allowedValueLabels', 'conjunctions', 'negatedConstraint'] as const) delete context.property[key]
+        context.property.path = new NamedNode(definition.path)
+        context.property.name = definition.name.trim()
+        context.property.nameLiterals = [{ value: definition.name.trim(), lang: 'en' }]
+        context.property.qualifiedValueShape = { node: new NamedNode(generated.iri) }
+        context.property.qualifiedMinCount = definition.minCount
+        context.property.qualifiedMaxCount = definition.maxCount ?? undefined
+        context.property.minCount = undefined
+        context.property.maxCount = undefined
+      }
+      syncSerializedProfiles()
+    } finally {
+      endHistoryGroup()
+    }
+    return generated.iri
   }
 
   function createConnectedPropertyFromProfile(shapeIri: string, targetShapeIri: string): string | null {
@@ -892,6 +927,8 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     createProperty,
     copyProperty,
     createConnectedProfileFromProperty,
+    addQuantityFromProperty,
+    addQuantityProfile,
     canCreateConnectedProfileFromProperty,
     createConnectedPropertyFromProfile,
     removeProperty,

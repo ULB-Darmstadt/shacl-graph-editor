@@ -1,4 +1,4 @@
-import { graph, parse } from 'rdflib'
+import { graph, parse, serialize } from 'rdflib'
 import type { ShaclProfile } from '@/domain/profiles'
 import { serializeProfilesAsTurtle } from '@/infrastructure/shacl/shaclProfileSerializer'
 import { OWL_IMPORTS, SH_HAS_VALUE, SH_PROPERTY } from '@/shared/rdf/rdfConstants'
@@ -26,9 +26,10 @@ export function serializeProfilesForPreview(profiles: readonly ShaclProfile[]): 
     }
   }
   const includedProfiles = new Set(profiles.filter(profile => profile.nodeShapes.length > 0).map(profile => profile.iri))
-  return store.statements
-    .filter(statement => !(statement.predicate.equals(OWL_IMPORTS)
-      && statement.object.termType === 'NamedNode' && includedProfiles.has(statement.object.value)))
-    .map(statement => statement.toNT())
-    .join('\n')
+  for (const statement of store.match(null, OWL_IMPORTS, null, null)) {
+    if (statement.object.termType === 'NamedNode' && includedProfiles.has(statement.object.value)) store.removeStatement(statement)
+  }
+  // rdflib represents Turtle lists as Collection terms. Serializing individual
+  // statements with toNT() leaves dangling list references without their items.
+  return serialize(null, store, 'https://shacl-editor.invalid/preview/', 'text/turtle') ?? ''
 }

@@ -50,8 +50,9 @@ function isAimsProfile(entry: unknown): entry is AimsProfile {
     && typeof entry.name === 'string'
 }
 
-async function fetchAimsJson(url: string): Promise<unknown> {
+async function fetchAimsJson(url: string, signal?: AbortSignal): Promise<unknown> {
   const response = await fetch(url, {
+    signal,
     headers: {
       accept: 'application/json',
     },
@@ -90,10 +91,10 @@ export function loadAimsProfiles(): Promise<AimsProfile[]> {
   return aimsProfilesPromise
 }
 
-export async function fetchAimsProfileDefinition(baseUrl: string): Promise<{ text: string; mediaType?: string }> {
+export async function fetchAimsProfileDefinition(baseUrl: string, signal?: AbortSignal): Promise<{ text: string; mediaType?: string }> {
   const encodedBaseUrl = encodeURIComponent(baseUrl)
   const url = `${AIMS_API}/application-profiles/${encodedBaseUrl}?includeDefinition=true`
-  const data = await fetchAimsJson(url)
+  const data = await fetchAimsJson(url, signal)
 
   // Detail responses can have a null name even when the catalog row has one.
   // Download validity depends on the definition, not display metadata.
