@@ -35,8 +35,8 @@ export function planProfileDeletion(profiles: readonly ShaclProfile[], selected:
     changed = false
     for (const iri of targets) {
       const entry = shapes.get(iri)!
-      const lockedSource = profiles.find(profile => lockImports && profile.origin !== 'created' && profile.nodeShapes.some(shape => !targets.has(shape.nodeId.value) && (profile.imports.includes(iri) || profile.imports.includes(entry.profile.iri) || (shape.inheritedShapeIris ?? []).includes(iri) || shape.properties.some(property => referenceTargets(property).includes(iri)))))
-      const reason = lockImports && entry.profile.origin !== 'created' ? 'Imported profile is locked.' : lockedSource ? `Referenced by locked profile ${lockedSource.nodeShapes[0]?.label || lockedSource.iri}.` : null
+      const lockedSource = profiles.find(profile => lockImports && profile.origin === 'fetched' && profile.nodeShapes.some(shape => !targets.has(shape.nodeId.value) && (profile.imports.includes(iri) || profile.imports.includes(entry.profile.iri) || (shape.inheritedShapeIris ?? []).includes(iri) || shape.properties.some(property => referenceTargets(property).includes(iri)))))
+      const reason = lockImports && entry.profile.origin === 'fetched' ? 'Imported profile is locked.' : lockedSource ? `Referenced by locked profile ${lockedSource.nodeShapes[0]?.label || lockedSource.iri}.` : null
       if (!reason) continue
       // Keep the complete document when one of its shapes cannot be removed.
       const family = entry.profile.nodeShapes.filter(shape => targets.has(shape.nodeId.value))

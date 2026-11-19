@@ -54,7 +54,7 @@ export function serializeApplicationProfileAsTurtle(applicationProfile: Applicat
 }
 
 export function serializeProfilesForExport(profiles: readonly ShaclProfile[]): string {
-  return serializeProfilesAsTurtle(profiles.filter(profile => profile.origin === 'created'), profiles)
+  return serializeProfilesAsTurtle(profiles.filter(profile => profile.origin !== 'fetched'), profiles)
 }
 
 export function buildProfilesExportFilename(baseName = 'shacl-profile-set'): string {

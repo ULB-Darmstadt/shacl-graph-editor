@@ -132,7 +132,10 @@ export function parseShaclProfiles(
     profiles.flatMap(profile => profile.imports.filter(importIri => profileIris.has(importIri))),
   )
 
-  return profiles.map(profile => importedProfileIris.has(profile.iri)
+  // Every definition supplied by an upload is a directly loaded draft, even
+  // when another uploaded definition imports it. Only fetched bundles hide
+  // their internal dependencies from the canvas roots.
+  return profiles.map(profile => origin === 'fetched' && importedProfileIris.has(profile.iri)
     ? { ...profile, source: profile.iri }
     : profile)
 }

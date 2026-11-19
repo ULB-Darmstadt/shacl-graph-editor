@@ -59,7 +59,7 @@ test('invalid definitions and locked fields leave the graph unchanged', async ()
     assert.throws(() => store.addQuantityFromProperty(parent, field, { ...input, ...patch }, [base]))
     assert.equal(JSON.stringify(store.profiles), before)
   }
-  await store.addTurtleFiles([new File([`@prefix sh: <http://www.w3.org/ns/shacl#> . <https://example.org/locked> a sh:NodeShape ; sh:property <https://example.org/field> . <https://example.org/field> sh:path <https://example.org/path> .`], 'locked.ttl')])
+  await store.addProfileFromTurtle(`@prefix sh: <http://www.w3.org/ns/shacl#> . <https://example.org/locked> a sh:NodeShape ; sh:property <https://example.org/field> . <https://example.org/field> sh:path <https://example.org/path> .`, 'locked.ttl')
   const lockedBefore = JSON.stringify(store.profiles)
   assert.throws(() => store.addQuantityFromProperty('https://example.org/locked', 'https://example.org/field', input, [base]), /locked/)
   assert.equal(JSON.stringify(store.profiles), lockedBefore)

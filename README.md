@@ -28,7 +28,7 @@ SHACL Graph Editor is a browser-based editor for the workflow:
 - Right-click a field to delete it or create an own-property copy of its name, description, and IRI for additional constraints.
 - Right-click an editable field to create a new profile with the same name and connect it directly using `sh:node`.
 - Drag a profile's header connector to another profile's Add Field connector to create a field named after the referenced profile with a `sh:node` link.
-- Imported profiles are locked for editing by default. Change this in Settings → Display Settings; locked profiles can still be inherited and their fields copied into editable profiles.
+- Uploaded profiles appear under Drafts and are editable, including all profiles provided in the same upload. Profiles loaded from MPS or fetched as external dependencies appear under Existing and are locked for editing by default. Change this in Settings → Display Settings; locked profiles can still be inherited and their fields copied into editable profiles.
 - Profiles referenced by imports stay loaded for previews. Display Settings controls whether profiles linked by `sh:class` and `sh:qualifiedValueShape` appear on the canvas.
 - Class references also discover matching `sh:targetClass` profiles from MPS when no matching profile is loaded, including references without `owl:imports`.
 - Undo and redo profile changes from the main menu (Ctrl/Cmd+Z to undo; Ctrl/Cmd+Shift+Z or Ctrl+Y to redo).
@@ -36,7 +36,7 @@ SHACL Graph Editor is a browser-based editor for the workflow:
 - Jump from review findings directly to the affected profile or property on the canvas.
 - Preview shapes with `@ulb-darmstadt/shacl-form`.
 - Switch the eye-button preview to Turtle (TTL) for read-only, syntax-highlighted source with line numbers and a copy action.
-- Export profiles created in the editor as SHACL/Turtle, retaining links and `owl:imports` to imported profiles without embedding their definitions. Export is available when at least one draft profile exists.
+- Export created and uploaded drafts as SHACL/Turtle, retaining links and `owl:imports` to externally fetched profiles without embedding their definitions. Export is available when at least one draft profile exists.
 
 ## Tech Stack
 

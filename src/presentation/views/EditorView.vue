@@ -393,7 +393,7 @@ const canvasProfileItems = computed<CanvasProfileSidebarItem[]>(() => {
         shapeIri,
         isHidden: !Array.from(visibleShapeIris).some(visibleIri => canvasShapeIncludesProfile(visibleIri, shapeIri, nodeShapes.value)),
         label: shape.label?.trim() || 'Unnamed profile',
-        isDraft: profile?.origin === 'created',
+        isDraft: Boolean(profile && profile.origin !== 'fetched'),
         badges: profile?.origin === 'fetched' ? aimsProfileBadges(serviceProfilesByIri.value.get(profile.iri)) : [],
         description: shape.description?.trim().split(/\r?\n/, 1)[0]?.trim() || null,
       }
@@ -1876,7 +1876,7 @@ void fetchSubjectHeadingOptions().then(options => {
             <i class="pi pi-sort-alt" aria-hidden="true" />
             <span>Resort Canvas</span>
           </button>
-          <button type="button" class="settings-menu__item" :disabled="!profiles.some(profile => profile.origin === 'created')" @click="handleExportProfiles">
+          <button type="button" class="settings-menu__item" :disabled="!profiles.some(profile => profile.origin !== 'fetched')" @click="handleExportProfiles">
             <i class="pi pi-download" />
             <span>Export Profiles</span>
           </button>
@@ -2293,14 +2293,14 @@ void fetchSubjectHeadingOptions().then(options => {
 
       <div v-else class="settings-form" role="tabpanel">
         <div class="settings-toggle-row">
-          <span>Lock imported profiles for editing</span>
+          <span>Lock existing profiles for editing</span>
           <button
             type="button"
             role="switch"
             class="settings-toggle"
             :class="{ 'is-on': lockImportedProfiles }"
             :aria-checked="lockImportedProfiles"
-            aria-label="Lock imported profiles for editing"
+            aria-label="Lock existing profiles for editing"
             @click="toggleImportedProfileLock"
           >
             <span class="settings-toggle__thumb" />

@@ -50,6 +50,7 @@ export interface NodeShape {
 export interface ShaclProfile {
   iri: string
   source: string
+  /** Uploaded and created profiles are drafts; fetched dependencies are existing profiles. */
   origin: 'uploaded' | 'fetched' | 'created'
   rawTurtle: string
   imports: string[]

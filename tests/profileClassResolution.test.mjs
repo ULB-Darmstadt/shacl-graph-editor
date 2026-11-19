@@ -52,6 +52,31 @@ before(async () => {
 afterEach(() => mock.restoreAll())
 after(async () => { await server?.close() })
 
+test('resolving external imports preserves uploaded drafts and marks only downloaded dependencies as fetched', async () => {
+  const app = new ApplicationProfile()
+  const root = 'https://example.org/upload-root'
+  const external = 'https://example.org/external'
+  const nested = 'https://example.org/external-nested'
+  app.upsert(parseShaclProfile(`${prefixes}
+    <${root}> a sh:NodeShape ; owl:imports <${external}> .`, 'upload.ttl', 'uploaded'))
+  const requested = []
+  const result = await resolveProfileImportsRecursive(app, {
+    fetchProfile: async iri => {
+      requested.push(iri)
+      return profile(iri, `<${iri}> a sh:NodeShape ${iri === external ? `; owl:imports <${nested}>` : ''} .`)
+    },
+    findClassProfiles: async () => [],
+  })
+  assert.deepEqual(result.errors, [])
+  assert.deepEqual(requested, [external, nested])
+  assert.equal(app.profiles.get(root).origin, 'uploaded')
+  assert.equal(app.profiles.get(root).source, 'upload.ttl')
+  for (const iri of [external, nested]) {
+    assert.equal(app.profiles.get(iri).origin, 'fetched')
+    assert.equal(app.profiles.get(iri).source, iri)
+  }
+})
+
 test('Processing Step-style class references load matching MPS profiles without owl:imports', async () => {
   const rootIri = 'https://example.org/processing-step'
   const classBase = 'https://example.org/processing-class/'

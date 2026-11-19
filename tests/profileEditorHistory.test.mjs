@@ -1185,18 +1185,79 @@ test('imported profiles are locked by default across every mutation path', async
   assert.equal(JSON.stringify(store.profiles), before)
 })
 
-test('uploaded profiles are also locked, and the setting unlocks their fields', async () => {
+test('uploaded profiles are editable drafts even with existing-profile locking enabled', async () => {
   await store.addTurtleFiles([new File([importedTurtle], 'uploaded.ttl', { type: 'text/turtle' })])
   assert.equal(store.profiles[0].origin, 'uploaded')
-  assert.equal(store.isShapeLocked(importedProfileIri), true)
-  store.lockImportedProfiles = false
+  assert.equal(store.lockImportedProfiles, true)
+  assert.equal(store.isShapeLocked(importedProfileIri), false)
+  assert.equal(store.isPropertyLocked(importedProfileIri, importedFieldIri), false)
   store.updateShapeField(importedProfileIri, 'label', 'Editable import')
   store.updatePropertyField(importedProfileIri, importedFieldIri, 'name', 'Editable field')
   assert.equal(store.applicationProfile.findNodeShape(importedProfileIri).label, 'Editable import')
   assert.equal(store.applicationProfile.findNodeShape(importedProfileIri).properties[0].name, 'Editable field')
-  store.lockImportedProfiles = true
-  store.updatePropertyField(importedProfileIri, importedFieldIri, 'name', 'Blocked')
+  await nextTick()
+  assert.equal(store.undo(), true)
+  assert.equal(store.applicationProfile.findNodeShape(importedProfileIri).properties[0].name, 'Imported field')
+  assert.equal(store.redo(), true)
   assert.equal(store.applicationProfile.findNodeShape(importedProfileIri).properties[0].name, 'Editable field')
+  assert.ok(store.createProperty(importedProfileIri))
+  assert.equal(store.updateProfileUrl(importedProfileIri, 'https://example.org/renamed-upload').ok, true)
+  assert.equal(store.removeProfile('https://example.org/renamed-upload').ok, true)
+})
+
+test('all profiles supplied in one file remain visible editable drafts even when they import each other', async () => {
+  const root = 'https://example.org/upload-root'
+  const linked = 'https://example.org/upload-linked'
+  const turtle = `@prefix sh: <http://www.w3.org/ns/shacl#> .
+    @prefix owl: <http://www.w3.org/2002/07/owl#> .
+    <${root}> a sh:NodeShape ; owl:imports <${linked}> .
+    <${linked}> a sh:NodeShape .`
+  await store.addTurtleFiles([new File([turtle], 'bundle.ttl')])
+  assert.equal(store.profiles.length, 2)
+  assert.deepEqual(new Set(store.rootNodeShapes.map(shape => shape.nodeId.value)), new Set([root, linked]))
+  assert.deepEqual(store.lastResolveErrors, [])
+  for (const profile of store.profiles) {
+    assert.equal(profile.origin, 'uploaded')
+    assert.equal(profile.source, 'bundle.ttl')
+    assert.equal(store.isShapeLocked(profile.iri), false)
+    assert.ok(store.createProperty(profile.iri))
+  }
+})
+
+test('profiles supplied in separate files of the same upload stay drafts instead of being fetched', async () => {
+  const root = 'https://example.org/batch-root'
+  const linked = 'https://example.org/batch-linked'
+  await store.addTurtleFiles([
+    new File([`@prefix sh: <http://www.w3.org/ns/shacl#> .
+      <${root}> a sh:NodeShape ; <http://www.w3.org/2002/07/owl#imports> <${linked}> .`], 'root.ttl'),
+    new File([`<${linked}> a <http://www.w3.org/ns/shacl#NodeShape> .`], 'linked.ttl'),
+  ])
+  assert.deepEqual(store.lastResolveErrors, [])
+  assert.equal(store.profiles.length, 2)
+  assert.ok(store.profiles.every(profile => profile.origin === 'uploaded' && !store.isShapeLocked(profile.iri)))
+})
+
+test('uploads referencing an existing service profile stay drafts and preserve the locked dependency', async () => {
+  await store.addProfileFromTurtle(importedTurtle, 'mps.ttl', importedProfileIri)
+  const root = 'https://example.org/local-root'
+  await store.addTurtleFiles([new File([`@prefix sh: <http://www.w3.org/ns/shacl#> .
+    <${root}> a sh:NodeShape ; <http://www.w3.org/2002/07/owl#imports> <${importedProfileIri}> ;
+      sh:node <${importedProfileIri}> .`], 'local.ttl')])
+  assert.equal(store.isShapeLocked(root), false)
+  assert.equal(store.isShapeLocked(importedProfileIri), true)
+  assert.equal(store.isPropertyLocked(root, importedFieldIri), true)
+  assert.equal(store.applicationProfile.profiles.get(importedProfileIri).origin, 'fetched')
+
+  // Explicitly uploading that dependency makes the supplied copy a draft too.
+  await store.addTurtleFiles([new File([importedTurtle], 'dependency.ttl')])
+  assert.equal(store.applicationProfile.profiles.get(importedProfileIri).origin, 'uploaded')
+  assert.equal(store.isShapeLocked(importedProfileIri), false)
+  assert.equal(store.isPropertyLocked(root, importedFieldIri), false)
+  await nextTick()
+  assert.equal(store.undo(), true)
+  assert.equal(store.isShapeLocked(importedProfileIri), true)
+  assert.equal(store.redo(), true)
+  assert.equal(store.isShapeLocked(importedProfileIri), false)
 })
 
 test('locked imports can be inherited, referenced, and copied into editable profiles', async () => {
@@ -1277,10 +1338,14 @@ test('locked source connections cannot be edited, but editable fields can still 
   assert.equal(typeof edges.find(edge => edge.sourceHandle === `ref:${ownField}`).data.onRemove, 'function')
 })
 
-test('class and qualified profiles stay loaded while their canvas visibility is toggled independently', async () => {
+test('external class and qualified profiles stay loaded while their canvas visibility is toggled independently', async () => {
   const main = 'https://example.org/main'
   const classProfile = 'https://example.org/class-profile'
   const qualifiedProfile = 'https://example.org/qualified-profile'
+  await store.addProfileFromTurtle(`@prefix sh: <http://www.w3.org/ns/shacl#> .
+    <${classProfile}> a sh:NodeShape ; sh:targetClass <https://example.org/Class> .`, classProfile)
+  await store.addProfileFromTurtle(`@prefix sh: <http://www.w3.org/ns/shacl#> .
+    <${qualifiedProfile}> a sh:NodeShape ; sh:property [ sh:path <https://example.org/value> ] .`, qualifiedProfile)
   const turtle = `
     @prefix sh: <http://www.w3.org/ns/shacl#> .
     @prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -1289,9 +1354,7 @@ test('class and qualified profiles stay loaded while their canvas visibility is 
         [ sh:path <https://example.org/qualified-field> ; sh:qualifiedValueShape <${qualifiedProfile}> ],
         [ sh:path <https://example.org/inline-field> ; sh:qualifiedValueShape [
           a sh:NodeShape ; sh:property [ sh:path <https://example.org/inline-value> ]
-        ] ] .
-    <${classProfile}> a sh:NodeShape ; sh:targetClass <https://example.org/Class> .
-    <${qualifiedProfile}> a sh:NodeShape ; sh:property [ sh:path <https://example.org/value> ] .`
+        ] ] .`
   await store.addTurtleFiles([new File([turtle], 'bundle.ttl', { type: 'text/turtle' })])
   assert.equal(store.profiles.length, 3)
   assert.equal(store.nodeShapes.length, 4)
@@ -1341,7 +1404,7 @@ test('a fetched profile with a different document IRI still has a visible primar
   assert.equal(store.rootNodeShapes[0].nodeId.value, shapeIri)
 })
 
-test('class profiles discovered without imports reach the store as hidden locked dependencies', async () => {
+test('class profiles discovered from an upload reach the store as hidden locked dependencies', async () => {
   const cls = 'https://example.org/store-linked-class'
   const root = 'https://example.org/store-class-root'
   const linked = 'https://example.org/store-linked-profile'
@@ -1352,12 +1415,15 @@ test('class profiles discovered without imports reach the store as hidden locked
     return Response.json([{ base_url: linked, definition: turtle, mimeType: 'text/turtle' }])
   })
   try {
-    await store.addProfileFromTurtle(`@prefix sh: <http://www.w3.org/ns/shacl#> .
-      <${root}> a sh:NodeShape ; sh:property [ sh:path <https://example.org/ref> ; sh:class <${cls}> ] .`, 'class-root.ttl', root)
+    await store.addTurtleFiles([new File([`@prefix sh: <http://www.w3.org/ns/shacl#> .
+      <${root}> a sh:NodeShape ; sh:property [ sh:path <https://example.org/ref> ; sh:class <${cls}> ] .`], 'class-root.ttl')])
     await nextTick()
     assert.equal(store.nodeShapes.length, 2)
     assert.deepEqual(store.rootNodeShapes.map(shape => shape.nodeId.value), [root])
     assert.equal(store.isShapeLocked(linked), true)
+    assert.equal(store.isShapeLocked(root), false)
+    assert.equal(store.applicationProfile.profiles.get(root).origin, 'uploaded')
+    assert.equal(store.applicationProfile.profiles.get(linked).origin, 'fetched')
     assert.equal(store.lastResolveErrors.length, 0)
     store.createProfile()
     await nextTick()
@@ -1575,10 +1641,10 @@ test('TTL export includes only drafts while retaining imported profile links and
   const graph = new Store(new Parser().parse(serializeProfilesForExport(store.profiles)))
   const sh = 'http://www.w3.org/ns/shacl#'
   const imports = 'http://www.w3.org/2002/07/owl#imports'
-  for (const iri of [importedProfileIri, nested, importedFieldIri, uploaded]) {
+  for (const iri of [importedProfileIri, nested, importedFieldIri]) {
     assert.equal(graph.countQuads(iri, null, null, null), 0, `No imported definition for ${iri}`)
   }
-  for (const iri of [child, otherDraft]) {
+  for (const iri of [child, otherDraft, uploaded]) {
     assert.equal(graph.countQuads(iri, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', `${sh}NodeShape`, null), 1)
   }
   assert.equal(graph.countQuads(child, `${sh}node`, importedProfileIri, null), 1)

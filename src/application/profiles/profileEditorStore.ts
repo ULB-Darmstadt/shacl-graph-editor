@@ -27,7 +27,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
   const lockImportedProfiles = ref(typeof localStorage === 'undefined'
     || localStorage.getItem('editor.lockImportedProfiles') !== 'false')
   const lockedShapeIris = computed(() => new Set(applicationProfile.value.list()
-    .filter(profile => lockImportedProfiles.value && profile.origin !== 'created')
+    .filter(profile => lockImportedProfiles.value && profile.origin === 'fetched')
     .flatMap(profile => profile.nodeShapes.map(shape => shape.nodeId.value))))
 
   watch(lockImportedProfiles, value => {
@@ -67,7 +67,9 @@ export const useProfileEditorStore = defineStore('profiles', () => {
       const target = targetProfiles.get(profile.iri)
       // Loading or removing a profile remains undoable, like resetting the
       // canvas. Existing locked profile contents must remain unchanged.
-      return profile.origin === 'created' || !target || JSON.stringify(profile) === JSON.stringify(target)
+      // Uploading a replacement draft can also be undone and redone.
+      return profile.origin !== 'fetched' || !target || target.origin !== 'fetched'
+        || JSON.stringify(profile) === JSON.stringify(target)
     })
   }
 
@@ -397,7 +399,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
   function updateProfileUrl(profileIri: string, value: string): { ok: boolean; reason?: string } {
     const profile = applicationProfile.value.profiles.get(profileIri)
     if (!profile) return { ok: false, reason: 'Profile not found.' }
-    if (lockImportedProfiles.value && profile.origin !== 'created') {
+    if (lockImportedProfiles.value && profile.origin === 'fetched') {
       return { ok: false, reason: 'Imported profiles are locked for editing in Settings.' }
     }
     const iri = value.trim()
@@ -440,7 +442,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     const renamed = applicationProfile.value.list().map(renameReferences)
     const lockedReference = renamed.some(candidate => {
       const original = applicationProfile.value.profiles.get(candidate.iri)
-      return original && lockImportedProfiles.value && original.origin !== 'created'
+      return original && lockImportedProfiles.value && original.origin === 'fetched'
         && JSON.stringify(original) !== JSON.stringify(candidate)
     })
     if (lockedReference) return { ok: false, reason: 'A locked profile references this URL. Unlock imported profiles in Settings before changing it.' }
