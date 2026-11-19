@@ -961,6 +961,15 @@ function handleCanvasUploadProfiles(): void {
   triggerSchemaUpload()
 }
 
+function handleCsvUpload(): void {
+  if (readOnlyMode.value) return
+  cancelPendingProfilePlacement()
+  resetPendingPlacement()
+  closeCanvasMenu()
+  closeActionMenus()
+  openImportOverlay('csv-upload')
+}
+
 function handleConfirmResetAll(): void {
   closeActionMenus()
   closeActionOverlay()
@@ -1910,6 +1919,10 @@ void fetchSubjectHeadingOptions().then(options => {
               <i class="pi pi-chevron-down" />
             </button>
             <div v-if="addProfileMenuOpen" class="add-profile-menu">
+              <button type="button" class="add-profile-menu__item" @click="handleCsvUpload">
+                <i class="pi pi-table" />
+                <span>Upload CSV file</span>
+              </button>
               <button type="button" class="add-profile-menu__item" :disabled="reviewMode" @click="openStandaloneQuantityGenerator">
                 <i class="pi pi-calculator" />
                 <span>Use Quantity Generator</span>
