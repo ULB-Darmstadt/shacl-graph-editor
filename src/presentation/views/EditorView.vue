@@ -11,6 +11,7 @@ import { storeToRefs } from 'pinia'
 import { VueFlow, useVueFlow, type Connection, type XYPosition } from '@vue-flow/core'
 import { combineCanvasSelection, type CanvasSelectionMode } from '@/presentation/features/editor/canvasSelection'
 import ProfileDeletionDialog from '@/presentation/features/editor/components/ProfileDeletionDialog.vue'
+import GettingStartedDialog from '@/presentation/features/getting-started/GettingStartedDialog.vue'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
@@ -227,6 +228,7 @@ const { nodes, edges, nodeTypes, edgeTypes, hiddenProfileCount } = useEditorGrap
 })
 
 const hasNothing = computed(() => profiles.value.length === 0)
+const gettingStartedOpen = ref(false)
 const canvasSelectedShapeIris = computed(() => [...new Set((nodes.value as unknown as Array<{ id: string; selected?: boolean }>).filter(node => node.selected).map(node => parseEditorShapeNodeTarget(node.id)?.representedShapeIri).filter((iri): iri is string => !!iri))])
 watch(() => canvasSelectedShapeIris.value.length, count => { if (count <= 1) nodesSelectionActive.value = false })
 const hasInspectorSelection = computed(() => selectedShape.value !== null)
@@ -1216,7 +1218,7 @@ function handleGraphShellClick(event: MouseEvent): void {
   if (canvasMenuRef.value?.contains(target)) return
   if (canvasActionBarRef.value?.contains(target)) return
   if (actionOverlayRef.value?.contains(target)) return
-  if ((target as Element).closest?.('.empty-state__actions')) return
+  if ((target as Element).closest?.('.empty-state__actions, .empty-state__getting-started')) return
 
   event.preventDefault()
   event.stopPropagation()
@@ -1764,6 +1766,11 @@ void fetchSubjectHeadingOptions().then(options => {
                 Import your own profiles
               </button>
             </div>
+            <p class="empty-state__tutorial-intro">Not sure where to start? Watch our short introduction.</p>
+            <button type="button" class="empty-state__option empty-state__getting-started" @click="gettingStartedOpen = true">
+              <i class="pi pi-play-circle" aria-hidden="true" />
+              Getting Started with SHACL Editor
+            </button>
           </div>
 
           <VueFlow
@@ -1918,6 +1925,10 @@ void fetchSubjectHeadingOptions().then(options => {
           <i class="pi pi-cog" />
         </button>
         <div v-if="settingsMenuOpen" ref="settingsMenuRef" class="settings-menu">
+          <button type="button" class="settings-menu__item" @click="gettingStartedOpen = true; settingsMenuOpen = false">
+            <i class="pi pi-play-circle" aria-hidden="true" />
+            <span>Getting Started</span>
+          </button>
           <button type="button" class="settings-menu__item" @click="openSettings">
             <i class="pi pi-sliders-h" />
             <span>Settings</span>
@@ -2396,6 +2407,7 @@ void fetchSubjectHeadingOptions().then(options => {
         <p v-if="reviewMode" class="helper-text">Review mode always shows all linked profiles. Your display preferences will apply again when you leave Review mode.</p>
       </div>
     </Dialog>
+    <GettingStartedDialog v-if="gettingStartedOpen" @close="gettingStartedOpen = false" />
   </div>
 </template>
 
@@ -3263,6 +3275,12 @@ void fetchSubjectHeadingOptions().then(options => {
   margin-top: var(--space-3);
 }
 
+.empty-state__tutorial-intro {
+  margin: var(--space-4) 0 0;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
 .empty-state__option {
   display: inline-flex;
   align-items: center;
@@ -3281,6 +3299,23 @@ void fetchSubjectHeadingOptions().then(options => {
   &:hover:not(:disabled) { background: var(--color-surface-2); color: var(--color-text); }
   &:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
   &:disabled { opacity: 0.55; cursor: not-allowed; }
+}
+
+.empty-state__getting-started {
+  padding: 12px 20px;
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: white;
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+
+  .pi { font-size: 1.1rem; }
+
+  &:hover:not(:disabled) {
+    border-color: var(--color-primary-hover);
+    background: var(--color-primary-hover);
+    color: white;
+  }
 }
 
 @media (max-width: 1100px) {
