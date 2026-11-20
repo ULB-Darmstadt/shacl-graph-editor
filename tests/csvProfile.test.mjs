@@ -6,7 +6,7 @@ import { createServer } from 'vite'
 import { createPinia, setActivePinia } from 'pinia'
 import { nextTick } from 'vue'
 
-let server, analyzeCsv, parseCsv, inferCsvDatatype, useProfileEditorStore
+let server, analyzeCsv, parseCsv, inferCsvDatatype, decodeCsvBytes, useProfileEditorStore
 const xsd = 'http://www.w3.org/2001/XMLSchema#'
 
 before(async () => {
@@ -17,10 +17,66 @@ before(async () => {
     server: { middlewareMode: true, hmr: { server: createHttpServer() } },
     resolve: { alias: { '@': fileURLToPath(new URL('../src', import.meta.url)) } },
   })
-  ;({ analyzeCsv, parseCsv, inferCsvDatatype } = await server.ssrLoadModule('/src/application/profiles/csvProfile.ts'))
+  ;({ analyzeCsv, parseCsv, inferCsvDatatype, decodeCsvBytes } = await server.ssrLoadModule('/src/application/profiles/csvProfile.ts'))
   ;({ useProfileEditorStore } = await server.ssrLoadModule('/src/application/profiles/profileEditorStore.ts'))
 })
 after(async () => { await server?.close() })
+
+test('CSV decoding preserves UTF-8, Windows-1252 and BOM-marked UTF-16 characters', () => {
+  const text = 'city,note\nMalmö,“café” €'
+  assert.equal(decodeCsvBytes(new TextEncoder().encode(text)), text)
+  assert.equal(decodeCsvBytes(Uint8Array.from([0xef, 0xbb, 0xbf, ...new TextEncoder().encode(text)])), text)
+  const western = Uint8Array.from(Buffer.from('city,note\nMalm\xf6,\x93caf\xe9\x94 \x80', 'latin1'))
+  assert.equal(decodeCsvBytes(western), text)
+  const littleEndian = Buffer.from(text, 'utf16le')
+  assert.equal(decodeCsvBytes(Buffer.concat([Buffer.from([0xff, 0xfe]), littleEndian])), text)
+  const bigEndian = Buffer.from(littleEndian).swap16()
+  assert.equal(decodeCsvBytes(Buffer.concat([Buffer.from([0xfe, 0xff]), bigEndian])), text)
+})
+
+test('chosen CSV datatypes survive serialization and undo/redo while other fields keep suggestions', async () => {
+  setActivePinia(createPinia())
+  const store = useProfileEditorStore()
+  const initialFitRequest = store.fitViewRequestTick
+  store.addCsvProfile('code,count,active\n001,2,true', 'types.csv', 'auto', 'auto', [xsd + 'string', xsd + 'decimal'])
+  await nextTick()
+  assert.equal(store.fitViewRequestTick, initialFitRequest, 'CSV creation preserves the viewport for centered placement')
+  const expected = [xsd + 'string', xsd + 'decimal', xsd + 'boolean']
+  assert.deepEqual(store.rootNodeShapes[0].properties.map(field => field.datatype.value), expected)
+  const { parseShaclProfile } = await server.ssrLoadModule('/src/infrastructure/shacl/shaclProfileParser.ts')
+  const roundtrip = parseShaclProfile(store.profiles[0].rawTurtle, 'roundtrip.ttl', 'uploaded')
+  assert.deepEqual(roundtrip.nodeShapes[0].properties.map(field => field.datatype.value), expected)
+  assert.equal(store.undo(), true)
+  assert.equal(store.profiles.length, 0)
+  assert.equal(store.redo(), true)
+  assert.deepEqual(store.rootNodeShapes[0].properties.map(field => field.datatype.value), expected)
+})
+
+test('CSV metadata defaults are saved, serialized and restored together with the profile', async () => {
+  setActivePinia(createPinia())
+  const store = useProfileEditorStore()
+  const defaults = {
+    creator: 'Example creator', created: '2026-11-20',
+    license: 'https://creativecommons.org/licenses/by/4.0/', subject: 'https://example.org/subject',
+  }
+  store.addCsvProfile('name;count\nMalmö;2', 'metadata.csv', 'auto', 'auto', [], defaults)
+  await nextTick()
+  const assertMetadata = shape => {
+    for (const [field, value] of Object.entries(defaults)) assert.equal(shape[field], value, field)
+  }
+  assertMetadata(store.rootNodeShapes[0])
+  assert.deepEqual(store.rootNodeShapes[0].properties.map(field => field.name), ['name', 'count'])
+  const { parseShaclProfile } = await server.ssrLoadModule('/src/infrastructure/shacl/shaclProfileParser.ts')
+  const roundtrip = parseShaclProfile(store.profiles[0].rawTurtle, 'roundtrip.ttl', 'uploaded')
+  assertMetadata(roundtrip.nodeShapes[0])
+  assert.equal(store.undo(), true)
+  assert.equal(store.profiles.length, 0)
+  assert.equal(store.redo(), true)
+  assertMetadata(store.rootNodeShapes[0])
+  store.addCsvProfile('name\nExample', 'blank-defaults.csv', 'auto', 'auto', [], { creator: '  ', created: '', license: ' ', subject: '' })
+  const blank = store.profiles.find(profile => profile.source === 'blank-defaults.csv').nodeShapes[0]
+  for (const field of Object.keys(defaults)) assert.equal(blank[field], undefined, field)
+})
 
 test('CSV parsing preserves quotes, multiline values, BOM and empty trailing cells', () => {
   assert.deepEqual(parseCsv('\uFEFFname,note,empty\r\n"A, B","said ""hello""\r\nagain",\r\n\r\n'), [

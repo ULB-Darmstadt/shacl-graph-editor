@@ -7,6 +7,8 @@ export type ProfileImportDialogId = string
 
 export interface ProfileImportDialogPayload {
   nodeId?: string
+  csvText?: string
+  filename?: string
 }
 
 export interface ProfileImportDialogDefinition {
@@ -28,9 +30,10 @@ export interface ProfileImportSourceDefinition {
 const dialogDefinitions: ProfileImportDialogDefinition[] = [
   {
     id: 'csv-upload',
-    header: 'Create profile from CSV',
-    width: 'min(720px, 96vw)',
+    header: 'Preview CSV',
+    width: 'min(960px, 96vw)',
     component: CsvProfileImportPanel,
+    buildProps: payload => ({ csvText: payload?.csvText ?? '', filename: payload?.filename ?? '' }),
   },
   {
     id: 'aims-profile-catalog',

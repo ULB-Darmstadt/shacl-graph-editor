@@ -1,10 +1,22 @@
 import { NamedNode } from 'rdflib'
-import type { ShaclProfile } from '@/domain/profiles'
+import type { NodeShape, ShaclProfile } from '@/domain/profiles'
 import { PREFIX_APS, PREFIX_XSD } from '@/shared/rdf/rdfConstants'
 import { PLACEHOLDER_TERM_IRI_PREFIX } from '@/shared/rdf/placeholderTermIri'
 
 export type CsvHeaderMode = 'auto' | 'present' | 'absent'
 export interface CsvColumn { name: string; datatype: string }
+export type CsvProfileDefaults = Pick<NodeShape, 'creator' | 'created' | 'license' | 'subject'>
+
+/** Preserve BOM-marked Unicode and fall back to Western CSV exports when UTF-8 is invalid. */
+export function decodeCsvBytes(bytes: Uint8Array): string {
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder('utf-16le', { fatal: true }).decode(bytes)
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder('utf-16be', { fatal: true }).decode(bytes)
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    return new TextDecoder('windows-1252').decode(bytes)
+  }
+}
 
 /** Parse quoted fields, escaped quotes and embedded newlines without discarding empty columns. */
 export function parseCsv(text: string, delimiter = ','): string[][] {
@@ -107,7 +119,7 @@ export function analyzeCsv(text: string, headerMode: CsvHeaderMode = 'auto', del
   return { columns, hasHeaders, rowCount: data.length, delimiter: resolvedDelimiter }
 }
 
-export function buildCsvProfile(text: string, filename: string, headerMode: CsvHeaderMode = 'auto', delimiter = 'auto'): ShaclProfile {
+export function buildCsvProfile(text: string, filename: string, headerMode: CsvHeaderMode = 'auto', delimiter = 'auto', datatypes: readonly (string | undefined)[] = [], defaults: CsvProfileDefaults = {}): ShaclProfile {
   const { columns } = analyzeCsv(text, headerMode, delimiter)
   const iri = PREFIX_APS + crypto.randomUUID()
   return {
@@ -115,10 +127,14 @@ export function buildCsvProfile(text: string, filename: string, headerMode: CsvH
     nodeShapes: [{
       nodeId: new NamedNode(iri), label: filename.replace(/\.csv$/i, ''),
       sourceProfileIri: iri, closed: false, inheritedShapeIris: [],
+      creator: defaults.creator?.trim() ? defaults.creator : undefined,
+      created: defaults.created?.trim() ? defaults.created : undefined,
+      license: defaults.license?.trim() ? defaults.license : undefined,
+      subject: defaults.subject?.trim() ? defaults.subject : undefined,
       properties: columns.map((column, order) => ({
         nodeId: new NamedNode(`${iri}#property-shape-${order + 1}`),
         path: new NamedNode(PLACEHOLDER_TERM_IRI_PREFIX + crypto.randomUUID()),
-        name: column.name, datatype: new NamedNode(column.datatype), editorType: 'datatype', order,
+        name: column.name, datatype: new NamedNode(datatypes[order] || column.datatype), editorType: 'datatype', order,
       })),
     }],
   }
