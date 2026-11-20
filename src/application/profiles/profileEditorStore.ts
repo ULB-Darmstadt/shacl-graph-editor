@@ -356,7 +356,11 @@ export const useProfileEditorStore = defineStore('profiles', () => {
         context.property.path = new NamedNode(definition.path)
         context.property.name = definition.name.trim()
         context.property.nameLiterals = [{ value: definition.name.trim(), lang: 'en' }]
-        context.property.qualifiedValueShape = { node: new NamedNode(generated.iri) }
+        context.property.qualifiedValueShape = {
+          node: new NamedNode(generated.iri),
+          inlineNodeShape: true,
+          label: definition.name.trim(),
+        }
         context.property.qualifiedMinCount = definition.minCount
         context.property.qualifiedMaxCount = definition.maxCount ?? undefined
         context.property.minCount = undefined
