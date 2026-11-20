@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import { decodeCsvBytes } from '@/application/profiles/csvProfile'
 import {
   getProfileImportDialogDefinition,
   profileImportSources,
@@ -40,12 +41,31 @@ interface UseProfileWorkflowMenuOptions {
 
 export function useProfileWorkflowMenu(options: UseProfileWorkflowMenuOptions) {
   const schemaInputRef = ref<HTMLInputElement | null>(null)
+  const csvInputRef = ref<HTMLInputElement | null>(null)
   const activeImportDialogId = ref<ProfileImportDialogId | null>(null)
   const activeImportDialogPayload = ref<ProfileImportDialogPayload | undefined>(undefined)
   const activeImportDialogKey = ref(0)
 
   function triggerSchemaUpload(): void {
     schemaInputRef.value?.click()
+  }
+
+  function triggerCsvUpload(): void {
+    csvInputRef.value?.click()
+  }
+
+  async function onCsvFile(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement
+    const file = input.files?.[0]
+    if (!file) return
+    try {
+      const csvText = decodeCsvBytes(new Uint8Array(await file.arrayBuffer()))
+      openImportDialog('csv-upload', { csvText, filename: file.name })
+    } catch (error) {
+      options.toast.add({ severity: 'error', summary: 'Could not read CSV', detail: error instanceof Error ? error.message : String(error), life: 5000 })
+    } finally {
+      input.value = ''
+    }
   }
 
   function openImportDialog(dialogId: ProfileImportDialogId, payload?: ProfileImportDialogPayload): void {
@@ -136,6 +156,10 @@ export function useProfileWorkflowMenu(options: UseProfileWorkflowMenuOptions) {
         label: source.label,
         icon: source.icon,
         command: () => {
+          if (source.id === 'csv-upload') {
+            triggerCsvUpload()
+            return
+          }
           if (source.action === 'upload-files') {
             triggerSchemaUpload()
             return
@@ -148,6 +172,9 @@ export function useProfileWorkflowMenu(options: UseProfileWorkflowMenuOptions) {
 
   return {
     schemaInputRef,
+    csvInputRef,
+    onCsvFile,
+    triggerCsvUpload,
     activeImportDialogDefinition,
     activeImportDialogVisible,
     activeImportDialogKey,

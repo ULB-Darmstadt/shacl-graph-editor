@@ -13,6 +13,7 @@ import { PLACEHOLDER_TERM_IRI_PREFIX } from '@/shared/rdf/placeholderTermIri'
 import { defaultDatatypeLabel } from '@/application/profiles/profileEditorCatalogs'
 import { buildQuantityProfile, NUMERICAL_VARIABLE_PROFILE, type QuantityDefinition } from '@/application/profiles/quantityGenerator'
 import { detachDeletedProfileReferences, planProfileDeletion } from '@/application/profiles/profileDeletion'
+import { buildCsvProfile, type CsvHeaderMode, type CsvProfileDefaults } from '@/application/profiles/csvProfile'
 
 /**
  * profileEditorStore
@@ -243,6 +244,13 @@ export const useProfileEditorStore = defineStore('profiles', () => {
   function reset(): void {
     applicationProfile.value = new ApplicationProfile()
     lastResolveErrors.value = []
+  }
+
+  function addCsvProfile(text: string, filename: string, headerMode: CsvHeaderMode = 'auto', delimiter = 'auto', datatypes: readonly (string | undefined)[] = [], defaults: CsvProfileDefaults = {}): string {
+    const profile = buildCsvProfile(text, filename, headerMode, delimiter, datatypes, defaults)
+    applicationProfile.value.upsert(profile)
+    syncSerializedProfiles()
+    return profile.iri
   }
 
   function createProfile(): string {
@@ -936,6 +944,7 @@ export const useProfileEditorStore = defineStore('profiles', () => {
     removeProfiles,
     profileDeletionPlan,
     createProfile,
+    addCsvProfile,
     createProperty,
     copyProperty,
     createConnectedProfileFromProperty,

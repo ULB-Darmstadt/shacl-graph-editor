@@ -1,11 +1,14 @@
 import { defineAsyncComponent } from 'vue'
 import type { Component } from 'vue'
 const AimsProfileCatalogPanel = defineAsyncComponent(() => import('@/presentation/features/profile-import/components/AimsProfileCatalogPanel.vue'))
+const CsvProfileImportPanel = defineAsyncComponent(() => import('@/presentation/features/profile-import/components/CsvProfileImportPanel.vue'))
 
 export type ProfileImportDialogId = string
 
 export interface ProfileImportDialogPayload {
   nodeId?: string
+  csvText?: string
+  filename?: string
 }
 
 export interface ProfileImportDialogDefinition {
@@ -26,6 +29,13 @@ export interface ProfileImportSourceDefinition {
 
 const dialogDefinitions: ProfileImportDialogDefinition[] = [
   {
+    id: 'csv-upload',
+    header: 'Preview CSV',
+    width: 'min(960px, 96vw)',
+    component: CsvProfileImportPanel,
+    buildProps: payload => ({ csvText: payload?.csvText ?? '', filename: payload?.filename ?? '' }),
+  },
+  {
     id: 'aims-profile-catalog',
     header: 'Search NFDI4ING Metadata Profile Service',
     width: 'min(1200px, 96vw)',
@@ -34,6 +44,13 @@ const dialogDefinitions: ProfileImportDialogDefinition[] = [
 ]
 
 export const profileImportSources: ProfileImportSourceDefinition[] = [
+  {
+    id: 'csv-upload',
+    label: 'Upload CSV file',
+    icon: 'pi pi-table',
+    action: 'open-dialog',
+    dialogId: 'csv-upload',
+  },
   {
     id: 'ttl-upload',
     label: 'Upload TTL file',

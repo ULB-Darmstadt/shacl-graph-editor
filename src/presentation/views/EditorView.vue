@@ -141,6 +141,9 @@ function resetEditorUiState(): void {
 
 const {
   schemaInputRef,
+  csvInputRef,
+  onCsvFile,
+  triggerCsvUpload,
   activeImportDialogDefinition,
   activeImportDialogVisible,
   activeImportDialogKey,
@@ -679,7 +682,7 @@ function handleGlobalPointerDown(event: PointerEvent): void {
   if (settingsMenuRef.value?.contains(target)) return
   if (actionOverlayRef.value?.contains(target)) return
 
-  if ((target as Element).closest?.('.shape-header-menu')) return
+  if ((target as Element).closest?.('.shape-header-menu, .p-dialog')) return
   closeCanvasMenu()
   closeShapeHeaderMenu()
   closeActionMenus()
@@ -961,6 +964,16 @@ function handleCanvasUploadProfiles(): void {
   triggerSchemaUpload()
 }
 
+function handleCsvUpload(): void {
+  if (readOnlyMode.value) return
+  cancelPendingProfilePlacement()
+  resetPendingPlacement()
+  closeCanvasMenu()
+  closeActionMenus()
+  closeActionOverlay()
+  triggerCsvUpload()
+}
+
 function handleConfirmResetAll(): void {
   closeActionMenus()
   closeActionOverlay()
@@ -1093,6 +1106,24 @@ async function handleBottomAddNewProfile(): Promise<void> {
   const center = resolvePlacementPosition(rect.left + rect.width / 2, rect.top + rect.height / 2)
   const iri = createProfileAt({ x: center.x - 170, y: center.y - 90 })
   resetPendingPlacement()
+
+  await placeNewProfileAtCanvasCenter(iri)
+}
+
+async function handleCsvProfileAdded(iri: string): Promise<void> {
+  closeImportDialog()
+  const shape = profileStore.applicationProfile.findNodeShape(iri)
+  if (shape) selectShape(shape)
+  await placeNewProfileAtCanvasCenter(iri)
+}
+
+async function placeNewProfileAtCanvasCenter(iri: string): Promise<void> {
+  const shell = graphShellRef.value
+  const shape = profileStore.applicationProfile.findNodeShape(iri)
+  if (!shell || !shape) return
+  const rect = shell.getBoundingClientRect()
+  const center = screenToFlowCoordinate({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
+  queueShapePlacementAt(iri, { x: center.x - 170, y: center.y - estimateEditorShapeHeight(shape, rootNodeShapes.value) / 2 })
 
   // Use the rendered dimensions and current viewport to center the whole
   // card rather than its corner.
@@ -1676,6 +1707,25 @@ void fetchSubjectHeadingOptions().then(options => {
 <template>
   <div class="editor-view" @focusin="handleEditorFocusIn" @focusout="profileStore.endHistoryGroup">
     <input ref="schemaInputRef" type="file" accept=".ttl,.shacl,text/turtle" multiple style="display:none" @change="onSchemaFiles" />
+    <input ref="csvInputRef" type="file" accept=".csv,text/csv" style="display:none" @change="onCsvFile" />
+
+    <Dialog
+      v-if="activeImportDialogDefinition?.id === 'csv-upload'"
+      v-model:visible="activeImportDialogVisible"
+      modal
+      :header="activeImportDialogDefinition.header"
+      :style="{ width: activeImportDialogDefinition.width }"
+    >
+      <component
+        :is="activeImportDialogDefinition.component"
+        :key="activeImportDialogKey"
+        v-bind="activeImportDialogProps"
+        :metadata-defaults="{ creator: defaultCreator, created: defaultCreated, license: defaultLicense, subject: defaultSubject }"
+        @added="handleCsvProfileAdded"
+        @close="closeImportDialog"
+        @replace="triggerCsvUpload"
+      />
+    </Dialog>
 
     <div class="editor-workspace">
       <EditorProfileSidebar
@@ -1910,6 +1960,10 @@ void fetchSubjectHeadingOptions().then(options => {
               <i class="pi pi-chevron-down" />
             </button>
             <div v-if="addProfileMenuOpen" class="add-profile-menu">
+              <button type="button" class="add-profile-menu__item" @click="handleCsvUpload">
+                <i class="pi pi-table" />
+                <span>Upload CSV file</span>
+              </button>
               <button type="button" class="add-profile-menu__item" :disabled="reviewMode" @click="openStandaloneQuantityGenerator">
                 <i class="pi pi-calculator" />
                 <span>Use Quantity Generator</span>
@@ -1974,7 +2028,7 @@ void fetchSubjectHeadingOptions().then(options => {
         </div>
 
         <div
-          v-if="reviewDialogOpen || activeImportDialogVisible"
+          v-if="reviewDialogOpen || (activeImportDialogVisible && activeImportDialogDefinition?.id !== 'csv-upload')"
           ref="actionOverlayRef"
           class="action-menu-overlay"
           :style="actionOverlayStyle"

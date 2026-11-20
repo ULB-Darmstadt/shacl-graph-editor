@@ -11,6 +11,7 @@ SHACL Graph Editor is a browser-based editor for the workflow:
 ## Features
 
 - Start from local Turtle files or search profiles from the NFDI4ING Metadata Profile Service.
+- Choose **Add Profile → Upload CSV file** to create a draft with one field per table column. Preview fields, select comma/semicolon/tab separators, and override header detection before creating the profile. Headers become field names; absent or empty headers become **Unnamed field**. Automatic detection assumes headers for a text-only first row, so select **No headers** for text-only data without headers. Consistent non-empty values infer integer, decimal, double, boolean, date, or dateTime types; mixed or empty columns use string. Generated field IRIs can be replaced in the editor. CSV import supports undo/redo.
 - Work visually on a graph canvas with profiles, inherited profiles, properties, and SHACL relations.
 - Edit profile metadata and property details in the side panel.
 - Search property terms with the TS4NFDI Terminology Service Suite using the search button beside Term IRI. Confirm a result to replace only the IRI; field names and descriptions stay unchanged.
