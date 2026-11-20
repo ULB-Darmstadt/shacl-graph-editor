@@ -5,7 +5,7 @@ import Select from 'primevue/select'
 import MultiSelect from 'primevue/multiselect'
 import { quantityDefinitionError, type QuantityDefinition, type QuantityResource } from '@/application/profiles/quantityGenerator'
 import { loadQuantityKinds, loadQuantityUnits } from '@/infrastructure/external/qudtService'
-const props = defineProps<{ initialName: string; initialPath: string; standalone: boolean; busy: boolean; error: string | null }>()
+const props = defineProps<{ initialName: string; initialPath: string; busy: boolean; error: string | null }>()
 const emit = defineEmits<{ close: []; add: [definition: QuantityDefinition] }>()
 const name = ref(props.initialName)
 const description = ref('')
@@ -54,11 +54,11 @@ onBeforeUnmount(() => { lifetime.abort(); unitRequest?.abort() })
 <template>
   <Dialog :visible="true" modal header="Quantity Generator" :closable="!busy" :close-on-escape="!busy" class="quantity-generator-dialog" :style="{ width: 'min(720px, 95vw)' }" @update:visible="!$event && !busy && emit('close')">
     <form class="quantity-generator" @submit.prevent="!busy && !validation && !loadingUnits && emit('add', definition)">
-      <p>{{ standalone ? 'Create a standalone parameter profile based on m4i Numerical Variable. You can connect it to a field later.' : 'Create a parameter profile based on m4i Numerical Variable and connect this field to it.' }}</p>
+      <p>Create a parameter profile based on m4i Numerical Variable and connect this field to it.</p>
       <fieldset :disabled="busy">
         <label>Parameter name<input v-model="name" required type="text" /></label>
         <label>Description<textarea v-model="description" rows="2" /></label>
-        <label v-if="!standalone">Field IRI<input v-model="path" required type="url" /></label>
+        <label>Field IRI<input v-model="path" required type="url" /></label>
         <label for="quantity-kind">Quantity kind</label>
         <Select v-model="kind" input-id="quantity-kind" aria-label="Quantity kind" :options="kinds" option-label="label" data-key="iri" filter placeholder="Select a quantity kind" :loading="loadingKinds" :disabled="busy || loadingKinds" />
         <p v-if="kindError" role="alert">{{ kindError }} <button type="button" @click="fetchKinds">Retry quantity kinds</button></p>
@@ -73,7 +73,7 @@ onBeforeUnmount(() => { lifetime.abort(); unitRequest?.abort() })
           <label>Maximum value<input v-model="maximum" type="text" inputmode="decimal" placeholder="Unbounded" /></label>
         </div>
         <small>Bounds are inclusive and require exactly one selected unit. No unit conversion is applied.</small>
-        <div v-if="!standalone" class="quantity-generator__pair">
+        <div class="quantity-generator__pair">
           <label>Minimum count<input v-model.number="minCount" type="number" min="0" step="1" /></label>
           <label>Maximum count<input v-model.number="maxCount" type="number" min="0" step="1" placeholder="Unbounded" /></label>
         </div>

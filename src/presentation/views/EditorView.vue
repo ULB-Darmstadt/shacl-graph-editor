@@ -45,7 +45,7 @@ import '@vue-flow/minimap/dist/style.css'
 
 const profileStore = useProfileEditorStore()
 const QuantityGeneratorDialog = defineAsyncComponent(() => import('@/presentation/features/editor/components/QuantityGeneratorDialog.vue'))
-const quantityGenerator = ref<{ connection: { shapeIri: string; propertyNodeId: string } | null; name: string; path: string } | null>(null)
+const quantityGenerator = ref<{ connection: { shapeIri: string; propertyNodeId: string }; name: string; path: string } | null>(null)
 const quantityGeneratorBusy = ref(false)
 const quantityGeneratorError = ref<string | null>(null)
 const toast = useToast()
@@ -823,14 +823,6 @@ async function createAndConnectProfileFromField(): Promise<void> {
   await centerShapeInCanvas(iri)
 }
 
-function openStandaloneQuantityGenerator(): void {
-  if (readOnlyMode.value || reviewMode.value) return
-  quantityGenerator.value = { connection: null, name: '', path: 'http://purl.obolibrary.org/obo/BFO_0000051' }
-  quantityGeneratorError.value = null
-  closeActionMenus()
-  closeActionOverlay()
-}
-
 function openQuantityGenerator(): void {
   const menu = propertyMenu.value
   if (!menu || readOnlyMode.value || reviewMode.value || !profileStore.canCreateConnectedProfileFromProperty(menu.shapeIri, menu.propertyNodeId)) return
@@ -849,23 +841,17 @@ async function addGeneratedQuantity(definition: QuantityDefinition): Promise<voi
   try {
     const dependencies = await loadQuantityBaseProfiles(profileStore.profiles)
     if (readOnlyMode.value || reviewMode.value) throw new Error('Return to Edit mode to add this quantity.')
-    const iri = profileStore.addQuantityProfile(definition, dependencies, context.connection ?? undefined)
+    const iri = profileStore.addQuantityFromProperty(context.connection.shapeIri, context.connection.propertyNodeId, definition, dependencies)
     const canvasNodes = nodes.value as unknown as CanvasNodePosition[]
     const source = canvasNodes.find(node => {
       const target = parseEditorShapeNodeTarget(node.id)
-      return target && context.connection && canvasShapeIncludesProfile(target.representedShapeIri, context.connection.shapeIri, nodeShapes.value)
+      return target && canvasShapeIncludesProfile(target.representedShapeIri, context.connection.shapeIri, nodeShapes.value)
     })
     if (source) queueShapePlacementAt(iri, { x: source.position.x + IMPORT_HORIZONTAL_OFFSET, y: source.position.y })
-    if (context.connection) {
-      showQualifiedValueShapes.value = true
-      const collapsed = new Set(collapsedPropertyConnections.value)
-      collapsed.delete(propertyConnectionKey(context.connection.shapeIri, context.connection.propertyNodeId))
-      collapsedPropertyConnections.value = collapsed
-    } else if (graphShellRef.value) {
-      const rect = graphShellRef.value.getBoundingClientRect()
-      const center = resolvePlacementPosition(rect.left + rect.width / 2, rect.top + rect.height / 2)
-      queueShapePlacementAt(iri, { x: center.x - 170, y: center.y - 110 })
-    }
+    showQualifiedValueShapes.value = true
+    const collapsed = new Set(collapsedPropertyConnections.value)
+    collapsed.delete(propertyConnectionKey(context.connection.shapeIri, context.connection.propertyNodeId))
+    collapsedPropertyConnections.value = collapsed
     resetPendingPlacement()
     quantityGenerator.value = null
     const shape = profileStore.applicationProfile.findNodeShape(iri)
@@ -1975,10 +1961,6 @@ void fetchSubjectHeadingOptions().then(options => {
                 <i class="pi pi-table" />
                 <span>Upload CSV file</span>
               </button>
-              <button type="button" class="add-profile-menu__item" :disabled="reviewMode" @click="openStandaloneQuantityGenerator">
-                <i class="pi pi-calculator" />
-                <span>Use Quantity Generator</span>
-              </button>
               <button type="button" class="add-profile-menu__item" @click="handleBottomAddNewProfile">
                 <i class="pi pi-plus-circle" />
                 <span>Add new Profile</span>
@@ -2192,7 +2174,6 @@ void fetchSubjectHeadingOptions().then(options => {
       v-if="quantityGenerator"
       :initial-name="quantityGenerator.name"
       :initial-path="quantityGenerator.path"
-      :standalone="!quantityGenerator.connection"
       :busy="quantityGeneratorBusy"
       :error="quantityGeneratorError"
       @close="quantityGenerator = null"
